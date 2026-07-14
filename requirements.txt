@@ -1,0 +1,19 @@
+# Discord
+discord.py>=2.3.0
+
+# HTTP / OpenRouter
+httpx>=0.27.0
+aiohttp>=3.9.0
+
+# Memoria y persistencia
+aiosqlite>=0.20.0
+
+# Configuración
+python-dotenv>=1.0.0
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+
+# Utilidades
+tenacity>=8.3.0        # Retry con backoff para LLM calls
+rich>=13.7.0           # Logging visual en terminal
+pytz>=2024.1
