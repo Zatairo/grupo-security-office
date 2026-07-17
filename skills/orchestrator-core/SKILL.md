@@ -409,7 +409,7 @@ La memoria operativa mínima específica del proyecto está definida en:
 
 y se complementa con:
 
-- `docs/Arquitectura_v1.md`
+- `docs/arquitectura/orchestrator-architecture.md`
 - `decisions/`
 - `memory/`
 

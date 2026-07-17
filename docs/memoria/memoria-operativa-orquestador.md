@@ -28,7 +28,7 @@ Antes de tomar decisiones de arquitectura o proponer artefactos, el ORQUESTADOR 
 
 - `skills/orchestrator-core/SKILL.md`
 - `docs/arquitectura/orchestrator-architecture.md`
-- `docs/Arquitectura_v1.md` (si existe)
+- `docs/arquitectura/orchestrator-architecture.md`
 - `docs/memoria/orchestrator-context.md`
 - `decisions/0001-orchestrator-setup.md`
 
