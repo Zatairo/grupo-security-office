@@ -2,40 +2,63 @@
 type: agent
 project: grupo-security-office
 agent_name: DIRECTOR
-status: active
+status: legacy
 model_route: call_secure_auto
-criticality: high
+criticality: historical
 tags:
   - agente
   - orquestador
   - direccion
+  - legacy
 ---
 
-# Agente DIRECTOR — Orquestador principal
+# DIRECTOR — Implementación Python heredada del ORQUESTADOR
 
-## Misión
+## Estado
 
-Actuar como Director de Operaciones de la oficina digital de Grupo Security:
-- Recibe solicitudes desde Discord
-- Descompone en tareas atómicas
-- Asigna agente destino y prioridad
-- Mantiene trazabilidad vía `data/memory.db`
+DIRECTOR ya no se considera el runtime principal activo del proyecto.
 
-## Responsabilidades
+El runtime principal actual está en OpenClaw mediante el agente:
 
-- Registro de tareas (`TASK-XXXX`) con estado y agente asignado
-- Handoffs a agentes especializados (`ARCHITECT_AGENT`, `DEV_AGENT`, `COPY_AGENT`, etc.)
-- Aplicar política ZDR: sanitizar datos sensibles antes de llamar a OpenRouter
+- `orquestador`
 
-## Modelo y ruta
+El código relacionado con DIRECTOR fue preservado en:
 
-- Ruta recomendada: `call_secure_auto()` → Mistral Small 4 con fallback Qwen3.6 35B A3B
-- Uso: decisiones de orquestación, reparto de trabajo, consolidación de estado
+- `legacy_python/agents/director.py`
+- `legacy_python/main.py`
 
-## Memoria
+## Rol histórico
 
-- Memoria operativa: SQLite (`data/memory.db`)
-- Claves de contexto: `last_request_<usuario>`, `bot_status`, estadísticas de tareas y handoffs
+DIRECTOR fue concebido como implementación Python del orquestador principal de la oficina digital de Grupo Security.
+
+Sus responsabilidades eran:
+
+- recibir solicitudes,
+- descomponer tareas,
+- asignar prioridad,
+- delegar a agentes especializados,
+- y mantener trazabilidad operativa.
+
+## Componentes asociados
+
+- `legacy_python/agents/director.py`
+- `legacy_python/agents/base_agent.py`
+- `legacy_python/main.py`
+- `client/openrouter_client.py`
+- `memory/store.py`
+- `memory/context_manager.py`
+
+## Política y modelo
+
+- Ruta histórica de modelo: `call_secure_auto()`
+- Política asociada: ZDR
+- Estado actual: referencia técnica e histórica, no flujo operativo principal
+
+## Relación con el runtime actual
+
+El agente OpenClaw `orquestador` reemplaza a DIRECTOR como punto principal de operación.
+
+DIRECTOR debe entenderse como antecedente técnico o implementación alternativa preservada, no como agente activo principal.
 
 ## Enlaces
 
