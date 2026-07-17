@@ -2,16 +2,11 @@
 tags:
   - bitacora
   - grupo-security
-date: <% tp.date.now("YYYY-MM-DD") %>
-autor: autor-desconocido
----
----
-tags: [bitacora, grupo-security]
-date: <% tp.date.now("YYYY-MM-DD") %>
+date: 2026-07-17
 autor: autor-desconocido
 ---
 
-# Bitácora — <% tp.date.now("YYYY-MM-DD") %>
+# Bitácora — 2026-07-17
 
 ## ¿Qué se hizo?
 - 
