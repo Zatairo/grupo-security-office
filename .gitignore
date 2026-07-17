@@ -38,3 +38,4 @@ logs/
 .DS_Store
 Thumbs.db
 *.bak
+openclaw-workspace-state.json
