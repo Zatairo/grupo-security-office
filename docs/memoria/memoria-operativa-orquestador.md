@@ -27,9 +27,9 @@ El ORQUESTADOR debe considerar como memoria oficial únicamente los archivos den
 Antes de tomar decisiones de arquitectura o proponer artefactos, el ORQUESTADOR debe considerar como mínimo:
 
 - `skills/orchestrator-core/SKILL.md`
-- `docs/orchestrator-architecture.md`
+- `docs/arquitectura/orchestrator-architecture.md`
 - `docs/Arquitectura_v1.md` (si existe)
-- `memory/orchestrator-context.md`
+- `docs/memoria/orchestrator-context.md`
 - `decisions/0001-orchestrator-setup.md`
 
 ## Qué debe recordar siempre
