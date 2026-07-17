@@ -1,0 +1,6 @@
+
+# Obsidian cache (no versionar)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.trash/
