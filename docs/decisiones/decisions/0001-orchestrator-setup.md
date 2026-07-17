@@ -6,15 +6,15 @@
 
 ## Alcance
 
-Definir la estructura base del proyecto GRUPO_SECURITY y conectar el skill `orchestrator-core` al agente `main` de OpenClaw.
+Definir la estructura base del proyecto GRUPO_SECURITY y conectar el skill `orchestrator-core` al entorno de OpenClaw para el agente `orquestador`.
 
 ## Decisión
 
-1. Crear el repositorio `/home/soporte/proyectos/GRUPO_SECURITY` con estructura:
-   - docs/, agents/, skills/, memory/, logs/, decisions/
-2. Definir el skill `skills/orchestrator-core/SKILL.md` como cerebro base del ORQUESTADOR.
-3. Apuntar `agents.defaults.skills` en `~/.openclaw/openclaw.json` a:
-   - `/home/soporte/proyectos/GRUPO_SECURITY/skills/orchestrator-core`
+1. Crear el repositorio `/home/soporte/proyectos/GRUPO_SECURITY` con estructura base de documentación, memoria y soporte operativo.
+2. Definir el skill `orchestrator-core` como base operativa del agente ORQUESTADOR en OpenClaw.
+3. Configurar `~/.openclaw/openclaw.json` para usar el workspace:
+   - `/home/soporte/proyectos/GRUPO_SECURITY`
+4. Mantener código Python local (`agents/director.py`, `main.py`) como implementación auxiliar o heredada, no como runtime principal actual.
 
 ## Razón
 
@@ -24,4 +24,6 @@ Definir la estructura base del proyecto GRUPO_SECURITY y conectar el skill `orch
 
 ## Estado
 
-- Aplicado y verificado.
+- Aplicado parcialmente y verificado.
+- Runtime principal actual: agente `orquestador` en OpenClaw.
+- Código Python local presente, pero no confirmado como flujo operativo activo.

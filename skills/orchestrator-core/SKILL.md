@@ -17,7 +17,7 @@ Este skill no ejecuta herramientas externas por sí mismo; actúa como capa de p
 
 La arquitectura detallada del ORQUESTADOR vive en:
 
-- `docs/orchestrator-architecture.md`
+- `docs/arquitectura/orchestrator-architecture.md`
 
 Este skill debe respetar siempre esa definición.
 
@@ -378,7 +378,7 @@ No debe simular ejecución documental por iniciativa propia.
 
 El ORQUESTADOR debe considerar como referencia principal de memoria operativa el documento:
 
-- `docs/memoria-operativa-orquestador.md`
+- `docs/memoria/memoria-operativa-orquestador.md`
 
 Antes de tomar decisiones relevantes sobre el proyecto GRUPO_SECURITY, debe intentar alinear su comportamiento con:
 
@@ -405,7 +405,7 @@ Estos archivos globales del workspace solo deben usarse como contexto general cu
 
 La memoria operativa mínima específica del proyecto está definida en:
 
-- `docs/memoria-operativa-orquestador.md`
+- `docs/memoria/memoria-operativa-orquestador.md`
 
 y se complementa con:
 
