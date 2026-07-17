@@ -13,7 +13,7 @@ tags:
 ## Navegación
 
 - [[01-Proyecto/Proyecto-General]]
-- [[02-Agentes/DIRECTOR]]
+- [[02-Agentes/ORQUESTADOR]]
 - [[03-Decisiones/DEC-0001-Arquitectura-Inicial]]
 - [[04-Sprints/Sprint-000]]
 - [[05-Handoffs/HANDOFF-LOG]]

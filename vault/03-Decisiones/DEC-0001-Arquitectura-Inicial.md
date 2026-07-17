@@ -45,4 +45,4 @@ Se adopta una arquitectura dual:
 
 - [[Home]]
 - [[01-Proyecto/Proyecto-General]]
-- [[02-Agentes/DIRECTOR]]
+- [[02-Agentes/ORQUESTADOR]]
