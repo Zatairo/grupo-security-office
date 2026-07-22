@@ -1,113 +1,89 @@
-Grupo Security — ORQUESTADOR sobre OpenClaw
-Proyecto de oficina multiagente para Grupo Security con runtime principal en OpenClaw usando el agente orquestador y el skill skills/orchestrator-core.
+# Grupo Security - Plataforma Comercial Interna
 
-Arquitectura
-Runtime principal: OpenClaw + agente orquestador.
+## Descripción del Proyecto
 
-text
-Discord / canales integrados
-  └── ORQUESTADOR
-        ├── skills/orchestrator-core/              # Núcleo operativo y reglas de decisión
-        ├── docs/arquitectura/                     # Arquitectura detallada del sistema
-        ├── docs/memoria/                          # Memoria operativa del proyecto
-        ├── config/                               # Configuración y prompts
-        ├── client/                               # Cliente OpenRouter / políticas de llamada
-        ├── memory/                               # Soporte de memoria persistente
-        └── legacy_python/                        # Implementación Python histórica / no principal
-Estado actual
-El runtime operativo actual está definido en OpenClaw mediante el agente orquestador, con workspace en /home/soporte/proyectos/GRUPO_SECURITY y agentDir separado en ~/.openclaw/agents/orquestador/agent.
+Sistema web/e-commerce para **Grupo Security**, empresa colombiana de seguridad electrónica con sedes en Pereira, Armenia, Manizales y Cali.
 
-El skill operativo del ORQUESTADOR está en skills/orchestrator-core/SKILL.md, alineado con la estructura esperada por OpenClaw.
+**Servicios:** CCTV, Sistemas de alarma, Control de acceso, Smart Home
 
-El código Python previo se conserva en legacy_python/ como referencia técnica e histórica, pero no representa el runtime principal actual del sistema.
+## Fases
 
-Setup rápido
-Runtime principal (OpenClaw)
-La configuración principal vive en ~/.openclaw/openclaw.json, donde el agente operativo es orquestador.
+| Fase | Estado | Descripción |
+|------|--------|-------------|
+| Fase 1 | **ACTUAL** | Sistema Interno Modular (Panel Admin) |
+| Fase 2 | Futura | E-commerce Público |
+| Fase 3 | Futura | Portal Cliente |
 
-Puntos clave del runtime:
+## Stack Tecnológico
 
-agentId: orquestador
+- **Frontend:** React + TypeScript + Tailwind CSS
+- **Backend:** Node.js + TypeScript
+- **Base de datos:** PostgreSQL
+- **Auth:** OAuth2/OIDC + JWT + RBAC
+- **Integración ERP:** Yéminus (pendiente confirmación API)
 
-name: ORQUESTADOR
+## Estructura del Repositorio
 
-workspace: /home/soporte/proyectos/GRUPO_SECURITY
+```
+GRUPO_SECURITY/
+├── vault/                  # Obsidian vault (documentación)
+│   ├── Home.md
+│   ├── 01-Proyecto/
+│   ├── 02-Agentes/
+│   ├── 03-Decisiones/
+│   ├── 04-Archivos/
+│   └── 05-Handoffs/
+├── src/                    # Código fuente
+│   ├── frontend/           # React + TypeScript
+│   └── backend/            # Node.js + TypeScript
+├── api/                    # Especificaciones API
+│   └── api-spec.yaml       # OpenAPI 3.0
+├── docs/                   # Documentación técnica
+├── .opencode/              # Agentes y skills
+├── skills/                 # Skills del orquestador
+├── config/                 # Configuración
+├── client/                 # Cliente OpenRouter
+├── memory/                 # Memoria persistente
+├── legacy_python/          # Código Python legacy
+├── AGENTS.md               # Gobernanza de agentes
+└── README.md
+```
 
-skill principal: skills/orchestrator-core/SKILL.md
+## Configuración de Obsidian
 
-Código Python legacy
-Este código se conserva como implementación alternativa / histórica:
+1. Abrir Obsidian
+2. File → Open vault → Seleccionar esta carpeta
+3. El plugin **obsidian-git** sincroniza automáticamente con GitHub cada 5 minutos
 
-bash
-pip install -r requirements.txt
-python legacy_python/main.py
-Ese flujo no debe considerarse el runtime principal mientras OpenClaw siga siendo la vía operativa activa del proyecto.
+## Roles del Sistema
 
-Estructura
-text
-skills/
-  orchestrator-core/
-    SKILL.md                    # Skill operativo del ORQUESTADOR
+| Rol | Permisos |
+|-----|----------|
+| Admin | Acceso total |
+| Gerente | Productos, precios, publicación, reportes |
+| Operator | Edición limitada, consulta precios |
+| Viewer | Solo lectura |
 
-docs/
-  00-INDEX.md
-  AGENTS.md
-  IDENTITY.md
-  README.md
-  SOUL.md
-  TOOLS.md
-  USER.md
-  arquitectura/
-    orchestrator-architecture.md
-    README.md
-  bitacora/
-  decisiones/
-    decisions/
-      0001-orchestrator-setup.md
-  memoria/
-    memoria-operativa-orquestador.md
-    orchestrator-context.md
-    README.md
-  procedimientos/
-  reuniones/
-  seguimiento/
+## Integración con OpenClaw
 
-config/
-  settings.py                   # Configuración centralizada
-  prompts.py                    # Prompts base y reglas
+El orquestador en el servidor Ubuntu (10.156.2.39) coordina los agentes:
+- **Orchestrator:** Coordinador central
+- **Backend:** Desarrollo de API
+- **Frontend:** Desarrollo UI
+- **Security:** Auditoría de seguridad
 
-client/
-  openrouter_client.py          # Cliente OpenRouter y rutas seguras
+## Seguridad
 
-memory/
-  store.py                      # Persistencia de memoria
-  context_manager.py            # Manejo y sanitización de contexto
+- HTTPS obligatorio
+- RBAC con 4 roles
+- Contraseñas bcrypt/argon2
+- Validación Zod
+- OWASP Top 10
+- MFA recomendado para admin
 
-legacy_python/
-  agents/                       # Implementación previa de DirectorAgent y base_agent
-  discord_bot/                  # Bot Discord legado
-  main.py                       # Entrada Python legacy
+## Última Actualización
 
-data/
-logs/
-vault/
-  01-Proyecto/
-  02-Agentes/
-  03-Decisiones/
-  05-Handoffs/
-Criterio documental
-Este repositorio debe reflejar primero lo que realmente está funcionando en producción o en operación activa: OpenClaw, el agente orquestador, su skill operativo y la documentación asociada.
-
-Todo componente que no sea parte del runtime principal debe documentarse como legacy, experimental o futuro, evitando presentarlo como arquitectura activa.
-
-Seguridad y contexto
-La política ZDR y los componentes de sanitización/contexto siguen presentes en el código del proyecto, por lo que cualquier limpieza futura debe decidirse con validación técnica y no solo documental.
-
-Mientras existan context_manager.py, openrouter_client.py, prompts y flags de configuración asociados, ZDR debe tratarse como parte vigente del diseño del repositorio, aunque algunas piezas estén en código legacy.
-
-Próximos ajustes recomendados
-Actualizar docs/AGENTS.md para indicar que el agente operativo es ORQUESTADOR y que DirectorAgent pertenece a legacy_python/.
-
-Corregir docs/decisiones/decisions/0001-orchestrator-setup.md para reflejar que el runtime principal usa orquestador, no main.
-
-Revisar referencias internas en documentación para que todas apunten a rutas reales bajo docs/arquitectura/ y docs/memoria/.
+- 2026-07-22: Configuración GitHub + Obsidian sync
+- 2026-07-21: Arquitectura v1 definida
+- 2026-07-21: Modelo de datos SQL
+- 2026-07-21: API spec OpenAPI 3.0

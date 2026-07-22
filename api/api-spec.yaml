@@ -1,0 +1,975 @@
+openapi: 3.0.3
+info:
+  title: Grupo Security - API Comercial v1
+  description: |
+    API interna para gestión de catálogo, precios, usuarios y publicación.
+    Sistema de panel administrativo para Grupo Security.
+  version: 1.0.0
+  contact:
+    name: Grupo Security - Equipo Técnico
+
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Desarrollo local
+
+tags:
+  - name: Auth
+    description: Autenticación y autorización
+  - name: Products
+    description: Gestión de productos
+  - name: Categories
+    description: Gestión de categorías
+  - name: Brands
+    description: Gestión de marcas
+  - name: Price Lists
+    description: Gestión de listas de precios
+  - name: Prices
+    description: Gestión de precios
+  - name: Users
+    description: Gestión de usuarios
+  - name: Roles
+    description: Gestión de roles
+  - name: Audit
+    description: Logs de auditoría
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Iniciar sesión
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Renovar token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token renovado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /products:
+    get:
+      tags: [Products]
+      summary: Listar productos
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: category_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: brand_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, active, archived]
+        - name: is_published
+          in: query
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Búsqueda por nombre o SKU
+      responses:
+        '200':
+          description: Lista de productos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductList'
+    post:
+      tags: [Products]
+      summary: Crear producto
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '201':
+          description: Producto creado
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /products/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Products]
+      summary: Obtener producto por ID
+      responses:
+        '200':
+          description: Producto encontrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Products]
+      summary: Actualizar producto
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '200':
+          description: Producto actualizado
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Products]
+      summary: Eliminar producto
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Producto eliminado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /products/{id}/publish:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags: [Products]
+      summary: Toggle publicación de producto
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_published:
+                  type: boolean
+      responses:
+        '200':
+          description: Estado de publicación actualizado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /categories:
+    get:
+      tags: [Categories]
+      summary: Listar categorías (árbol)
+      responses:
+        '200':
+          description: Lista de categorías
+    post:
+      tags: [Categories]
+      summary: Crear categoría
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryInput'
+      responses:
+        '201':
+          description: Categoría creada
+
+  /categories/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Categories]
+      summary: Obtener categoría
+      responses:
+        '200':
+          description: Categoría encontrada
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Categories]
+      summary: Actualizar categoría
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryInput'
+      responses:
+        '200':
+          description: Categoría actualizada
+    delete:
+      tags: [Categories]
+      summary: Eliminar categoría
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Categoría eliminada
+
+  /brands:
+    get:
+      tags: [Brands]
+      summary: Listar marcas
+      responses:
+        '200':
+          description: Lista de marcas
+    post:
+      tags: [Brands]
+      summary: Crear marca
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrandInput'
+      responses:
+        '201':
+          description: Marca creada
+
+  /brands/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Brands]
+      summary: Obtener marca
+      responses:
+        '200':
+          description: Marca encontrada
+    put:
+      tags: [Brands]
+      summary: Actualizar marca
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrandInput'
+      responses:
+        '200':
+          description: Marca actualizada
+    delete:
+      tags: [Brands]
+      summary: Eliminar marca
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Marca eliminada
+
+  /price-lists:
+    get:
+      tags: [Price Lists]
+      summary: Listar listas de precios
+      responses:
+        '200':
+          description: Lista de precios
+    post:
+      tags: [Price Lists]
+      summary: Crear lista de precios
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PriceListInput'
+      responses:
+        '201':
+          description: Lista creada
+
+  /price-lists/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Price Lists]
+      summary: Obtener lista de precios
+      responses:
+        '200':
+          description: Lista encontrada
+    put:
+      tags: [Price Lists]
+      summary: Actualizar lista
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PriceListInput'
+      responses:
+        '200':
+          description: Lista actualizada
+    delete:
+      tags: [Price Lists]
+      summary: Eliminar lista
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Lista eliminada
+
+  /prices:
+    get:
+      tags: [Prices]
+      summary: Listar precios
+      parameters:
+        - name: product_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: price_list_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lista de precios
+    post:
+      tags: [Prices]
+      summary: Asignar precio a producto
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PriceInput'
+      responses:
+        '201':
+          description: Precio asignado
+
+  /prices/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Prices]
+      summary: Actualizar precio
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PriceInput'
+      responses:
+        '200':
+          description: Precio actualizado
+    delete:
+      tags: [Prices]
+      summary: Eliminar precio
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Precio eliminado
+
+  /users:
+    get:
+      tags: [Users]
+      summary: Listar usuarios
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de usuarios
+    post:
+      tags: [Users]
+      summary: Crear usuario
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInput'
+      responses:
+        '201':
+          description: Usuario creado
+
+  /users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Users]
+      summary: Obtener usuario
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Usuario encontrado
+    put:
+      tags: [Users]
+      summary: Actualizar usuario
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInput'
+      responses:
+        '200':
+          description: Usuario actualizado
+    delete:
+      tags: [Users]
+      summary: Eliminar usuario
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Usuario eliminado
+
+  /roles:
+    get:
+      tags: [Roles]
+      summary: Listar roles
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de roles
+    post:
+      tags: [Roles]
+      summary: Crear rol
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleInput'
+      responses:
+        '201':
+          description: Rol creado
+
+  /roles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Roles]
+      summary: Actualizar rol
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleInput'
+      responses:
+        '200':
+          description: Rol actualizado
+    delete:
+      tags: [Roles]
+      summary: Eliminar rol
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Rol eliminado
+
+  /audit-logs:
+    get:
+      tags: [Audit]
+      summary: Listar logs de auditoría
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: entity
+          in: query
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Lista de logs
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        sku:
+          type: string
+        category_id:
+          type: string
+          format: uuid
+        brand_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [draft, active, archived]
+        is_published:
+          type: boolean
+        images:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProductInput:
+      type: object
+      required: [name, sku]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+        sku:
+          type: string
+          minLength: 1
+          maxLength: 100
+        category_id:
+          type: string
+          format: uuid
+        brand_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [draft, active, archived]
+          default: draft
+        images:
+          type: array
+          items:
+            type: string
+
+    ProductList:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        meta:
+          $ref: '#/components/schemas/Pagination'
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+        sort_order:
+          type: integer
+        is_active:
+          type: boolean
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+
+    CategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+        sort_order:
+          type: integer
+
+    Brand:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        logo_url:
+          type: string
+        description:
+          type: string
+        is_active:
+          type: boolean
+
+    BrandInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        logo_url:
+          type: string
+        description:
+          type: string
+
+    PriceList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        currency:
+          type: string
+        valid_from:
+          type: string
+          format: date
+        valid_to:
+          type: string
+          format: date
+        is_active:
+          type: boolean
+
+    PriceListInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        currency:
+          type: string
+          default: COP
+        valid_from:
+          type: string
+          format: date
+        valid_to:
+          type: string
+          format: date
+
+    Price:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        price_list_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        currency:
+          type: string
+
+    PriceInput:
+      type: object
+      required: [product_id, price_list_id, amount]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        price_list_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          minimum: 0
+        currency:
+          type: string
+          default: COP
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        is_active:
+          type: boolean
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        created_at:
+          type: string
+          format: date-time
+
+    UserInput:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        is_active:
+          type: boolean
+          default: true
+        role_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+
+    RoleInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        permissions:
+          type: array
+          items:
+            type: string
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [CREATE, UPDATE, DELETE]
+        entity:
+          type: string
+        entity_id:
+          type: string
+          format: uuid
+        changes:
+          type: object
+        ip_address:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+            user:
+              $ref: '#/components/schemas/User'
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: No autenticado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
