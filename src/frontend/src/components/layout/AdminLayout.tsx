@@ -4,11 +4,11 @@ import Header from './Header'
 
 export default function AdminLayout() {
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="min-h-screen bg-navy-50">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="ml-64 flex flex-col min-h-screen">
         <Header />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 p-6">
           <Outlet />
         </main>
       </div>
