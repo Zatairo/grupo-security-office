@@ -19,14 +19,14 @@ Sistema web interno para la gestión comercial de Grupo Security, incluyendo:
 
 ## 2. Stack Tecnológico
 
-| Capa | Tecnología | Versión | Justificación |
-|------|-----------|---------|---------------|
+| Stack Tecnológico | Tecnología | Versión | Justificación |
+|-------------------|-----------|---------|---------------|
 | Frontend Admin | React + TypeScript + Tailwind CSS + Vite | React 18 | Rápido, tipado, CSS utility-first |
 | Backend API | NestJS + TypeScript | NestJS 10 | Modular, escalable, enterprise-ready |
 | Base de datos | PostgreSQL | 16 | Robusto, open-source, JSON support |
 | ORM | Prisma | 5.x | Type-safe, migraciones, relations |
 | Auth | Passport.js + JWT + bcrypt | - | Estándar industry |
-| Validación | Zod + class-validator | - | Type-safe validation |
+| Validación | class-validator + class-transformer | - | DTOs tipados, consistente en backend |
 | API Docs | Swagger (auto desde NestJS) | - | Generado automáticamente |
 | State Management | Zustand | 4.x | Ligero, simple, TypeScript-first |
 | Data Fetching | React Query (TanStack Query) | 5.x | Caching, revalidation, loading states |
@@ -775,7 +775,6 @@ export class RolesGuard implements CanActivate {
 DATABASE_URL=postgresql://postgres:password@localhost:5432/grupo_security
 JWT_SECRET=your-super-secret-jwt-key-min-32-characters
 JWT_EXPIRATION=24h
-REDIS_URL=redis://localhost:6379
 CORS_ORIGIN=http://localhost:5173
 API_PORT=3000
 NODE_ENV=development
