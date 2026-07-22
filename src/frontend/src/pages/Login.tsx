@@ -19,7 +19,7 @@ export default function Login() {
     try {
       const response = await api.post('/auth/login', { email, password })
       const { user } = response.data
-      login(user, user.id)
+      login(user)
       navigate('/')
     } catch (err: any) {
       setError(err.response?.data?.message || 'Error al iniciar sesión')

@@ -7,13 +7,18 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private prisma: PrismaService) {
     super({
-      jwtFromRequest: ExtractJwt.fromExtractors([
-        (request: any) => {
-          // Extract from cookie first, then Authorization header
-          return request?.cookies?.access_token || null;
-        },
-        ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ]),
+      jwtFromRequest: (req: any) => {
+        // 1. Try cookie first
+        if (req?.cookies?.access_token) {
+          return req.cookies.access_token;
+        }
+        // 2. Try Authorization header (Bearer token)
+        const authHeader = req?.headers?.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          return authHeader.substring(7);
+        }
+        return null;
+      },
       ignoreExpiration: false,
       secretOrKey: process.env.JWT_SECRET || 'grupo-security-secret-key-change-in-production',
     });
