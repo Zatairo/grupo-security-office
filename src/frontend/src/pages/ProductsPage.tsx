@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../services/api'
+import ExcelImport from '../components/ExcelImport'
 
 interface Product {
   id: string
@@ -23,6 +24,7 @@ export default function ProductsPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
 
@@ -76,15 +78,26 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold text-syscom-700">Productos</h1>
           <p className="text-sm text-gray-500 mt-1">Gestiona tu catálogo de productos</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nuevo Producto
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Importar Excel
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nuevo Producto
+          </button>
+        </div>
       </div>
 
       {/* Search and filters */}
@@ -321,6 +334,16 @@ export default function ProductsPage() {
             queryClient.invalidateQueries({ queryKey: ['products'] })
             setShowCreateModal(false)
             setEditingProduct(null)
+          }}
+        />
+      )}
+
+      {/* Excel Import Modal */}
+      {showImportModal && (
+        <ExcelImport
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['products'] })
           }}
         />
       )}

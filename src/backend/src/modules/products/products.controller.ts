@@ -1,11 +1,13 @@
-import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Products')
 @ApiBearerAuth()
@@ -85,5 +87,24 @@ export class ProductsController {
   @ApiOperation({ summary: 'Eliminar producto' })
   remove(@Param('id') id: string) {
     return this.productsService.remove(id);
+  }
+
+  @Post('import')
+  @Roles('Admin', 'Gerente')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Importar productos desde Excel' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Productos importados' })
+  @ApiResponse({ status: 400, description: 'Archivo inválido' })
+  async importExcel(@UploadedFile() file: Express.Multer.File) {
+    return this.productsService.importFromExcel(file.buffer);
   }
 }
