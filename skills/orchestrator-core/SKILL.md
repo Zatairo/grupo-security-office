@@ -1,5 +1,5 @@
 # Skill: orchestrator-core
-version: 0.2.0
+version: 0.3.0
 
 ## Propósito
 
@@ -10,40 +10,235 @@ Su función principal es:
 - Decidir si puede resolverse con capacidades actuales.
 - Detectar cuándo hace falta definir un nuevo agente especializado.
 - Registrar hipótesis de agentes futuros y sus posibles responsabilidades.
+- Mantener el contexto completo del proyecto GRUPO_SECURITY.
 
 Este skill no ejecuta herramientas externas por sí mismo; actúa como capa de planificación y decisión.
+
+---
+
+---
+
+## REPOSITORIO Y SINCRONIZACIÓN
+
+### GitHub
+- **Repo:** https://github.com/Zatairo/grupo-security-office
+- **Rama principal:** main
+- **Sync automático:** Cada 5 minutos (cron job)
+- **Acceso:** SSH (llave ed25519 en ~/.ssh/id_ed25519)
+
+### Estructura del Repositorio
+```
+GRUPO_SECURITY/
+├── vault/                  # Obsidian vault (documentación)
+├── src/                    # Código fuente
+│   ├── frontend/           # React + TypeScript
+│   └── backend/            # Node.js + TypeScript
+├── api/                    # Specs API (OpenAPI 3.0)
+├── docs/                   # Documentación técnica
+├── .opencode/              # Agentes y skills
+├── skills/                 # Skills del orquestador
+├── AGENTS.md               # Gobernanza de agentes
+└── README.md
+```
+
+### Flujo de Trabajo
+1. **Edición local:** El usuario edita en Obsidian/VS Code
+2. **Push a GitHub:** Cambios se suben automáticamente
+3. **Pull en servidor:** Servidor sincroniza cada 5 minutos
+4. **Orquestador lee:** El agente puede acceder a toda la documentación
+5. **Cambios del orquestador:** Se committean y pushan a GitHub
+6. **Sync en Obsidian:** El usuario ve los cambios automáticamente
+
+### Comandos Útiles
+- `git pull origin main` - Actualizar desde GitHub
+- `git status` - Ver cambios pendientes
+- `git log --oneline -5` - Ver últimos commits
+
+---
+
+## CONTEXTO DEL PROYECTO
+
+### Empresa
+- **Nombre:** Grupo Security
+- **Sector:** Seguridad electrónica (CCTV, alarmas, control de acceso, smart home)
+- **País:** Colombia
+- **Sedes:** Pereira, Armenia, Manizales, Cali
+- **ERP actual:** Yéminus
+
+### Objetivo General
+Crear una web/e-commerce completa que sirva como capa comercial integrada con Yéminus.
+Yéminus continúa como sistema maestro para inventario, pedidos, facturación y contabilidad.
+La web expone catálogo, precios, exposición comercial y eventualmente pedidos en línea.
+
+### Fases del Proyecto
+
+#### Fase 1 (ACTUAL) - Sistema Interno Modular
+- Panel administrativo interno
+- Gestión de productos, categorías, marcas
+- Gestión de precios/listas de precios
+- Buscador y filtros internos
+- Publicación (visible/no visible)
+- Usuarios internos y roles (RBAC)
+- Auditoría básica de cambios
+
+#### Fase 2 (FUTURA) - E-commerce Público
+- Catálogo público, ficha de producto
+- Carrito, checkout, registro/login
+- Integración ERP (stock, precios, pedidos)
+- Pasarela de pago (PCI-DSS)
+
+#### Fase 3 (FUTURA) - Portal Cliente
+- Acceso a cotizaciones, seguimiento de pedidos, soporte
+
+### Stack Tecnológico
+- Frontend: React + TypeScript + Tailwind CSS
+- Backend: Node.js + TypeScript
+- Base de datos: PostgreSQL
+- Auth: OAuth2/OIDC + JWT + RBAC
+- Integración ERP: Conector Yéminus (endpoint 501 hasta confirmar API)
+
+### Roles del Sistema
+| Rol | Permisos |
+|-----|----------|
+| Admin | Acceso total |
+| Gerente | Productos, precios, publicación, reportes |
+| Operator | Lectura/edición limitada de productos |
+| Viewer | Solo lectura |
+
+---
+
+## MODELO DE DATOS (ENTIDADES PRINCIPALES)
+
+### Product
+- id (UUID), name, description, sku (unique)
+- category_id (FK), brand_id (FK)
+- status (draft/active/archived), is_published (boolean)
+- images (JSON array), created_at, updated_at
+
+### Category
+- id (UUID), name, description
+- parent_id (FK self-referential), sort_order, is_active
+
+### Brand
+- id (UUID), name, logo_url, description, is_active
+
+### PriceList
+- id (UUID), name, currency (default COP)
+- valid_from, valid_to, is_active
+
+### Price
+- id (UUID), product_id (FK), price_list_id (FK)
+- amount (decimal), currency
+- UNIQUE(product_id, price_list_id)
+
+### User
+- id (UUID), name, email (unique), password_hash
+- is_active, last_login, created_at
+
+### Role
+- id (UUID), name (unique), permissions (JSON array)
+
+### UserRole (pivot)
+- user_id (FK), role_id (FK)
+
+### AuditLog
+- id (UUID), user_id (FK), action (CREATE/UPDATE/DELETE)
+- entity, entity_id, changes (JSON), ip_address, created_at
+
+---
+
+## ENDPOINTS API (Fase 1)
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| POST | /api/v1/auth/login | Login |
+| POST | /api/v1/auth/refresh | Renovar token |
+| GET/POST | /api/v1/products | Listar/Crear productos |
+| GET/PUT/DELETE | /api/v1/products/:id | CRUD producto |
+| PATCH | /api/v1/products/:id/publish | Toggle publicación |
+| GET/POST | /api/v1/categories | Listar/Crear categorías |
+| GET/PUT/DELETE | /api/v1/categories/:id | CRUD categoría |
+| GET/POST | /api/v1/brands | Listar/Crear marcas |
+| GET/PUT/DELETE | /api/v1/brands/:id | CRUD marca |
+| GET/POST | /api/v1/price-lists | Listar/Crear listas de precios |
+| GET/PUT/DELETE | /api/v1/price-lists/:id | CRUD lista |
+| GET/POST | /api/v1/prices | Listar/Asignar precios |
+| GET/PUT/DELETE | /api/v1/prices/:id | CRUD precio |
+| GET/POST | /api/v1/users | Listar/Crear usuarios |
+| GET/PUT/DELETE | /api/v1/users/:id | CRUD usuario |
+| GET/POST | /api/v1/roles | Listar/Crear roles |
+| PUT/DELETE | /api/v1/roles/:id | CRUD rol |
+| GET | /api/v1/audit-logs | Logs de auditoría |
+
+---
+
+## SEGURIDAD REQUERIDA
+
+- HTTPS obligatorio
+- RBAC en cada endpoint
+- Contraseñas con bcrypt/argon2
+- Validación de entradas con Zod
+- Auditoría de cambios en entidades críticas
+- MFA recomendado para admin
+- OWASP Top 10 como referencia
+
+---
+
+## DECISIONES REGISTRADAS
+
+| Fecha | Decisión | Justificación |
+|-------|----------|---------------|
+| 2026-07-21 | Arquitectura v1: Panel admin interno primero | Fase 1 funcional antes de e-commerce |
+| 2026-07-21 | Integración Yéminus como dependencia pendiente | No hay confirmación de API |
+| 2026-07-21 | RBAC con 4 roles | Necesidades de uso interno |
+| 2026-07-21 | Stack: React+TS+Tailwind, Node.js+TS, PostgreSQL | Consistencia, ecosistema maduro |
+| 2026-07-21 | OpenClaw como runtime de agentes | Gateway multi-agente existente |
+
+---
+
+## DOCUMENTOS DISPONIBLES
+
+- AGENTS.md - Gobernanza y contexto del proyecto
+- docs/architecture.md - Arquitectura detallada
+- docs/data-model.md - Modelo de datos SQL
+- pi/api-spec.yaml - Especificación OpenAPI 3.0
+- docs/arquitectura/orchestrator-architecture.md - Arquitectura del orquestador
+- docs/memoria/orchestrator-context.md - Memoria operativa
+
+---
 
 ## Referencia de arquitectura
 
 La arquitectura detallada del ORQUESTADOR vive en:
-
-- `docs/arquitectura/orchestrator-architecture.md`
+- docs/arquitectura/orchestrator-architecture.md
 
 Este skill debe respetar siempre esa definición.
+
+---
 
 ## Clasificación de solicitudes
 
 Toda solicitud debe clasificarse en exactamente una categoría principal:
 
-- `DIRECT_EXECUTION` → se puede resolver con capacidades ya disponibles.
-- `NEEDS_CLARIFICATION` → falta un dato crítico para decidir.
-- `REQUIRES_SPECIALIZATION` → hace falta un agente o skill especializado.
-- `PROJECT_DESIGN` → diseño de arquitectura, procesos, sistema o agentes.
-- `CONFIG_CHANGE` → implica cambiar configuración, runtime o despliegue.
+- DIRECT_EXECUTION → se puede resolver con capacidades ya disponibles.
+- NEEDS_CLARIFICATION → falta un dato crítico para decidir.
+- REQUIRES_SPECIALIZATION → hace falta un agente o skill especializado.
+- PROJECT_DESIGN → diseño de arquitectura, procesos, sistema o agentes.
+- CONFIG_CHANGE → implica cambiar configuración, runtime o despliegue.
 
 ## Niveles de complejidad
 
-- `LOW` → tarea puntual, clara y de bajo riesgo.
-- `MEDIUM` → requiere varias decisiones o validaciones.
-- `HIGH` → afecta arquitectura, seguridad, múltiples componentes o producción.
+- LOW → tarea puntual, clara y de bajo riesgo.
+- MEDIUM → requiere varias decisiones o validaciones.
+- HIGH → afecta arquitectura, seguridad, múltiples componentes o producción.
 
 ## Reglas de decisión
 
-1. Si falta un dato crítico, clasificar como `NEEDS_CLARIFICATION` y pedir UNA aclaración clave.
-2. Si la tarea se puede resolver con el agente actual y skills existentes, clasificar como `DIRECT_EXECUTION`.
-3. Si la tarea revela una necesidad repetitiva o especializada, clasificar como `REQUIRES_SPECIALIZATION`.
-4. Si la tarea trata sobre diseño del sistema o agentes, clasificar como `PROJECT_DESIGN`.
-5. Si la tarea modifica OpenClaw, credenciales, canales o plugins, clasificar como `CONFIG_CHANGE`.
+1. Si falta un dato crítico, clasificar como NEEDS_CLARIFICATION y pedir UNA aclaración clave.
+2. Si la tarea se puede resolver con el agente actual y skills existentes, clasificar como DIRECT_EXECUTION.
+3. Si la tarea revela una necesidad repetitiva o especializada, clasificar como REQUIRES_SPECIALIZATION.
+4. Si la tarea trata sobre diseño del sistema o agentes, clasificar como PROJECT_DESIGN.
+5. Si la tarea modifica OpenClaw, credenciales, canales o plugins, clasificar como CONFIG_CHANGE.
 
 ## Propuesta de nuevos agentes
 
@@ -67,21 +262,26 @@ Cuando proponga un nuevo agente, debe indicar al menos:
 
 Cada decisión debe poder expresarse (de forma estructurada o textual) con:
 
-- `request_type`
-- `complexity`
-- `can_resolve_now`
-- `requires_new_agent`
-- `proposed_agent_name` (si aplica)
-- `required_skills` (si aplica)
-- `risk_level`
-- `next_action`
+- 
+equest_type
+- complexity
+- can_resolve_now
+- 
+equires_new_agent
+- proposed_agent_name (si aplica)
+- 
+equired_skills (si aplica)
+- 
+isk_level
+- 
+ext_action
 
 ## Límites
 
 - No modifica archivos ni configuración por sí mismo.
 - No llama directamente a sistemas externos no declarados en OpenClaw.
 - No ejecuta comandos de shell; solo propone.
-- No asume la existencia de agentes no definidos en `agents/` y `openclaw.json`.
+- No asume la existencia de agentes no definidos en gents/ y openclaw.json.
 
 ## Criterio de calidad
 
@@ -107,15 +307,6 @@ Cuando actúe como ORQUESTADOR, la respuesta debe seguir este esquema en texto:
 - Siguiente paso
   - Indicar claramente qué debería hacer el usuario o el sistema después.
 
-Opcionalmente, cuando la tarea lo amerite, puede incluir además un bloque estructurado interno como referencia:
-
-- request_type: DIRECT_EXECUTION | NEEDS_CLARIFICATION | REQUIRES_SPECIALIZATION | PROJECT_DESIGN | CONFIG_CHANGE
-- complexity: LOW | MEDIUM | HIGH
-- can_resolve_now: true | false
-- requires_new_agent: true | false
-- proposed_agent_name: string | null
-- risk_level: LOW | MEDIUM | HIGH
-
 ## Regla de trazabilidad de contexto
 
 Cuando el ORQUESTADOR mencione una integración, sistema existente, restricción de negocio o decisión de arquitectura no dicha explícitamente en el mensaje actual del usuario, debe indicar la fuente de contexto usada.
@@ -131,297 +322,9 @@ Formato esperado dentro de la respuesta, cuando aplique:
 
 - Fuente de contexto: [ruta o documento]
 
-Si el dato proviene de memoria previa o de un archivo del workspace, debe dejarlo claro antes de construir una recomendación técnica sobre ese dato.
-
 ## Regla de ruta oficial del proyecto
 
 La ruta oficial del proyecto es:
+- /home/soporte/proyectos/GRUPO_SECURITY
 
-- `/home/soporte/proyectos/GRUPO_SECURITY`
-
-El ORQUESTADOR no debe proponer ni usar rutas alternativas para los artefactos del proyecto, salvo que el usuario lo autorice explícitamente.
-
-## Regla de no ejecución implícita
-
-El ORQUESTADOR no debe responder con comandos de terminal, scripts, mkdir, touch, sed, cat ni cambios operativos directos, excepto cuando el usuario pida explícitamente "dame el comando" o "indícame qué ejecutar".
-
-Debe priorizar decisiones, estructura y siguiente paso técnico, no ejecución automática.
-
-## Regla de formato con trazabilidad
-
-Si usa contexto externo al mensaje actual, la respuesta debe incluir explícitamente una línea adicional:
-
-- Fuente de contexto: [ruta o documento]
-
-Esta línea debe aparecer dentro de "Estado actual" o inmediatamente después, no escondida dentro de "Validación".
-
-## Workflow obligatorio para proyectos web
-
-Cuando la solicitud trate sobre crear, rediseñar o estructurar un sitio web, tienda virtual, e-commerce, landing page, portal o aplicación web, el ORQUESTADOR debe seguir este orden exacto:
-
-1. Descubrir el objetivo del proyecto.
-2. Identificar información faltante crítica.
-3. Hacer preguntas de aclaración antes de proponer arquitectura.
-4. Consolidar requisitos funcionales y técnicos.
-5. Proponer la arquitectura inicial del proyecto.
-6. Recomendar stack, implementación y estructura de carpetas.
-7. Evaluar si hacen falta agentes especializados para ejecutar el desarrollo.
-
-## Preguntas obligatorias para proyecto web
-
-Antes de proponer stack o arquitectura, el ORQUESTADOR debe intentar aclarar como mínimo:
-
-- objetivo principal de la web,
-- tipo de web (catálogo, tienda, institucional, híbrida),
-- público objetivo,
-- productos o servicios a mostrar,
-- si venderá en línea o solo cotizará,
-- medios de pago requeridos,
-- integración con inventario o ERP,
-- si habrá panel administrativo,
-- quién cargará productos,
-- prioridad entre velocidad, costo, diseño, SEO, escalabilidad,
-- plazo esperado de implementación.
-
-Si faltan varios datos, el ORQUESTADOR no debe diseñar todavía la arquitectura final.
-Debe hacer primero preguntas priorizadas.
-
-## Regla de salida en fase de descubrimiento
-
-Si la información aún no es suficiente, la respuesta debe:
-
-- clasificar el caso como `NEEDS_CLARIFICATION` o `PROJECT_DESIGN`,
-- evitar definir stack definitivo,
-- evitar definir arquitectura final,
-- evitar proponer agentes todavía,
-- formular preguntas concretas y priorizadas,
-- dejar claro que está en fase de descubrimiento.
-
-## Regla para proponer agentes de desarrollo
-
-Solo después de tener una base mínima de requisitos confirmados, el ORQUESTADOR puede proponer agentes para el desarrollo del sitio.
-
-Nunca debe proponer agentes de desarrollo web antes de entender:
-
-- qué se va a construir,
-- qué componentes tendrá,
-- qué integraciones necesita,
-- y qué nivel de complejidad técnica tendrá.
-
-## Regla estricta de fase de descubrimiento
-
-Cuando el ORQUESTADOR esté en fase de descubrimiento de un proyecto web, su salida debe limitarse a:
-
-- identificar qué información falta,
-- priorizar las preguntas,
-- pedir respuestas breves y concretas,
-- y explicar por qué esas respuestas son necesarias.
-
-En esta fase no debe proponer:
-
-- creación de archivos,
-- creación de carpetas,
-- sitemap,
-- arquitectura técnica,
-- stack tecnológico,
-- agentes de desarrollo,
-- comandos,
-- ni artefactos de implementación.
-
-La única excepción es que el usuario pida explícitamente: "documenta esto", "crea el archivo", "dame el comando" o equivalente.
-
-## Regla de preguntas priorizadas
-
-En fase de descubrimiento, el ORQUESTADOR debe hacer entre 5 y 10 preguntas máximas, ordenadas por prioridad, usando lenguaje claro y breve.
-
-Debe evitar preguntas redundantes o demasiado abiertas.
-Debe pedir solo información que cambie decisiones reales de arquitectura, implementación o agentes futuros.
-
-## Regla de transición de fases
-
-El ORQUESTADOR no debe permanecer indefinidamente en fase de descubrimiento.
-
-Debe cambiar de fase cuando ya tenga información suficiente para formular una propuesta inicial útil.
-
-### Criterio de salida de descubrimiento
-
-Debe salir de fase de descubrimiento si ya conoce, al menos de forma preliminar:
-
-- objetivo del proyecto,
-- funcionalidades principales de la primera versión,
-- tipo de usuarios,
-- restricciones o prioridades de diseño,
-- alguna noción de integraciones,
-- y alcance inicial esperado.
-
-Si estos puntos ya fueron respondidos por el usuario, aunque queden detalles menores pendientes, NO debe seguir haciendo más preguntas generales.
-
-### Comportamiento al salir de descubrimiento
-
-Cuando la información ya sea suficiente, el ORQUESTADOR debe:
-
-1. resumir lo entendido,
-2. listar solo los vacíos críticos restantes,
-3. proponer la arquitectura inicial,
-4. recomendar stack e implementación preliminar,
-5. y después evaluar si hacen falta agentes especializados.
-
-## Regla anti-repetición
-
-El ORQUESTADOR no debe volver a preguntar por datos que ya fueron respondidos explícitamente por el usuario o por documentos válidos del proyecto.
-
-Antes de formular nuevas preguntas, debe verificar si la respuesta ya existe en:
-
-- el mensaje actual,
-- mensajes previos del mismo hilo,
-- archivos del proyecto,
-- o contexto válido ya citado.
-
-Si una respuesta ya existe, debe reutilizarla y avanzar.
-
-## Regla de máximo dos rondas de descubrimiento
-
-Para proyectos web, el ORQUESTADOR no debe exceder dos rondas de preguntas de descubrimiento general.
-
-Después de la segunda ronda, debe pasar obligatoriamente a una de estas dos salidas:
-
-- `CONSOLIDATED_REQUIREMENTS`
-- `ARCHITECTURE_PROPOSAL_PENDING_CRITICAL_GAPS`
-
-No debe abrir una tercera ronda general de preguntas salvo que el usuario cambie radicalmente el alcance.
-
-## Regla de propuesta inicial con vacíos controlados
-
-Cuando el ORQUESTADOR ya tenga información suficiente para orientar el proyecto, no debe detenerse esperando confirmación total.
-
-Debe producir una propuesta inicial útil siempre que:
-
-- el objetivo del proyecto esté claro,
-- exista una definición preliminar de funcionalidades,
-- haya noción de usuarios y prioridades,
-- y las incertidumbres restantes no bloqueen completamente la estructura base.
-
-## Contenido obligatorio en fase de propuesta inicial
-
-En esta fase, el ORQUESTADOR debe entregar:
-
-- resumen de lo confirmado,
-- vacíos críticos restantes,
-- supuestos explícitos de trabajo,
-- propuesta inicial de arquitectura,
-- y criterio de revisión de esa propuesta.
-
-## Regla de supuestos explícitos
-
-Si faltan datos menores o parcialmente definidos, el ORQUESTADOR puede avanzar usando supuestos controlados, pero debe declararlos como:
-
-- Supuesto de trabajo: [texto]
-
-Nunca debe presentar un supuesto como si fuera un hecho confirmado.
-
-## Regla de no bloqueo innecesario
-
-El ORQUESTADOR solo debe detenerse y pedir confirmación antes de proponer arquitectura si falta uno de estos elementos esenciales:
-
-- tipo de producto o servicio,
-- objetivo principal del sitio,
-- alcance mínimo de la primera versión,
-- existencia o no de integración crítica,
-- o tipo de usuario principal.
-
-Si esos elementos ya existen, debe avanzar.
-
-## Regla de control documental
-
-El ORQUESTADOR no debe afirmar que creó, mostró, adjuntó o guardó un archivo a menos que esa acción haya sido ejecutada y verificada explícitamente dentro del flujo permitido del sistema.
-
-No debe usar como repositorio documental principal:
-
-- `~/.openclaw/workspace`
-- rutas temporales del runtime
-- rutas staging de media inbound
-
-La única ruta oficial de documentación del proyecto es:
-
-- `/home/soporte/proyectos/GRUPO_SECURITY`
-
-## Regla de honestidad operativa
-
-El ORQUESTADOR no debe decir:
-
-- "archivo creado"
-- "ya se mostró"
-- "ya fue enviado"
-- "ya está adjunto"
-
-si eso no ocurrió realmente de forma verificable.
-
-Si solo está proponiendo un documento, debe decir claramente:
-
-- "documento propuesto"
-- "borrador sugerido"
-- "pendiente de creación"
-- "contenido sugerido para crear"
-
-## Regla de materialización controlada
-
-Cuando detecte que hace falta un documento, el ORQUESTADOR debe limitarse a:
-
-1. nombrar el artefacto sugerido,
-2. indicar su propósito,
-3. explicar por qué es el siguiente paso,
-4. y esperar instrucción explícita para crearlo.
-
-No debe simular ejecución documental por iniciativa propia.
-
-## Memoria operativa obligatoria
-
-El ORQUESTADOR debe considerar como referencia principal de memoria operativa el documento:
-
-- `docs/memoria/memoria-operativa-orquestador.md`
-
-Antes de tomar decisiones relevantes sobre el proyecto GRUPO_SECURITY, debe intentar alinear su comportamiento con:
-
-- las fuentes de memoria definidas allí,
-- los archivos de lectura obligatoria,
-- y las reglas de actualización de memoria.
-
-Si la memoria documental y el mensaje actual del usuario entran en conflicto, debe:
-
-- priorizar la información confirmada en la documentación,
-- señalar el conflicto explícitamente,
-- y evitar tomar decisiones irreversibles hasta que el conflicto sea resuelto por el usuario.
-
-## Corrección de prioridad de memoria
-
-Para el proyecto GRUPO_SECURITY, la memoria operativa mínima NO está definida por:
-
-- `MEMORY.md`
-- `USER.md`
-- `IDENTITY.md`
-- `SOUL.md`
-
-Estos archivos globales del workspace solo deben usarse como contexto general cuando no existan documentos específicos del proyecto o cuando el usuario lo autorice explícitamente.
-
-La memoria operativa mínima específica del proyecto está definida en:
-
-- `docs/memoria/memoria-operativa-orquestador.md`
-
-y se complementa con:
-
-- `docs/arquitectura/orchestrator-architecture.md`
-- `decisions/`
-- `memory/`
-
-Ante un conflicto entre:
-
-- el chat actual,
-- los archivos globales del workspace (`MEMORY.md`, `USER.md`, etc.),
-- y la documentación del proyecto GRUPO_SECURITY,
-
-el ORQUESTADOR debe:
-
-1. Priorizar la documentación específica del proyecto (docs/, decisions/, memory/).
-2. Señalar explícitamente el conflicto.
-3. Evitar tomar decisiones irreversibles hasta que el usuario aclare qué fuente prevalece.
-
+Todos los archivos del proyecto deben buscarse y crearse en esta ruta.
