@@ -562,10 +562,12 @@ model AuditLog {
    - email: user.email
    - roles: [role names]
    - permissions: [all permissions from roles]
-4. Devuelve JWT al frontend
-5. Frontend almacena JWT en localStorage
-6. Todas las peticiones incluyen header: Authorization: Bearer <token>
+4. Backend envía JWT en cookie HttpOnly (no accesible desde JS)
+5. Frontend envía cookie automáticamente en cada petición
+6. Backend extrae JWT de cookie en cada request
 ```
+
+**Nota:** Se usa cookie HttpOnly en vez de localStorage por seguridad (previene XSS de acceder al token).
 
 ### 7.2 JWT Payload
 
@@ -817,20 +819,60 @@ NODE_ENV=development
 
 ## 11. Seguridad
 
-### 11.1 Medidas Implementadas
+### 11.1 Seguridad Mínima Obligatoria (Fase 1)
 
-- **HTTPS**: Obligatorio en producción
-- **CORS**: Configurado para origen específico
-- **Rate Limiting**: Límite de peticiones por IP
-- **Input Validation**: Zod + class-validator en todos los endpoints
-- **SQL Injection**: Prisma ORM previene automáticamente
-- **XSS**: React escapa automáticamente, CSP headers
-- **CSRF**: Tokens CSRF para formularios
-- **Password Hashing**: bcrypt con salt rounds 12
-- **JWT**: Expiración configurable, refresh tokens
-- **RBAC**: Control de acceso basado en roles y permisos
+Estos controles son **obligatorios** antes de poner el panel en uso:
 
-### 11.2 Auditoría
+| Control | Implementación | Prioridad |
+|---------|---------------|-----------|
+| **Autenticación** | JWT en cookie HttpOnly + bcrypt password hash | Crítica |
+| **Autorización** | RBAC con guards en cada endpoint | Crítica |
+| **Validación de entradas** | class-validator en todos los DTOs | Crítica |
+| **SQL Injection** | Prisma ORM (previene automáticamente) | Crítica |
+| **XSS básico** | React escapa + helmet headers | Alta |
+| **CORS** | Configurar origen específico del frontend | Alta |
+| **Rate Limiting** | throttler en endpoints de auth | Alta |
+| **Auditoría** | Logs de CREATE/UPDATE/DELETE en entidades críticas | Alta |
+| **Contraseñas** | bcrypt con salt rounds 12, mínimo 8 caracteres | Crítica |
+| **MFA futuro** | Reservar endpoint POST /auth/mfa/setup | Media |
+
+### 11.2 Controles de Hardening (Post-Fase 1)
+
+Estos controles se implementan después del MVP funcional:
+
+| Control | Implementación | Cuándo |
+|---------|---------------|--------|
+| **HTTPS** | Certificado SSL/TLS (Let's Encrypt) | Antes de producción |
+| **CSP Headers** | Content-Security-Policy estricto | Post-MVP |
+| **HSTS** | Strict-Transport-Security | Post-MVP |
+| **Rate Limiting avanzado** | Por usuario, por endpoint | Post-MVP |
+| **WAF** | Web Application Firewall | Producción |
+| **MFA** | TOTP (Google Authenticator) | Post-MVP |
+| **Refresh Tokens** | Rotación de tokens | Post-MVP |
+| **Brute Force Protection** | Bloqueo temporal por intentos | Post-MVP |
+| **Audit Log avanzado** | IP, User-Agent, geo | Post-MVP |
+
+### 11.3 Cookie HttpOnly - Configuración
+
+```typescript
+// auth.controller.ts
+@Post('login')
+async login(@Body() loginDto: LoginDto, @Res({ passthrough: true }) res: Response) {
+  const { accessToken } = await this.authService.login(loginDto);
+  
+  res.cookie('auth_token', accessToken, {
+    httpOnly: true,      // No accesible desde JavaScript
+    secure: true,        // Solo HTTPS en producción
+    sameSite: 'strict',  // Protección CSRF
+    maxAge: 24 * 60 * 60 * 1000, // 24 horas
+    path: '/',
+  });
+  
+  return { message: 'Login exitoso' };
+}
+```
+
+### 11.4 Auditoría
 
 Todas las operaciones CRUD en entidades críticas generan logs:
 - Quién realizó la acción
