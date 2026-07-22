@@ -1,0 +1,155 @@
+import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import * as bcrypt from 'bcrypt';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { Prisma } from '@prisma/client';
+
+@Injectable()
+export class UsersService {
+  constructor(private prisma: PrismaService) {}
+
+  async findAll(params?: { skip?: number; take?: number; search?: string }) {
+    const { skip = 0, take = 50, search } = params || {};
+
+    const where: Prisma.UserWhereInput = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { email: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : {};
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          roles: {
+            include: { role: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return {
+      data: users.map((u) => ({
+        ...u,
+        password: undefined,
+        roles: u.roles.map((ur) => ur.role),
+      })),
+      meta: { total, skip, take },
+    };
+  }
+
+  async findOne(id: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        roles: {
+          include: { role: true },
+        },
+      },
+    });
+
+    if (!user) throw new NotFoundException('Usuario no encontrado');
+
+    return {
+      ...user,
+      password: undefined,
+      roles: user.roles.map((ur) => ur.role),
+    };
+  }
+
+  async create(dto: CreateUserDto) {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+    });
+
+    if (existing) {
+      throw new ConflictException('El email ya está registrado');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    const user = await this.prisma.user.create({
+      data: {
+        email: dto.email.toLowerCase(),
+        name: dto.name,
+        password: hashedPassword,
+        isActive: dto.isActive ?? true,
+        roles: dto.roleIds?.length
+          ? {
+              create: dto.roleIds.map((roleId) => ({ roleId })),
+            }
+          : undefined,
+      },
+      include: {
+        roles: { include: { role: true } },
+      },
+    });
+
+    return {
+      ...user,
+      password: undefined,
+      roles: user.roles.map((ur) => ur.role),
+    };
+  }
+
+  async update(id: string, dto: UpdateUserDto) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('Usuario no encontrado');
+
+    if (dto.email && dto.email !== user.email) {
+      const existing = await this.prisma.user.findUnique({
+        where: { email: dto.email.toLowerCase() },
+      });
+      if (existing) throw new ConflictException('El email ya está registrado');
+    }
+
+    const data: Prisma.UserUpdateInput = {
+      ...(dto.name && { name: dto.name }),
+      ...(dto.email && { email: dto.email.toLowerCase() }),
+      ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+    };
+
+    if (dto.password) {
+      data.password = await bcrypt.hash(dto.password, 10);
+    }
+
+    if (dto.roleIds) {
+      await this.prisma.userRole.deleteMany({ where: { userId: id } });
+      data.roles = {
+        create: dto.roleIds.map((roleId) => ({ roleId })),
+      };
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data,
+      include: {
+        roles: { include: { role: true } },
+      },
+    });
+
+    return {
+      ...updated,
+      password: undefined,
+      roles: updated.roles.map((ur) => ur.role),
+    };
+  }
+
+  async remove(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('Usuario no encontrado');
+
+    await this.prisma.userRole.deleteMany({ where: { userId: id } });
+    await this.prisma.user.delete({ where: { id } });
+
+    return { message: 'Usuario eliminado exitosamente' };
+  }
+}

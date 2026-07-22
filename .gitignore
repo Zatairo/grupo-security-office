@@ -1,3 +1,9 @@
+# Node.js
+node_modules/
+dist/
+build/
+.nest-cli/
+
 # Obsidian cache (no versionar)
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json

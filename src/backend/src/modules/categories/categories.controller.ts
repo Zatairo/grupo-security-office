@@ -1,0 +1,59 @@
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { CategoriesService } from './categories.service';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+
+@ApiTags('Categories')
+@ApiBearerAuth()
+@Controller('api/categories')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class CategoriesController {
+  constructor(private readonly categoriesService: CategoriesService) {}
+
+  @Get()
+  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @ApiOperation({ summary: 'Listar categorías' })
+  findAll() {
+    return this.categoriesService.findAll();
+  }
+
+  @Get('tree')
+  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @ApiOperation({ summary: 'Obtener árbol de categorías' })
+  findTree() {
+    return this.categoriesService.findTree();
+  }
+
+  @Get(':id')
+  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @ApiOperation({ summary: 'Obtener categoría por ID' })
+  findOne(@Param('id') id: string) {
+    return this.categoriesService.findOne(id);
+  }
+
+  @Post()
+  @Roles('Admin', 'Gerente')
+  @ApiOperation({ summary: 'Crear categoría' })
+  @ApiResponse({ status: 201, description: 'Categoría creada' })
+  create(@Body() dto: CreateCategoryDto) {
+    return this.categoriesService.create(dto);
+  }
+
+  @Put(':id')
+  @Roles('Admin', 'Gerente')
+  @ApiOperation({ summary: 'Actualizar categoría' })
+  update(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+    return this.categoriesService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles('Admin')
+  @ApiOperation({ summary: 'Eliminar categoría' })
+  remove(@Param('id') id: string) {
+    return this.categoriesService.remove(id);
+  }
+}
