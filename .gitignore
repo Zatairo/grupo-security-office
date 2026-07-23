@@ -45,3 +45,10 @@ logs/
 Thumbs.db
 *.bak
 openclaw-workspace-state.json
+.augment/
+.clinerules/
+.cursor/
+.devin/
+.kiro/
+.roo/
+*.tmp
