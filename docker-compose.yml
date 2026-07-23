@@ -1,0 +1,67 @@
+# ============================================================
+# docker-compose.yml — Desarrollo local con hot-reload
+# ============================================================
+
+services:
+  # ---- PostgreSQL ----
+  db:
+    image: postgres:16-alpine
+    container_name: gs-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-grupo_security}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-grupo_security}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---- Backend (NestJS con hot-reload) ----
+  api:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+      target: deps
+    container_name: gs-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/grupo_security?schema=public}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-no-usar-en-prod}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      API_PORT: 3000
+    volumes:
+      - ./src/backend/src:/app/src
+      - ./src/backend/prisma:/app/prisma
+    command: >
+      sh -c "npx prisma generate && npx prisma migrate deploy && npm run start:dev"
+
+  # ---- Frontend (Vite con hot-reload) ----
+  frontend:
+    image: node:20-alpine
+    container_name: gs-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    working_dir: /app
+    volumes:
+      - ./src/frontend:/app
+    command: >
+      sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  pgdata:

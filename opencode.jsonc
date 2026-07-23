@@ -1,0 +1,20 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openrouter/mistralai/mistral-small-2603",
+  "small_model": "openrouter/qwen/qwen3.6-35b-a3b",
+  "provider": {
+    "openrouter": {
+      "options": {
+        "apiKey": "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"
+      }
+    }
+  },
+  "instructions": ["AGENTS.md"],
+  "agent": {
+    "backend-architecture": {
+      "description": "Arquitecto backend senior - disena, documenta y gobierna la arquitectura NestJS, define modulos, contratos API, seguridad y alineacion con frontend/modelo de datos.",
+      "mode": "primary",
+      "model": "openrouter/mistralai/mistral-small-2603"
+    }
+  }
+}

@@ -1,0 +1,92 @@
+/**
+ * PrismaService mock factory.
+ * Proporciona un mock completo del PrismaService con todos los modelos
+ * que se usan en los servicios. Cada mock expone los métodos de Prisma
+ * (findUnique, findMany, create, update, delete, etc.) como jest.fn().
+ *
+ * Uso:
+ *   const prisma = createPrismaMock();
+ *   const service = new AuthService(prisma as any, jwtService);
+ */
+export const createPrismaMock = () => ({
+  user: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+  },
+  role: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+  },
+  userRole: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    delete: jest.fn(),
+  },
+  rolePermission: {
+    findMany: jest.fn(),
+    create: jest.fn(),
+    deleteMany: jest.fn(),
+  },
+  product: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+  },
+  category: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+  },
+  brand: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+  },
+  priceList: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+  },
+  price: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+  },
+  auditLog: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    count: jest.fn(),
+  },
+  productImage: {
+    findMany: jest.fn(),
+    create: jest.fn(),
+    deleteMany: jest.fn(),
+  },
+  $connect: jest.fn(),
+  $disconnect: jest.fn(),
+});

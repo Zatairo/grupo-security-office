@@ -1,0 +1,96 @@
+# ============================================================
+# docker-compose.prod.yml — Producción (imágenes pre-build)
+# ============================================================
+# Uso:
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml down
+#
+# Las imágenes se tagean por SHA de git.
+# Ejemplo de variable de entorno:
+#   IMAGE_TAG=abc1234 docker compose -f docker-compose.prod.yml up -d
+
+services:
+  # ---- Reverse proxy (SSL termination) ----
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: gs-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/ssl/grupo-security:/etc/nginx/ssl:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ---- Backend (NestJS) ----
+  api:
+    image: ghcr.io/zatairo/grupo-security-office/api:${IMAGE_TAG:-latest}
+    container_name: gs-api
+    restart: always
+    expose:
+      - "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://panel.gruposecurity.com}
+      API_PORT: 3000
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ---- Frontend (Nginx static files) ----
+  frontend:
+    image: ghcr.io/zatairo/grupo-security-office/frontend:${IMAGE_TAG:-latest}
+    container_name: gs-frontend
+    restart: always
+    expose:
+      - "80"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ---- PostgreSQL ----
+  db:
+    image: postgres:16-alpine
+    container_name: gs-db
+    restart: always
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-grupo_security}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-grupo_security}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

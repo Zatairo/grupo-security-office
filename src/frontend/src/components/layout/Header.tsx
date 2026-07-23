@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuthStore } from '../../stores/auth.store'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, NavLink } from 'react-router-dom'
 
 export default function Header() {
   const { user, logout } = useAuthStore()
@@ -56,6 +56,7 @@ export default function Header() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Buscar productos, categorías, marcas..."
+                aria-label="Buscar productos, categorías, marcas"
                 className="w-full px-4 py-2.5 pr-12 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
               />
               <button
@@ -116,18 +117,18 @@ export default function Header() {
 }
 
 function NavItem({ to, label }: { to: string; label: string }) {
-  const isActive = window.location.pathname === to
-
   return (
-    <a
-      href={to}
-      className={`px-4 py-2 text-sm font-medium whitespace-nowrap rounded transition-colors ${
-        isActive
-          ? 'bg-syscom-700 text-white'
-          : 'text-syscom-100 hover:bg-syscom-500 hover:text-white'
-      }`}
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `px-4 py-2 text-sm font-medium whitespace-nowrap rounded transition-colors ${
+          isActive
+            ? 'bg-syscom-700 text-white'
+            : 'text-syscom-100 hover:bg-syscom-500 hover:text-white'
+        }`
+      }
     >
       {label}
-    </a>
+    </NavLink>
   )
 }

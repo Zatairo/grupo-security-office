@@ -10,6 +10,7 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { BrandsModule } from './modules/brands/brands.module';
 import { PricesModule } from './modules/prices/prices.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { HealthModule } from './modules/health/health.module';
 import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
 
 @Module({
@@ -24,6 +25,7 @@ import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
     BrandsModule,
     PricesModule,
     AuditModule,
+    HealthModule,
   ],
   providers: [
     {

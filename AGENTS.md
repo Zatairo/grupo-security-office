@@ -1,162 +1,43 @@
-# AGENTS.md - Gobernanza y Contexto del Proyecto
+# AGENTS.md — Proyecto Grupo Security
 
-## Proyecto: Grupo Security - Plataforma Comercial Interna
+## Identidad del Proyecto
 
-### Contexto del Negocio
+- **Proyecto:** Plataforma comercial interna de Grupo Security
+- **Propósito:** Panel administrativo + catálogo de productos/servicios
+- **Stack Backend:** NestJS + Prisma ORM + PostgreSQL
+- **Autenticación:** JWT en cookie HttpOnly, RBAC por roles
+- **Stack Frontend:** React + TypeScript + Vite + Tailwind CSS
+- **Integraciones:** ERP Yéminus — pendiente de definir; no asumir APIs no confirmadas
 
-**Grupo Security** es una empresa colombiana de seguridad electrónica con sedes en Pereira, Armenia, Manizales y Cali. Ofrece:
-- CCTV (videovigilancia)
-- Sistemas de alarma
-- Control de acceso
-- Smart Home
+## Política de Modelos (Costo/Beneficio)
 
-**Objetivo general:** Crear una web/e-commerce completa para catálogo, precios, panel administrativo y, en fases posteriores, funciones de compra/cotización y portal cliente.
+| Rol | Modelo | ID en OpenRouter |
+|-----|--------|-----------------|
+| **Principal** (tareas normales) | Mistral Small 4 | `mistralai/mistral-small-2603` |
+| **Fallback 1 / small_model** (exploración, búsquedas) | Qwen3 35B A3B | `qwen/qwen3.6-35b-a3b` |
+| **Fallback 2** (manual, solo si los anteriores fallan) | Nemotron 3 Nano 30B A3B | `nvidia/nemotron-3-nano-30b-a3b` |
 
-**ERP existente:** Yéminus (módulos de gestión comercial, logística, inventarios, cotizaciones, pedidos, portal e-commerce). La nueva web debe ser una capa comercial integrada con Yéminus, no un sistema aislado.
+**Reglas de uso:**
+- Usar el modelo principal para tareas normales de refactor, lectura, análisis y scaffolding.
+- No usar Claude, GPT-4.x, GPT-5 ni modelos equivalentes/premium para tareas habituales.
+- Reservar modelos grandes o costosos solo para casos excepcionales y con autorización explícita del usuario.
+- El `small_model` (`qwen/qwen3.6-35b-a3b`) se usa automáticamente para agentes tipo `explore` y tareas ligeras.
 
----
+## Reglas del Proyecto
 
-### Fases del Proyecto
+1. **Seguridad:** No tocar secretos, claves ni archivos `.env` reales. No exponer credenciales en código.
+2. **Infraestructura:** No modificar CI/CD, scripts de sistema, Docker, despliegue ni configuraciones de infraestructura.
+3. **IA en el producto:** No agregar integraciones de inteligencia artificial al producto sin aprobación explícita.
+4. **Integraciones externas:** ERP Yéminus está en estado "pendiente". No implementar ni asumir APIs, schemas ni lógica que dependan de servicios no confirmados.
+5. **Rol del agente:** Actuar como **agente de desarrollo y refactor**. No operar como agente de automatización, DevOps ni producción.
+6. **Convenciones de código:** Seguir estilos existentes del proyecto. No añadir comentarios superfluos. Usar las librerías y patrones ya presentes en el código base.
+7. **Commits:** No hacer commit sin autorización explícita del usuario.
+8. **Stack permitido:** Usar exclusivamente las tecnologías listadas arriba. No introducir nuevas dependencias, frameworks o herramientas sin consultar.
+9. **Código limpio:** Escribir código funcional, tipado (TypeScript), sin bloques comentados ni debugging leftovers.
 
-#### Fase 1 (ACTUAL) - Sistema Interno Modular
-- Panel administrativo interno
-- Gestión de productos, categorías, marcas
-- Gestión de precios/listas de precios
-- Buscador y filtros internos
-- Publicación (visible/no visible)
-- Usuarios internos y roles (RBAC)
-- Auditoría básica de cambios
+## Flujo de Trabajo
 
-#### Fase 2 (FUTURA) - E-commerce Público
-- Catálogo público
-- Ficha de producto
-- Carrito de compras
-- Checkout
-- Registro/login de clientes
-- Historial de pedidos
-- Integración ERP (stock, precios, pedidos)
-- Pasarela de pago (PCI-DSS)
-
-#### Fase 3 (FUTURA) - Portal Cliente
-- Portal de cliente con acceso a cotizaciones
-- Seguimiento de pedidos
-- Soporte técnico
-
----
-
-### Arquitectura Comercial v1
-
-| Capa | Tecnología | Estado |
-|------|-----------|--------|
-| Frontend Admin | React + TypeScript + Tailwind CSS | Por definir |
-| Backend API | Node.js/TypeScript (modular) | Por definir |
-| Base de datos | PostgreSQL (relacional) | Por definir |
-| Auth | OAuth2/OIDC + JWT + RBAC | Por definir |
-| Integración ERP | Conector Yéminus | **PENDIENTE** (endpoint 501 hasta confirmar API) |
-
----
-
-### Modelo de Datos (Entidades Principales)
-
-- **Producto** → categoría, marca, precios, imágenes, estado publicación
-- **Categoría** → nombre, descripción, padre (jerarquía)
-- **Marca** → nombre, logo, descripción
-- **Lista de Precios** → nombre, moneda, vigencia
-- **Precio** → producto, lista, valor, moneda
-- **Usuario** → nombre, email, contraseña (hash), roles
-- **Rol** → nombre, permisos
-- **Auditoría** → usuario, acción, entidad, timestamp, cambios
-
----
-
-### Roles del Sistema (Fase 1)
-
-| Rol | Permisos |
-|-----|----------|
-| Admin | Acceso total a panel y configuración |
-| Gerente | Gestión de productos, precios, publicación, reportes |
-| Operator | Gestión de productos (lectura/edición limitada), consulta de precios |
-| Viewer | Solo lectura del catálogo interno |
-
----
-
-### Integración con Yéminus
-
-**Estado:** Pendiente de confirmación técnica y comercial.
-
-**Decisión arquitectónica:** El conector ERP se implementa como endpoint 501 (Not Implemented) hasta que Yéminus confirme:
-- API REST disponible
-- Entidades integrables (productos, inventario, pedidos, precios)
-- Mecanismos de seguridad (OAuth2, API keys, etc.)
-- Infraestructura y costos
-
-** NO asumir que hay API CRUD de productos disponible hasta tener confirmación.**
-
----
-
-### Seguridad Requerida
-
-- HTTPS obligatorio
-- Control de acceso con roles (RBAC)
-- Contraseñas seguras (bcrypt/argon2)
-- Validación de entradas
-- Protección OWASP Top 10 (XSS, CSRF, inyección, etc.)
-- MFA recomendado para administración
-- Auditoría de cambios en entidades críticas
-
----
-
-## Gobernanza de Agentes
-
-### Acciones PERMITIDAS sin aprobación
-
-- Leer archivos del proyecto
-- Proponer diseño de arquitectura
-- Generar documentos de especificación
-- Sugerir código y estructura
-- Buscar información en web
-- Crear/modificar archivos de código y documentación
-- Ejecutar comandos de desarrollo (npm, git, node, tsc, eslint)
-
-### Acciones que REQUIEREN aprobación explícita
-
-- Ejecutar comandos de sistema (sudo, apt, choco, winget)
-- Instalar software o paquetes del sistema
-- Abrir puertos o modificar firewall
-- Integrar canales externos (Telegram, webhooks, etc.)
-- Modificar configuración de seguridad
-- Crear credenciales o tokens
-- Modificar archivos fuera del workspace del proyecto
-
-### Acciones PROHIBIDAS
-
-- Modificar credenciales existentes
-- Almacenar tokens o secretos en texto plano
-- Exponer el gateway sin revisión de seguridad
-- Ejecutar comandos destructivos (rm -rf, DROP TABLE, etc.)
-- Acceder a archivos fuera del proyecto sin permiso
-- Modificar configuración del sistema operativo
-- Instalar agentes o servicios sin aprobación
-
----
-
-### Registro de Decisiones
-
-| Fecha | Decisión | Justificación |
-|-------|----------|---------------|
-| 2026-07-21 | Arquitectura v1: Panel admin interno primero | Fase 1 debe ser funcional antes de e-commerce público |
-| 2026-07-21 | Integración Yéminus como dependencia pendiente | No hay confirmación de API disponible |
-| 2026-07-21 | RBAC con 4 roles (Admin, Gerente, Operator, Viewer) | Necesidades de uso interno |
-| 2026-07-21 | Stack: React + TS + Tailwind (frontend), Node.js + TS (backend) | Consistencia de lenguaje, ecosistema maduro |
-
----
-
-### Pendientes
-
-- [ ] Confirmar API de Yéminus (respuesta esperada)
-- [ ] Definir stack exacto de backend (Express/Fastify/NestJS)
-- [ ] Diseñar modelo de datos completo con campos y relaciones
-- [ ] Generar especificación OpenAPI detallada
-- [ ] Definir flujo de autenticación y autorización
-- [ ] Crear prototipo de panel admin
-- [ ] Política de seguridad detallada (OWASP checklist)
+1. Leer y entender el código existente antes de proponer cambios.
+2. Preguntar antes de tomar decisiones arquitectónicas importantes.
+3. Verificar con `npm run lint` y `npm run typecheck` (o equivalentes) antes de dar tareas por terminadas.
+4. Mantener este archivo actualizado cuando cambien reglas o stack del proyecto.

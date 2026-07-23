@@ -1,0 +1,142 @@
+# ============================================================
+# CD — Build images → Push GHCR → Deploy via SSH → Smoke test
+# ============================================================
+
+name: CD
+
+on:
+  push:
+    branches:
+      - dev        # → staging
+      - main       # → producción
+
+concurrency:
+  group: cd-${{ github.ref_name }}
+  cancel-in-progress: false  # no cancelar deploys en curso
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_OWNER: zatairo
+  IMAGE_BACKEND: ghcr.io/zatairo/grupo-security-office/api
+  IMAGE_FRONTEND: ghcr.io/zatairo/grupo-security-office/frontend
+  NODE_VERSION: 20
+
+jobs:
+  # ─────────── Build & Push ───────────
+  build:
+    name: Build images + push to GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      tag: ${{ steps.vars.outputs.tag }}
+      env: ${{ steps.vars.outputs.env }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set env vars (branch-based)
+        id: vars
+        run: |
+          echo "tag=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "env=production" >> "$GITHUB_OUTPUT"
+          else
+            echo "env=staging" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Build backend ──
+      - name: Build & push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: src/backend
+          file: src/backend/Dockerfile
+          target: runner
+          push: true
+          tags: |
+            ${{ env.IMAGE_BACKEND }}:${{ steps.vars.outputs.tag }}
+            ${{ env.IMAGE_BACKEND }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Build frontend ──
+      - name: Build & push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: src/frontend
+          file: src/frontend/Dockerfile
+          target: runner
+          push: true
+          tags: |
+            ${{ env.IMAGE_FRONTEND }}:${{ steps.vars.outputs.tag }}
+            ${{ env.IMAGE_FRONTEND }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─────────── Deploy ───────────
+  deploy:
+    name: Deploy (${{ needs.build.outputs.env }})
+    needs: build
+    runs-on: ubuntu-latest
+    if: success()
+    environment: ${{ needs.build.outputs.env }}
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          envs: IMAGE_TAG
+          script: |
+            set -e
+            echo "→ Pulling images..."
+            docker compose -f /opt/grupo-security/docker-compose.prod.yml pull
+            echo "→ Deploying with tag: ${{ needs.build.outputs.tag }}"
+            IMAGE_TAG=${{ needs.build.outputs.tag }} \
+              docker compose -f /opt/grupo-security/docker-compose.prod.yml up -d --no-deps --remove-orphans
+
+      # ── Smoke test ──
+      - name: Smoke test
+        env:
+          DEPLOY_URL: ${{ vars.DEPLOY_URL || 'https://panel.gruposecurity.com' }}
+        run: |
+          echo "→ Running smoke tests against $DEPLOY_URL"
+          chmod +x ./scripts/smoke-test.sh
+          ./scripts/smoke-test.sh "$DEPLOY_URL"
+
+  # ─────────── Post-deploy notification ───────────
+  notify:
+    name: Notify result
+    needs: [build, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Notify Discord (opcional)
+        if: ${{ vars.DISCORD_WEBHOOK_URL != '' }}
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ vars.DISCORD_WEBHOOK_URL }}
+          status: ${{ needs.deploy.result }}
+          title: "Deploy ${{ needs.build.outputs.env }} — ${{ needs.build.outputs.tag }}"
+          description: |
+            Repo: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Autor: ${{ github.actor }}
