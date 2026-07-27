@@ -1,0 +1,67 @@
+{
+  "source_file": "productos_raw.xlsx",
+  "sheet_name": "Hoja1",
+  "header_row": 2,
+  "mappings": [
+    {
+      "source_column": "Cod. Producto",
+      "destination_field": "codigo",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "Nombre del Producto",
+      "destination_field": "nombre",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "Desc.",
+      "destination_field": "descripcion",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "Familia",
+      "destination_field": "categoria",
+      "default_value": "Sin categoría",
+      "ignored": false
+    },
+    {
+      "source_column": "Precio Lista",
+      "destination_field": "precio",
+      "default_value": "0",
+      "ignored": false
+    },
+    {
+      "source_column": "",
+      "destination_field": "moneda",
+      "default_value": "CLP",
+      "ignored": false
+    },
+    {
+      "source_column": "Estado",
+      "destination_field": "estado",
+      "default_value": "activo",
+      "ignored": false
+    },
+    {
+      "source_column": "Unidad",
+      "destination_field": "unidad_medida",
+      "default_value": "unidad",
+      "ignored": false
+    },
+    {
+      "source_column": "Código Interno",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Observaciones",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    }
+  ]
+}

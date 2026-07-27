@@ -1,0 +1,58 @@
+{
+  "name": "productos_schema",
+  "version": "1.0",
+  "description": "Schema destino de ejemplo para productos/servicios",
+  "fields": [
+    {
+      "name": "codigo",
+      "type": "string",
+      "required": true,
+      "description": "Código único del producto"
+    },
+    {
+      "name": "nombre",
+      "type": "string",
+      "required": true,
+      "description": "Nombre del producto"
+    },
+    {
+      "name": "descripcion",
+      "type": "string",
+      "required": false,
+      "description": "Descripción del producto"
+    },
+    {
+      "name": "categoria",
+      "type": "string",
+      "required": true,
+      "description": "Categoría o familia del producto"
+    },
+    {
+      "name": "precio",
+      "type": "number",
+      "required": false,
+      "description": "Precio unitario"
+    },
+    {
+      "name": "moneda",
+      "type": "string",
+      "required": false,
+      "description": "Moneda del precio",
+      "default": "CLP"
+    },
+    {
+      "name": "estado",
+      "type": "string",
+      "required": false,
+      "description": "Estado del producto (activo/inactivo)",
+      "default": "activo"
+    },
+    {
+      "name": "unidad_medida",
+      "type": "string",
+      "required": false,
+      "description": "Unidad de medida",
+      "default": "unidad"
+    }
+  ]
+}
