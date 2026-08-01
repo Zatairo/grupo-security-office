@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { useAuthStore } from '../stores/auth.store'
 import { Card } from '../components/ui'
 import { fetchTrendingProducts } from '../services/trending.service'
+import type { Product } from '../features/products/types/product.types'
 import { CAROUSEL_INTERVAL, TRENDING_PRODUCTS_LIMIT } from '../constants'
 
 interface BannerItem {
@@ -11,12 +12,6 @@ interface BannerItem {
   subtitle: string
   color: string
   icon: React.ReactNode
-}
-
-interface TrendingProduct {
-  brand: string
-  name: string
-  model: string
 }
 
 const defaultBanners: BannerItem[] = [
@@ -65,7 +60,7 @@ export default function Dashboard() {
     queryFn: () => fetchTrendingProducts({ take: TRENDING_PRODUCTS_LIMIT }),
   })
 
-  const trendingProducts: TrendingProduct[] = Array.isArray(trendingData) ? trendingData : []
+  const trendingProducts: Product[] = trendingData
   const banners = defaultBanners
 
   useEffect(() => {
@@ -182,6 +177,10 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+        ) : trendingProducts.length === 0 ? (
+          <div className="p-4 bg-gray-50 text-neutral-500 rounded-xl">
+            <p>No hay productos tendencia</p>
+          </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {trendingProducts.map((product, index) => (
@@ -192,9 +191,9 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <div className="p-3">
-                  <p className="text-[10px] font-semibold text-security-600 uppercase">{product.brand}</p>
+                  <p className="text-[10px] font-semibold text-security-600 uppercase">{product.brand.name}</p>
                   <p className="text-xs text-gray-700 mt-1 line-clamp-2 leading-tight">{product.name}</p>
-                  <p className="text-[10px] text-gray-400 font-mono mt-1">{product.model}</p>
+                  <p className="text-[10px] text-gray-400 font-mono mt-1">{product.sku}</p>
                 </div>
               </div>
             ))}

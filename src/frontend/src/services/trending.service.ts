@@ -1,15 +1,16 @@
 import api from './api'
+import type { Product } from '../features/products/types/product.types'
 
 export const fetchTrendingProducts = async (params?: {
   take?: number
   categoryId?: string
   search?: string
-}) => {
+}): Promise<Product[]> => {
   const queryParams = new URLSearchParams()
   if (params?.take) queryParams.set('take', params.take.toString())
   if (params?.categoryId) queryParams.set('categoryId', params.categoryId)
   if (params?.search) queryParams.set('search', params.search)
 
   const res = await api.get(`/products/trending?${queryParams.toString()}`)
-  return res.data
+  return res.data.data as Product[]
 }

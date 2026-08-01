@@ -4,6 +4,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsume
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { ProductQueryDto } from './dto/product-query.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -38,22 +39,16 @@ export class ProductsController {
   @ApiQuery({ name: 'isVisible', required: false, type: Boolean })
   @ApiQuery({ name: 'isActive', required: false, type: Boolean })
   findAll(
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
-    @Query('search') search?: string,
-    @Query('categoryId') categoryId?: string,
-    @Query('brandId') brandId?: string,
-    @Query('isVisible') isVisible?: string,
-    @Query('isActive') isActive?: string,
+    @Query() query: ProductQueryDto,
   ) {
     return this.productsService.findAll({
-      skip: skip ? parseInt(skip) : 0,
-      take: take ? parseInt(take) : 50,
-      search,
-      categoryId,
-      brandId,
-      isVisible: isVisible !== undefined ? isVisible === 'true' : undefined,
-      isActive: isActive !== undefined ? isActive === 'true' : undefined,
+      skip: query.skip ?? 0,
+      take: query.take ?? 50,
+      search: query.search,
+      categoryId: query.categoryId,
+      brandId: query.brandId,
+      isVisible: query.isVisible,
+      isActive: query.isActive,
     });
   }
 

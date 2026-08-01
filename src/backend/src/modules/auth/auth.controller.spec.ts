@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as request from 'supertest';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -10,6 +11,13 @@ const mockAuthService = {
   validateUser: jest.fn(),
   login: jest.fn(),
   getProfile: jest.fn(),
+};
+
+const mockConfigService = {
+  get: jest.fn().mockImplementation((key: string) => {
+    if (key === 'NODE_ENV') return 'test';
+    return undefined;
+  }),
 };
 
 describe('AuthController', () => {
@@ -40,6 +48,10 @@ describe('AuthController', () => {
         {
           provide: AuthService,
           useValue: mockAuthService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
         },
       ],
     })
