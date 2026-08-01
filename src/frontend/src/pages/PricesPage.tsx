@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../services/api'
+import { hasPermission } from '../lib/rbac'
 
 interface PriceList {
   id: string
@@ -98,15 +99,17 @@ export default function PricesPage() {
             </svg>
           </button>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-syscom-700">{selectedList.name}</h1>
+            <h1 className="text-2xl font-bold text-security-700">{selectedList.name}</h1>
             <p className="text-sm text-gray-500 mt-1">Código: <span className="font-mono">{selectedList.code}</span> · {selectedList.prices?.length || 0} precios</p>
           </div>
-          <button onClick={() => setShowAddPriceModal(true)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Agregar Precio
-          </button>
+          {hasPermission('prices:write') && (
+            <button onClick={() => setShowAddPriceModal(true)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-security-500 text-white rounded-lg font-semibold hover:bg-security-600 transition-colors">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Agregar Precio
+            </button>
+          )}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -139,22 +142,26 @@ export default function PricesPage() {
                       <span className="text-sm font-medium text-gray-900">{price.product.name}</span>
                     </div>
                     <div className="col-span-2">
-                      <span className="text-sm font-bold text-syscom-700">{formatCurrency(price.value, price.currency)}</span>
+                      <span className="text-sm font-bold text-security-700">{formatCurrency(price.value, price.currency)}</span>
                     </div>
                     <div className="col-span-2">
                       <span className="text-xs text-gray-500">{formatDate(price.validFrom)} — {formatDate(price.validUntil)}</span>
                     </div>
                     <div className="col-span-1 flex justify-end gap-1">
-                      <button onClick={() => setEditingPrice(price)} className="p-1.5 text-gray-400 hover:text-syscom-600 hover:bg-syscom-50 rounded transition-colors">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      <button onClick={() => { if (confirm('¿Eliminar este precio?')) deletePrice.mutate(price.id) }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                      {hasPermission('prices:write') && (
+                        <button onClick={() => setEditingPrice(price)} className="p-1.5 text-gray-400 hover:text-security-600 hover:bg-security-50 rounded transition-colors">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      )}
+                      {hasPermission('prices:delete') && (
+                        <button onClick={() => { if (confirm('¿Eliminar este precio?')) deletePrice.mutate(price.id) }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -199,15 +206,17 @@ export default function PricesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-syscom-700">Listas de Precios</h1>
+          <h1 className="text-2xl font-bold text-security-700">Listas de Precios</h1>
           <p className="text-sm text-gray-500 mt-1">Gestiona las listas de precios del catálogo</p>
         </div>
-        <button onClick={() => setShowCreateModal(true)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nueva Lista
-        </button>
+        {hasPermission('prices:write') && (
+          <button onClick={() => setShowCreateModal(true)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-security-500 text-white rounded-lg font-semibold hover:bg-security-600 transition-colors">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nueva Lista
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -246,11 +255,13 @@ export default function PricesPage() {
                     <p className="text-xs text-gray-400 font-mono">{list.code}</p>
                   </div>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); if (confirm('¿Eliminar esta lista de precios?')) deleteList.mutate(list.id) }} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
+                {hasPermission('prices:delete') && (
+                  <button onClick={(e) => { e.stopPropagation(); if (confirm('¿Eliminar esta lista de precios?')) deleteList.mutate(list.id) }} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
               </div>
               <div className="flex items-center justify-between text-xs text-gray-500">
                 <div className="flex items-center gap-3">
@@ -306,10 +317,10 @@ function PriceListModal({ list, onClose, onSuccess }: { list?: PriceList; onClos
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl">
-        <div className="px-6 py-4 border-b border-gray-200 bg-syscom-700 rounded-t-xl">
+        <div className="px-6 py-4 border-b border-gray-200 bg-security-700 rounded-t-xl">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white">{list ? 'Editar Lista' : 'Nueva Lista de Precios'}</h2>
-            <button onClick={onClose} className="p-2 text-syscom-200 hover:text-white hover:bg-syscom-600 rounded-lg transition-colors">
+            <button onClick={onClose} className="p-2 text-security-200 hover:text-white hover:bg-security-600 rounded-lg transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
@@ -318,37 +329,37 @@ function PriceListModal({ list, onClose, onSuccess }: { list?: PriceList; onClos
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre</label>
-              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent" required placeholder="Ej: Lista Mayorista" />
+              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary" required placeholder="Ej: Lista Mayorista" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Código</label>
-              <input type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent font-mono" required placeholder="MAYORISTA" />
+              <input type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary font-mono" required placeholder="MAYORISTA" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Moneda</label>
-              <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent">
+              <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary">
                 <option value="COP">COP - Peso Colombiano</option>
                 <option value="USD">USD - Dólar</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Vigencia desde</label>
-              <input type="date" value={form.validFrom} onChange={(e) => setForm({ ...form, validFrom: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent" />
+              <input type="date" value={form.validFrom} onChange={(e) => setForm({ ...form, validFrom: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Vigencia hasta</label>
-              <input type="date" value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent" />
+              <input type="date" value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary" />
             </div>
             <div className="col-span-2">
               <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} className="w-4 h-4 text-syscom-600 border-gray-300 rounded focus:ring-syscom-500" />
+                <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} className="w-4 h-4 text-security-600 border-gray-300 rounded focus:ring-brand-primary/30" />
                 <span className="text-sm font-medium text-gray-700">Lista activa</span>
               </label>
             </div>
           </div>
           <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
             <button type="button" onClick={onClose} className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors">Cancelar</button>
-            <button type="submit" disabled={mutation.isPending} className="px-4 py-2.5 bg-accent-500 text-white rounded-lg hover:bg-accent-600 disabled:opacity-50 font-semibold transition-colors">
+            <button type="submit" disabled={mutation.isPending} className="px-4 py-2.5 bg-security-500 text-white rounded-lg hover:bg-security-600 disabled:opacity-50 font-semibold transition-colors">
               {mutation.isPending ? 'Guardando...' : list ? 'Actualizar' : 'Crear'}
             </button>
           </div>
@@ -385,13 +396,13 @@ function PriceModal({ priceListId, priceListName, products, price, onClose, onSu
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl">
-        <div className="px-6 py-4 border-b border-gray-200 bg-syscom-700 rounded-t-xl">
+        <div className="px-6 py-4 border-b border-gray-200 bg-security-700 rounded-t-xl">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-white">{price ? 'Editar Precio' : 'Agregar Precio'}</h2>
-              <p className="text-syscom-200 text-sm">{priceListName}</p>
+              <p className="text-security-200 text-sm">{priceListName}</p>
             </div>
-            <button onClick={onClose} className="p-2 text-syscom-200 hover:text-white hover:bg-syscom-600 rounded-lg transition-colors">
+            <button onClick={onClose} className="p-2 text-security-200 hover:text-white hover:bg-security-600 rounded-lg transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
@@ -399,7 +410,7 @@ function PriceModal({ priceListId, priceListName, products, price, onClose, onSu
         <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(form) }} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Producto</label>
-            <select value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent" required disabled={!!price}>
+            <select value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary" required disabled={!!price}>
               <option value="">Seleccionar producto...</option>
               {products.map((p) => (
                 <option key={p.id} value={p.id}>{p.sku} — {p.name}</option>
@@ -410,27 +421,27 @@ function PriceModal({ priceListId, priceListName, products, price, onClose, onSu
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Precio</label>
-              <input type="number" step="0.01" min="0" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent" required placeholder="0" />
+              <input type="number" step="0.01" min="0" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary" required placeholder="0" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Moneda</label>
-              <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent">
+              <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary">
                 <option value="COP">COP</option>
                 <option value="USD">USD</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Vigencia desde</label>
-              <input type="date" value={form.validFrom} onChange={(e) => setForm({ ...form, validFrom: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent" />
+              <input type="date" value={form.validFrom} onChange={(e) => setForm({ ...form, validFrom: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Vigencia hasta</label>
-              <input type="date" value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent" />
+              <input type="date" value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary" />
             </div>
           </div>
           <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
             <button type="button" onClick={onClose} className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors">Cancelar</button>
-            <button type="submit" disabled={mutation.isPending} className="px-4 py-2.5 bg-accent-500 text-white rounded-lg hover:bg-accent-600 disabled:opacity-50 font-semibold transition-colors">
+            <button type="submit" disabled={mutation.isPending} className="px-4 py-2.5 bg-security-500 text-white rounded-lg hover:bg-security-600 disabled:opacity-50 font-semibold transition-colors">
               {mutation.isPending ? 'Guardando...' : price ? 'Actualizar' : 'Agregar'}
             </button>
           </div>

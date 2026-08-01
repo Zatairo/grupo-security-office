@@ -1,18 +1,33 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import ExcelImport from '../components/ExcelImport'
+import ImportWizard from '../features/products/import/components/ImportWizard'
+import { IMPORT_WIZARD_STORAGE_KEY } from '../features/products/import/store/import.store'
 import type { Product } from '../features/products/types/product.types'
 import { useProducts } from '../features/products/hooks/useProducts'
 import { useProductMutations } from '../features/products/hooks/useProductMutations'
 import { ProductCard } from '../features/products/components/ProductCard'
 import { ProductTableRow } from '../features/products/components/ProductTableRow'
 import ProductFormModal from '../features/products/components/ProductFormModal'
+import { hasPermission } from '../lib/rbac'
+import { Button } from '../components/ui'
+
+function hasPersistedImportState(): boolean {
+  try {
+    const raw = sessionStorage.getItem(IMPORT_WIZARD_STORAGE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    const step = parsed?.state?.currentStep;
+    return typeof step === 'string' && step !== 'upload' && step !== 'execution' && step !== 'result';
+  } catch {
+    return false;
+  }
+}
 
 export default function ProductsPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showImportModal, setShowImportModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(hasPersistedImportState)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
 
@@ -24,36 +39,44 @@ export default function ProductsPage() {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-syscom-700">Productos</h1>
-          <p className="text-sm text-gray-500 mt-1">Gestiona tu catálogo de productos</p>
+          <h1 className="text-2xl font-condensed font-bold text-security-800">Productos</h1>
+          <p className="text-sm text-neutral-500 mt-1">Gestiona tu catálogo de productos</p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Importar Excel
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Nuevo Producto
-          </button>
+          {hasPermission('products:write') && (
+            <Button
+              variant="secondary"
+              icon={
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+              }
+              onClick={() => setShowImportModal(true)}
+            >
+              Importar Excel
+            </Button>
+          )}
+          {hasPermission('products:write') && (
+            <Button
+              variant="primary"
+              icon={
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              }
+              onClick={() => setShowCreateModal(true)}
+            >
+              Nuevo Producto
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Search and filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="bg-white rounded-xl border border-neutral-200 p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
@@ -61,7 +84,7 @@ export default function ProductsPage() {
               placeholder="Buscar por nombre, SKU o descripción..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm"
             />
           </div>
           <div className="flex gap-2">
@@ -69,8 +92,8 @@ export default function ProductsPage() {
               onClick={() => setViewMode('grid')}
               className={`p-2.5 rounded-lg border transition-colors ${
                 viewMode === 'grid'
-                  ? 'bg-syscom-700 text-white border-syscom-700'
-                  : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'
+                  ? 'bg-security-500 text-white border-security-500'
+                  : 'bg-white text-neutral-500 border-neutral-300 hover:bg-neutral-50'
               }`}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -81,8 +104,8 @@ export default function ProductsPage() {
               onClick={() => setViewMode('list')}
               className={`p-2.5 rounded-lg border transition-colors ${
                 viewMode === 'list'
-                  ? 'bg-syscom-700 text-white border-syscom-700'
-                  : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'
+                  ? 'bg-security-500 text-white border-security-500'
+                  : 'bg-white text-neutral-500 border-neutral-300 hover:bg-neutral-50'
               }`}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -183,12 +206,13 @@ export default function ProductsPage() {
         />
       )}
 
-      {/* Excel Import Modal */}
+      {/* Import Wizard Modal */}
       {showImportModal && (
-        <ExcelImport
+        <ImportWizard
           onClose={() => setShowImportModal(false)}
-          onSuccess={() => {
+          onComplete={() => {
             queryClient.invalidateQueries({ queryKey: ['products'] })
+            setShowImportModal(false)
           }}
         />
       )}

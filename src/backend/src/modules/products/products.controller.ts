@@ -16,6 +16,17 @@ import { Public } from '../../common/decorators/public.decorator';
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
+  @Get('trending')
+  @Public()
+  @ApiOperation({ summary: 'Obtener productos tendencia' })
+  findTrending(
+    @Query('take') take?: number,
+    @Query('categoryId') categoryId?: string,
+    @Query('search') search?: string
+  ) {
+    return this.productsService.findTrending({ take, categoryId, search });
+  }
+
   @Get()
   @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
   @ApiOperation({ summary: 'Listar productos' })

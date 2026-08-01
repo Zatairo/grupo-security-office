@@ -69,10 +69,10 @@ export default function ExcelImport({ onClose, onSuccess }: ExcelImportProps) {
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 bg-syscom-700 rounded-t-xl">
+        <div className="px-6 py-4 border-b border-gray-200 bg-security-700 rounded-t-xl">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white">Importar Productos desde Excel</h2>
-            <button onClick={onClose} className="p-2 text-syscom-200 hover:text-white hover:bg-syscom-600 rounded-lg transition-colors">
+            <button onClick={onClose} className="p-2 text-security-200 hover:text-white hover:bg-security-600 rounded-lg transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -100,20 +100,20 @@ export default function ExcelImport({ onClose, onSuccess }: ExcelImportProps) {
               onDrop={handleDrop}
               className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
                 file
-                  ? 'border-syscom-500 bg-syscom-50'
-                  : 'border-gray-300 hover:border-syscom-400 hover:bg-gray-50'
+                  ? 'border-security-500 bg-security-50'
+                  : 'border-gray-300 hover:border-security-400 hover:bg-gray-50'
               }`}
             >
               {file ? (
                 <div>
-                  <svg className="w-12 h-12 text-syscom-500 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-12 h-12 text-security-500 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   <p className="text-sm font-medium text-gray-900">{file.name}</p>
                   <p className="text-xs text-gray-500 mt-1">{(file.size / 1024).toFixed(1)} KB</p>
                   <button
                     onClick={() => { setFile(null); setResult(null) }}
-                    className="mt-3 text-sm text-syscom-600 hover:text-syscom-700"
+                    className="mt-3 text-sm text-security-600 hover:text-security-700"
                   >
                     Cambiar archivo
                   </button>
@@ -127,7 +127,7 @@ export default function ExcelImport({ onClose, onSuccess }: ExcelImportProps) {
                   <p className="text-xs text-gray-400 mt-1">o</p>
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="mt-2 px-4 py-2 bg-syscom-700 text-white text-sm rounded-lg hover:bg-syscom-800 transition-colors"
+                    className="mt-2 px-4 py-2 bg-security-700 text-white text-sm rounded-lg hover:bg-security-800 transition-colors"
                   >
                     Seleccionar archivo
                   </button>
@@ -189,7 +189,7 @@ export default function ExcelImport({ onClose, onSuccess }: ExcelImportProps) {
               <button
                 onClick={handleImport}
                 disabled={!file || importMutation.isPending}
-                className="px-4 py-2.5 bg-accent-500 text-white rounded-lg hover:bg-accent-600 disabled:opacity-50 font-semibold transition-colors flex items-center gap-2"
+                className="px-4 py-2.5 bg-security-500 text-white rounded-lg hover:bg-security-600 disabled:opacity-50 font-semibold transition-colors flex items-center gap-2"
               >
                 {importMutation.isPending ? (
                   <>

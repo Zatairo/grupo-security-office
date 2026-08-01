@@ -1,5 +1,6 @@
 import type { Product } from '../types/product.types'
 import { ProductStatusBadge } from './ProductStatusBadge'
+import { hasPermission } from '../../../lib/rbac'
 
 interface ProductCardProps {
   product: Product
@@ -26,49 +27,55 @@ export function ProductCard({ product, onEdit, onToggleActive, onDelete }: Produ
           {product.isVisible && (
             <ProductStatusBadge
               label="Visible"
-              className="px-2 py-0.5 bg-syscom-600 text-white text-[10px] font-semibold rounded"
+              className="px-2 py-0.5 bg-security-600 text-white text-[10px] font-semibold rounded"
             />
           )}
         </div>
         {/* Actions */}
         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => onEdit(product)}
-            className="p-2 bg-white rounded-lg shadow hover:bg-gray-50 text-gray-600 hover:text-syscom-600 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
+          {hasPermission('products:write') && (
+            <button
+              onClick={() => onEdit(product)}
+              className="p-2 bg-white rounded-lg shadow hover:bg-gray-50 text-gray-600 hover:text-security-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
       <div className="p-4">
-        <p className="text-[10px] font-semibold text-syscom-600 uppercase">{product.brand?.name}</p>
+        <p className="text-[10px] font-semibold text-security-600 uppercase">{product.brand?.name}</p>
         <h3 className="text-sm font-medium text-gray-800 mt-1 line-clamp-2 leading-tight min-h-[2.5rem]">{product.name}</h3>
         <p className="text-xs text-gray-400 font-mono mt-1">{product.sku}</p>
         <div className="mt-3 flex items-center gap-2">
-          <button
-            onClick={() => onToggleActive(product.id)}
-            className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
-              product.isActive
-                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                : 'bg-red-50 text-red-700 hover:bg-red-100'
-            }`}
-          >
-            {product.isActive ? 'Activo' : 'Inactivo'}
-          </button>
-          <button
-            onClick={() => {
-              if (confirm('¿Eliminar este producto?')) {
-                onDelete(product.id)
-              }
-            }}
-            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
+          {hasPermission('products:write') && (
+            <button
+              onClick={() => onToggleActive(product.id)}
+              className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
+                product.isActive
+                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'bg-red-50 text-red-700 hover:bg-red-100'
+              }`}
+            >
+              {product.isActive ? 'Activo' : 'Inactivo'}
+            </button>
+          )}
+          {hasPermission('products:delete') && (
+            <button
+              onClick={() => {
+                if (confirm('¿Eliminar este producto?')) {
+                  onDelete(product.id)
+                }
+              }}
+              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     </div>

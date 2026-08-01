@@ -384,4 +384,82 @@ describe('AuthService', () => {
       // ⚠ Riesgo: getProfile no lanza error aunque user.isActive === false
     });
   });
+
+  // -----------------------------------------------------------------------
+  //  Cenarios de acceso real — escenarios de seguridad críticos
+  // -----------------------------------------------------------------------
+
+  describe('Cenarios de acceso real', () => {
+    it('debe rechazar login de usuario inactivo', async () => {
+      const inactiveUser = buildInactiveUser();
+      mockPrisma.user.findUnique.mockResolvedValue(inactiveUser);
+
+      await expect(
+        authService.validateUser('inactivo@grupo-security.com', 'password123'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      await expect(
+        authService.validateUser('inactivo@grupo-security.com', 'password123'),
+      ).rejects.toThrow('Credenciales inválidas');
+    });
+
+    it('debe rechazar login con contraseña incorrecta', async () => {
+      const user = buildActiveUser();
+      const userWithRoles = buildUserWithRoles(user, [
+        { role: buildAdminRole(), permissions: [] },
+      ]);
+
+      mockPrisma.user.findUnique.mockResolvedValue(userWithRoles);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        authService.validateUser('admin@grupo-security.com', 'wrong-password'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      await expect(
+        authService.validateUser('admin@grupo-security.com', 'wrong-password'),
+      ).rejects.toThrow('Credenciales inválidas');
+    });
+
+    it('debe rechazar login de usuario inexistente', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        authService.validateUser('no-existe@test.com', 'password123'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      await expect(
+        authService.validateUser('no-existe@test.com', 'password123'),
+      ).rejects.toThrow('Credenciales inválidas');
+    });
+
+    it('debe retornar user con roles y permissions en login exitoso', async () => {
+      const user = buildActiveUser();
+      const adminRole = buildAdminRole();
+      const permissions = ['products:read', 'products:write', 'users:read'];
+
+      const userWithRoles = buildUserWithRoles(user, [
+        { role: adminRole, permissions },
+      ]);
+
+      mockPrisma.user.findUnique.mockResolvedValue(userWithRoles);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      const result = await authService.validateUser(
+        'admin@grupo-security.com',
+        'password123',
+      );
+
+      expect(result).toHaveProperty('id');
+      expect(result).toHaveProperty('email');
+      expect(result).toHaveProperty('name');
+      expect(result).toHaveProperty('roles');
+      expect(result).toHaveProperty('permissions');
+      expect(result.id).toBe(user.id);
+      expect(result.email).toBe('admin@grupo-security.com');
+      expect(result.name).toBe('Admin Principal');
+      expect(result.roles).toEqual(['Admin']);
+      expect(result.permissions).toEqual(permissions);
+    });
+  });
 });

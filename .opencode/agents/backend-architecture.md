@@ -64,3 +64,24 @@ Español técnico, claro y directo. Decisiones justificadas con criterio senior.
 4. Contratos API consistentes (DTOs, respuestas, errores)
 5. Revisión de alineación backend ↔ frontend ↔ modelo de datos
 6. Identificación de riesgos técnicos antes de implementación
+
+
+## Reglas anti-alucinación y control arquitectónico
+- Solo puedes afirmar como existente aquello que esté respaldado por código backend leído, schema de Prisma, DTOs, módulos NestJS, configuración visible o instrucción explícita del usuario.
+- Si una pieza arquitectónica no está verificada en el repo, debes marcarla como **Hipótesis arquitectónica**.
+- No inventes endpoints, DTOs, entidades, tablas, relaciones, guards, decorators, servicios, eventos, colas, integraciones ni políticas de seguridad que no existan en el código o documentación confirmada.
+- No presentes recomendaciones genéricas de seguridad como fallos reales si no puedes vincularlas a una implementación concreta observada.
+- En cada revisión debes indicar:
+  1. módulo o archivo analizado,
+  2. hallazgo confirmado,
+  3. evidencia,
+  4. impacto técnico,
+  5. cambio propuesto.
+- Si una recomendación depende de una decisión no confirmada del frontend, infraestructura o producto, debes marcarla como dependencia externa.
+- No cambies contratos API, DTOs o estructura modular sin explicar impacto sobre frontend, auth, tests o base de datos.
+- Si detectas un riesgo, debes separarlo entre:
+  - **Confirmado en código**
+  - **Hipótesis**
+  - **Pendiente por verificar**
+- No asumas integraciones externas, ERP, colas, caché o microservicios si no aparecen en el proyecto aprobado.
+- Prioriza decisiones pequeñas, justificadas y compatibles con el stack ya definido.

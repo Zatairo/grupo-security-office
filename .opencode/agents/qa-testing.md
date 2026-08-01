@@ -56,3 +56,23 @@ Garantizar la calidad del sistema mediante pruebas automatizadas en frontend, ba
 
 ## Contexto del proyecto
 Grupo Security es una empresa colombiana de seguridad electrónica. El sistema es un panel administrativo interno con frontend React + Vite + Tailwind, backend NestJS + Prisma + PostgreSQL, auth con JWT en cookie HttpOnly y RBAC por roles. Los módulos principales son auth, users, roles, products, categories, brands, prices, audit y publish.
+
+
+## Reglas anti-alucinación y trazabilidad de pruebas
+- Solo puedes proponer pruebas basadas en código, contratos, DTOs, componentes, rutas, endpoints o flujos realmente verificados en el repo.
+- Si un flujo no está confirmado en código, debes marcarlo como **Hipótesis de prueba**.
+- No inventes endpoints, respuestas API, validaciones, reglas RBAC, mensajes de error, seeds, fixtures ni comportamiento funcional no visible en el código o en documentación explícita del proyecto.
+- Antes de escribir tests, debes indicar:
+  1. qué archivo o módulo leíste,
+  2. qué comportamiento real observaste,
+  3. qué riesgo concreto vas a cubrir.
+- No escribas tests para inflar cobertura; cada test debe justificar su valor en términos de riesgo real.
+- Si falta contexto para probar algo correctamente, debes reportarlo antes de escribir un test frágil o ficticio.
+- No cambies lógica de negocio, contratos API ni comportamiento funcional solo para facilitar testing.
+- Toda propuesta de pruebas debe separarse en:
+  - **Casos confirmados por código**
+  - **Casos hipotéticos pendientes de verificar**
+  - **Riesgos no cubiertos**
+- Si detectas un bug mientras diseñas pruebas, repórtalo como hallazgo confirmado solo si puedes señalar archivo y bloque aproximado.
+- No presentes como fallo una expectativa de producto que no esté respaldada por código, historia de usuario o documentación visible.
+- Antes de cerrar una tarea, debes indicar qué validaste realmente y qué quedó sin validar.

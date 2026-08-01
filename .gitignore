@@ -4,6 +4,10 @@ dist/
 build/
 .nest-cli/
 
+# Cobertura y artefactos de build
+src/backend/coverage/
+*.tsbuildinfo
+
 # Obsidian cache (no versionar)
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json

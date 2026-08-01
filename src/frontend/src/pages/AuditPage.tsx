@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../services/api'
+import { hasRole, hasPermission } from '../lib/rbac'
 
 export default function AuditPage() {
   const [entity, setEntity] = useState('')
@@ -18,10 +19,21 @@ export default function AuditPage() {
     },
   })
 
+  if (!hasRole('Admin') && !hasPermission('audit:read')) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24">
+        <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        <p className="text-gray-500 font-medium">No tienes permisos para ver esta sección</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-syscom-700">Auditoría</h1>
+        <h1 className="text-2xl font-bold text-security-700">Auditoría</h1>
         <p className="text-sm text-gray-500 mt-1">Historial de cambios y actividad del sistema</p>
       </div>
 
@@ -30,7 +42,7 @@ export default function AuditPage() {
           <select
             value={entity}
             onChange={(e) => setEntity(e.target.value)}
-            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent"
+            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
           >
             <option value="">Todas las entidades</option>
             <option value="Product">Productos</option>
@@ -42,7 +54,7 @@ export default function AuditPage() {
           <select
             value={action}
             onChange={(e) => setAction(e.target.value)}
-            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent"
+            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
           >
             <option value="">Todas las acciones</option>
             <option value="CREATE">Crear</option>
@@ -74,8 +86,8 @@ export default function AuditPage() {
                   <td className="px-6 py-4 text-sm text-gray-500">{new Date(log.createdAt).toLocaleString()}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-syscom-100 rounded-full flex items-center justify-center">
-                        <span className="text-xs font-semibold text-syscom-700">
+                      <div className="w-7 h-7 bg-security-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-semibold text-security-700">
                           {log.user?.name?.charAt(0).toUpperCase() || 'S'}
                         </span>
                       </div>

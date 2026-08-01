@@ -45,12 +45,12 @@ export default function ProductFormModal({
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl">
-        <div className="px-6 py-4 border-b border-gray-200 bg-syscom-700 rounded-t-xl">
+        <div className="px-6 py-4 border-b border-gray-200 bg-security-700 rounded-t-xl">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white">
               {product ? 'Editar Producto' : 'Nuevo Producto'}
             </h2>
-            <button onClick={onClose} className="p-2 text-syscom-200 hover:text-white hover:bg-syscom-600 rounded-lg transition-colors">
+            <button onClick={onClose} className="p-2 text-security-200 hover:text-white hover:bg-security-600 rounded-lg transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -66,7 +66,7 @@ export default function ProductFormModal({
                 type="text"
                 value={form.sku}
                 onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
                 required
               />
             </div>
@@ -76,7 +76,7 @@ export default function ProductFormModal({
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
                 required
               />
             </div>
@@ -87,7 +87,7 @@ export default function ProductFormModal({
             <textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent resize-none"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary resize-none"
               rows={3}
             />
           </div>
@@ -98,7 +98,7 @@ export default function ProductFormModal({
               <select
                 value={form.categoryId}
                 onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
                 required
               >
                 <option value="">Seleccionar...</option>
@@ -112,7 +112,7 @@ export default function ProductFormModal({
               <select
                 value={form.brandId}
                 onChange={(e) => setForm({ ...form, brandId: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-syscom-500 focus:border-transparent"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
                 required
               >
                 <option value="">Seleccionar...</option>
@@ -129,7 +129,7 @@ export default function ProductFormModal({
                 type="checkbox"
                 checked={form.isActive}
                 onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                className="w-4 h-4 text-syscom-600 border-gray-300 rounded focus:ring-syscom-500"
+                className="w-4 h-4 text-security-600 border-gray-300 rounded focus:ring-brand-primary/30 focus:border-brand-primary"
               />
               <span className="text-sm text-gray-700">Activo</span>
             </label>
@@ -138,7 +138,7 @@ export default function ProductFormModal({
                 type="checkbox"
                 checked={form.isVisible}
                 onChange={(e) => setForm({ ...form, isVisible: e.target.checked })}
-                className="w-4 h-4 text-syscom-600 border-gray-300 rounded focus:ring-syscom-500"
+                className="w-4 h-4 text-security-600 border-gray-300 rounded focus:ring-brand-primary/30 focus:border-brand-primary"
               />
               <span className="text-sm text-gray-700">Visible</span>
             </label>
@@ -155,7 +155,7 @@ export default function ProductFormModal({
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="px-4 py-2.5 bg-accent-500 text-white rounded-lg hover:bg-accent-600 disabled:opacity-50 font-semibold transition-colors flex items-center gap-2"
+              className="px-4 py-2.5 bg-security-500 text-white rounded-lg hover:bg-security-600 disabled:opacity-50 font-semibold transition-colors flex items-center gap-2"
             >
               {mutation.isPending ? (
                 <>

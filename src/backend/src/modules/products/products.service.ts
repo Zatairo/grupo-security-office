@@ -9,6 +9,84 @@ import * as XLSX from 'xlsx';
 export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
+  private trendingCache: { data: any; timestamp: number } | null = null;
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutos de expiración de caché
+
+  /**
+   * Cachea productos tendencia por 5 minutos
+   */
+  private getFromTrendingCache(): any | null {
+    if (!this.trendingCache) return null;
+    if (Date.now() - this.trendingCache.timestamp > this.CACHE_TTL) {
+      this.trendingCache = null;
+    }
+    return this.trendingCache?.data || null;
+  }
+
+  private setTrendingCache(data: any): void {
+    this.trendingCache = {
+      data,
+      timestamp: Date.now(),
+    };
+  }
+
+  /**
+   * Obtiene productos tendencia (últimos 30 días visibles y activos)
+   */
+  async findTrending(params?: {
+    take?: number;
+    categoryId?: string;
+    search?: string;
+    forceReload?: boolean;
+  }): Promise<{
+    data: any;
+    meta: { total: number; take?: number }
+  }> {
+    if (params?.forceReload || !this.getFromTrendingCache()) {
+      const take = params?.take || 5;
+
+      const where: Prisma.ProductWhereInput = {
+        isVisible: true,
+        isActive: true,
+        createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        ...(params?.categoryId && { categoryId: params.categoryId }),
+        ...(params?.search && {
+          OR: [
+            { name: { contains: params.search, mode: 'insensitive' } },
+            { sku: { contains: params.search, mode: 'insensitive' } },
+            { description: { contains: params.search, mode: 'insensitive' } },
+          ],
+        }),
+      };
+
+      const [products, total] = await Promise.all([
+        this.prisma.product.findMany({
+          where,
+          take,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            category: { select: { id: true, name: true, slug: true } },
+            brand: { select: { id: true, name: true, slug: true } },
+            images: { where: { isPrimary: true }, take: 1 },
+            prices: { include: { priceList: { select: { id: true, name: true, code: true } } } },
+          },
+        }),
+        this.prisma.product.count({ where }),
+      ]);
+
+      this.setTrendingCache({
+        data: products,
+        meta: { total, take },
+      });
+    }
+
+    const cached = this.getFromTrendingCache();
+    return {
+      data: cached?.data || [],
+      meta: cached?.meta || { total: 0, take: params?.take || 5 },
+    };
+  }
+
   async findAll(params?: {
     skip?: number;
     take?: number;
