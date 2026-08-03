@@ -29,7 +29,7 @@ export class ProductsController {
   }
 
   @Get()
-  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Listar productos' })
   @ApiQuery({ name: 'skip', required: false, type: Number })
   @ApiQuery({ name: 'take', required: false, type: Number })
@@ -53,14 +53,14 @@ export class ProductsController {
   }
 
   @Get(':id')
-  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Obtener producto por ID' })
   findOne(@Param('id') id: string) {
     return this.productsService.findOne(id);
   }
 
   @Post()
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Crear producto' })
   @ApiResponse({ status: 201, description: 'Producto creado' })
   create(@Body() dto: CreateProductDto) {
@@ -68,35 +68,35 @@ export class ProductsController {
   }
 
   @Put(':id')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Actualizar producto' })
   update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.productsService.update(id, dto);
   }
 
   @Patch(':id/toggle-visibility')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Alternar visibilidad del producto' })
   toggleVisibility(@Param('id') id: string) {
     return this.productsService.toggleVisibility(id);
   }
 
   @Patch(':id/toggle-active')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Alternar estado activo del producto' })
   toggleActive(@Param('id') id: string) {
     return this.productsService.toggleActive(id);
   }
 
   @Delete(':id')
-  @Roles('Admin')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Eliminar producto' })
   remove(@Param('id') id: string) {
     return this.productsService.remove(id);
   }
 
   @Post('import')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: 'Importar productos desde Excel' })
   @ApiConsumes('multipart/form-data')

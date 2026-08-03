@@ -9,7 +9,7 @@ import { Role, User } from '@prisma/client';
 
 /**
  * Usuario activo con roles y permisos completos.
- * Simula un Admin con todos los permisos del sistema.
+ * Simula un Super Admin con todos los permisos del sistema.
  */
 export const buildActiveUser = (overrides: Partial<User> = {}): User => ({
   id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
@@ -37,24 +37,24 @@ export const buildInactiveUser = (overrides: Partial<User> = {}): User => ({
 });
 
 /**
- * Rol Admin con permisos completos.
+ * Rol Super Admin con permisos completos.
  */
 export const buildAdminRole = (overrides: Partial<Role> = {}): Role => ({
   id: 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
-  name: 'Admin',
-  description: 'Administrador del sistema',
+  name: 'Super Admin',
+  description: 'Acceso total al sistema',
   createdAt: new Date('2025-01-01T00:00:00Z'),
   updatedAt: new Date('2025-01-01T00:00:00Z'),
   ...overrides,
 });
 
 /**
- * Rol Operator con permisos limitados.
+ * Rol Operador con permisos limitados.
  */
 export const buildOperatorRole = (overrides: Partial<Role> = {}): Role => ({
   id: 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44',
-  name: 'Operator',
-  description: 'Operador de catálogo',
+  name: 'Operador',
+  description: 'Consulta del catálogo',
   createdAt: new Date('2025-01-01T00:00:00Z'),
   updatedAt: new Date('2025-01-01T00:00:00Z'),
   ...overrides,
@@ -91,7 +91,7 @@ export const buildExpectedUserData = () => ({
   id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
   email: 'admin@grupo-security.com',
   name: 'Admin Principal',
-  roles: ['Admin'],
+  roles: ['Super Admin'],
   permissions: [
     'products:read',
     'products:write',

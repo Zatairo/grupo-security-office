@@ -15,21 +15,21 @@ export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
   @Get()
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Listar roles' })
   findAll() {
     return this.rolesService.findAll();
   }
 
   @Get(':id')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Obtener rol por ID' })
   findOne(@Param('id') id: string) {
     return this.rolesService.findOne(id);
   }
 
   @Post()
-  @Roles('Admin')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Crear rol' })
   @ApiResponse({ status: 201, description: 'Rol creado' })
   @ApiResponse({ status: 409, description: 'Nombre ya existe' })
@@ -38,14 +38,14 @@ export class RolesController {
   }
 
   @Put(':id')
-  @Roles('Admin')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Actualizar rol' })
   update(@Param('id') id: string, @Body() updateRoleDto: UpdateRoleDto) {
     return this.rolesService.update(id, updateRoleDto);
   }
 
   @Delete(':id')
-  @Roles('Admin')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Eliminar rol' })
   remove(@Param('id') id: string) {
     return this.rolesService.remove(id);

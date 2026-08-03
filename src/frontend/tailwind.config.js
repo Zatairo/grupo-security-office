@@ -39,6 +39,8 @@ export default {
           'primary-hover': '#AD0102',
           'primary-light': '#FFF5F5',
           'primary-subtle': '#FFE0E0',
+          secondary: '#484748',
+          'secondary-hover': '#3A393A',
           success: '#059669',
           'success-light': '#ECFDF5',
           warning: '#D97706',

@@ -3,50 +3,9 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
-async function main() {
-  console.log('🌱 Seeding database...');
-
-  // Create roles
-  const adminRole = await prisma.role.upsert({
-    where: { name: 'Admin' },
-    update: {},
-    create: {
-      name: 'Admin',
-      description: 'Acceso total al sistema',
-    },
-  });
-
-  const gerenteRole = await prisma.role.upsert({
-    where: { name: 'Gerente' },
-    update: {},
-    create: {
-      name: 'Gerente',
-      description: 'Gestión de productos, precios y publicación',
-    },
-  });
-
-  const operatorRole = await prisma.role.upsert({
-    where: { name: 'Operator' },
-    update: {},
-    create: {
-      name: 'Operator',
-      description: 'Edición limitada de productos y consulta de precios',
-    },
-  });
-
-  const viewerRole = await prisma.role.upsert({
-    where: { name: 'Viewer' },
-    update: {},
-    create: {
-      name: 'Viewer',
-      description: 'Solo lectura del catálogo',
-    },
-  });
-
-  console.log('✅ Roles created');
-
-  // Create permissions
-  const allPermissions = [
+// Matriz de permisos por rol (fuente de verdad del negocio).
+const ROLE_PERMISSIONS: Record<string, string[]> = {
+  'Super Admin': [
     'products:read', 'products:write', 'products:delete',
     'categories:read', 'categories:write',
     'brands:read', 'brands:write',
@@ -54,69 +13,118 @@ async function main() {
     'users:read', 'users:write', 'users:manage',
     'audit:read',
     'publish:manage',
-  ];
-
-  const gerentePermissions = [
+  ],
+  'Supervisor': [
+    'products:read',
+    'publish:manage',
+    'audit:read',
+  ],
+  'Admin Comercial': [
     'products:read', 'products:write',
     'categories:read', 'categories:write',
     'brands:read', 'brands:write',
     'prices:read', 'prices:write',
-    'audit:read',
     'publish:manage',
-  ];
-
-  const operatorPermissions = [
-    'products:read', 'products:write',
-    'categories:read',
-    'brands:read',
-    'prices:read',
-  ];
-
-  const viewerPermissions = [
+  ],
+  'Operador': [
     'products:read',
     'categories:read',
     'brands:read',
     'prices:read',
-  ];
+  ],
+  'Consulta': [
+    'products:read',
+    'categories:read',
+    'brands:read',
+    'prices:read',
+  ],
+};
 
-  // Assign permissions to roles
-  for (const permission of allPermissions) {
-    await prisma.rolePermission.upsert({
-      where: { roleId_permission: { roleId: adminRole.id, permission } },
-      update: {},
-      create: { roleId: adminRole.id, permission },
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+  'Super Admin': 'Acceso total al sistema y gestión de usuarios y auditoría',
+  'Supervisor': 'Supervisión comercial, publicación de productos y auditoría',
+  'Admin Comercial': 'Gestión comercial del catálogo, precios y publicación',
+  'Operador': 'Consulta del catálogo y precios',
+  'Consulta': 'Solo lectura de catálogo y precios',
+};
+
+// Equivalencia de roles antiguos a los nuevos según la matriz.
+const LEGACY_ROLE_MAPPING: Record<string, string> = {
+  Admin: 'Super Admin',
+  Gerente: 'Admin Comercial',
+  Operator: 'Operador',
+  Viewer: 'Consulta',
+};
+
+async function upsertRole(name: string) {
+  const role = await prisma.role.upsert({
+    where: { name },
+    update: { description: ROLE_DESCRIPTIONS[name] },
+    create: { name, description: ROLE_DESCRIPTIONS[name] },
+  });
+
+  // Reemplaza permisos para que el estado final coincida exactamente con la matriz
+  // (idempotente: re-ejecutar deja el mismo resultado).
+  await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
+  await prisma.rolePermission.createMany({
+    data: ROLE_PERMISSIONS[name].map((permission) => ({
+      roleId: role.id,
+      permission,
+    })),
+  });
+
+  return role;
+}
+
+async function migrateLegacyRoles() {
+  for (const [oldName, newName] of Object.entries(LEGACY_ROLE_MAPPING)) {
+    const oldRole = await prisma.role.findUnique({
+      where: { name: oldName },
+      include: { users: true },
     });
-  }
 
-  for (const permission of gerentePermissions) {
-    await prisma.rolePermission.upsert({
-      where: { roleId_permission: { roleId: gerenteRole.id, permission } },
-      update: {},
-      create: { roleId: gerenteRole.id, permission },
-    });
-  }
+    if (!oldRole) continue;
 
-  for (const permission of operatorPermissions) {
-    await prisma.rolePermission.upsert({
-      where: { roleId_permission: { roleId: operatorRole.id, permission } },
-      update: {},
-      create: { roleId: operatorRole.id, permission },
-    });
-  }
+    // Reasigna usuarios al rol equivalente antes de eliminar.
+    const newRole = await prisma.role.findUnique({ where: { name: newName } });
+    if (newRole) {
+      for (const userRole of oldRole.users) {
+        await prisma.userRole.upsert({
+          where: { userId_roleId: { userId: userRole.userId, roleId: newRole.id } },
+          update: {},
+          create: { userId: userRole.userId, roleId: newRole.id },
+        });
+      }
+    }
 
-  for (const permission of viewerPermissions) {
-    await prisma.rolePermission.upsert({
-      where: { roleId_permission: { roleId: viewerRole.id, permission } },
-      update: {},
-      create: { roleId: viewerRole.id, permission },
-    });
-  }
+    // Elimina las asignaciones restantes del rol antiguo; de lo contrario
+    // la FK RESTRICT de user_roles impide borrar el rol.
+    await prisma.userRole.deleteMany({ where: { roleId: oldRole.id } });
+    await prisma.rolePermission.deleteMany({ where: { roleId: oldRole.id } });
+    await prisma.role.delete({ where: { id: oldRole.id } });
 
-  console.log('✅ Permissions assigned');
+    console.log(`♻️ Rol antiguo "${oldName}" migrado a "${newName}"`);
+  }
+}
+
+async function main() {
+  console.log('🌱 Seeding database...');
+
+  // Create roles (definitivos, en español)
+  const superAdminRole = await upsertRole('Super Admin');
+  await upsertRole('Supervisor');
+  await upsertRole('Admin Comercial');
+  await upsertRole('Operador');
+  await upsertRole('Consulta');
+
+  console.log('✅ Roles created');
+
+  // Migra roles antiguos (Admin, Gerente, Operator, Viewer) → nuevos
+  await migrateLegacyRoles();
 
   // Create admin user
   const hashedPassword = await bcrypt.hash('admin123', 12);
-  
+
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@grupo-security.com' },
     update: {},
@@ -129,12 +137,12 @@ async function main() {
   });
 
   await prisma.userRole.upsert({
-    where: { userId_roleId: { userId: adminUser.id, roleId: adminRole.id } },
+    where: { userId_roleId: { userId: adminUser.id, roleId: superAdminRole.id } },
     update: {},
-    create: { userId: adminUser.id, roleId: adminRole.id },
+    create: { userId: adminUser.id, roleId: superAdminRole.id },
   });
 
-  console.log('✅ Admin user created (admin@grupo-security.com / admin123)');
+  console.log('✅ Admin user created (admin@grupo-security.com / admin123) → Super Admin');
 
   // Create sample categories
   const cctv = await prisma.category.upsert({

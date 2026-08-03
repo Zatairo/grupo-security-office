@@ -32,7 +32,7 @@ const mockUser = {
 const mockUserWithRoles = {
   ...mockUser,
   roles: [
-    { userId: 'user-1', roleId: 'role-1', role: { id: 'role-1', name: 'Admin', description: null } },
+    { userId: 'user-1', roleId: 'role-1', role: { id: 'role-1', name: 'Super Admin', description: null } },
   ],
 };
 
@@ -42,7 +42,7 @@ const mockCreatedUser = {
   email: 'new@test.com',
   name: 'New User',
   roles: [
-    { userId: 'new-id', roleId: 'role-1', role: { id: 'role-1', name: 'Admin', description: null } },
+    { userId: 'new-id', roleId: 'role-1', role: { id: 'role-1', name: 'Super Admin', description: null } },
   ],
 };
 
@@ -224,7 +224,7 @@ describe('UsersService', () => {
       const updatedWithRoles = {
         ...mockUserWithRoles,
         roles: [
-          { userId: 'user-1', roleId: 'role-2', role: { id: 'role-2', name: 'Operator', description: null } },
+          { userId: 'user-1', roleId: 'role-2', role: { id: 'role-2', name: 'Operador', description: null } },
         ],
       };
       mockPrisma.user.update.mockResolvedValue(updatedWithRoles);
@@ -232,7 +232,7 @@ describe('UsersService', () => {
       const result = await service.update('user-1', { roleIds: ['role-2'] });
 
       expect(result.roles).toHaveLength(1);
-      expect(result.roles[0].name).toBe('Operator');
+      expect(result.roles[0].name).toBe('Operador');
       expect(mockPrisma.userRole.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } });
     });
 

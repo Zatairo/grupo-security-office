@@ -220,7 +220,7 @@ describe('AuthService', () => {
 
     /**
      * PERMISOS: deduplicación con roles superpuestos.
-     * Riesgo: si dos roles comparten permisos (ej. Admin y Operator
+     * Riesgo: si dos roles comparten permisos (ej. Super Admin y Operador
      * tienen ambos 'products:read'), el array final debe tener
      * cada permiso una sola vez para evitar bugs en la UI.
      */
@@ -342,7 +342,7 @@ describe('AuthService', () => {
         id: user.id,
         email: user.email,
         name: user.name,
-        roles: ['Admin'],
+        roles: ['Super Admin'],
         permissions: ['products:read', 'products:write'],
       });
     });
@@ -458,7 +458,7 @@ describe('AuthService', () => {
       expect(result.id).toBe(user.id);
       expect(result.email).toBe('admin@grupo-security.com');
       expect(result.name).toBe('Admin Principal');
-      expect(result.roles).toEqual(['Admin']);
+      expect(result.roles).toEqual(['Super Admin']);
       expect(result.permissions).toEqual(permissions);
     });
   });

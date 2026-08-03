@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../services/api'
 import { hasRole, hasPermission } from '../lib/rbac'
+import { ROLES } from '../lib/roles'
 
 export default function AuditPage() {
   const [entity, setEntity] = useState('')
@@ -19,7 +20,7 @@ export default function AuditPage() {
     },
   })
 
-  if (!hasRole('Admin') && !hasPermission('audit:read')) {
+  if (!hasRole(ROLES.SUPER_ADMIN) && !hasPermission('audit:read')) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
         <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

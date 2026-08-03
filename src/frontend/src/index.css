@@ -2,49 +2,59 @@
 
 /* Enhanced visual design system */
 :root {
-  /* Updated color palette with better contrast and accessibility */
-  --color-primary: #dc2626;           /* deep red */
-  --color-primary-dark: #b91c1c;
-  --color-primary-light: #fecac5;
-  --color-secondary: #64748b;
-  --color-secondary-light: #94a3b8;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
-  --color-info: #06b6d4;
+  /* Semantic color palette — aligned with Grupo Security brand (#CE0203) */
+  --color-primary: #CE0203;            /* PRIMARY — rojo institucional */
+  --color-primary-hover: #AD0102;
+  --color-primary-focus-ring: #FECACA; /* soft red for focus rings */
+  --color-primary-bg-subtle: #FEF2F2;  /* very light red for backgrounds */
 
-  /* Enhanced background and surface colors */
+  --color-secondary: #484748;            /* Gris oscuro institucional Grupo Security */
+  --color-secondary-hover: #3A393A;
+
+  --color-success: #059669;
+  --color-success-hover: #047857;
+  --color-success-bg-subtle: #ECFDF5;
+
+  --color-warning: #D97706;
+  --color-warning-hover: #B45309;
+  --color-warning-bg-subtle: #FFFBEB;
+
+  --color-error: #DC2626;
+  --color-error-hover: #B91C1C;
+  --color-error-bg-subtle: #FEF2F2;
+
+  --color-info: #0284C7;
+  --color-info-hover: #0369A1;
+  --color-info-bg-subtle: #EFF6FF;
+
+  /* Background and surface colors */
   --color-bg-primary: #ffffff;
   --color-bg-card: #ffffff;
-  --color-bg-surface: #f1f5f9;
-  --color-surface: #ffffff;
+  --color-bg-surface: #F8FAFC;
+  --color-bg-surface-hover: #F1F5F9;
+  --color-bg-accent: #FEF2F2;
 
-  /* Enhanced text colors */
-  --color-text-primary: #1e293b;
-  --color-text-primary-secondary: #475562;
-  --color-text-tertiary: #94a3b8;
+  /* Text colors */
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-tertiary: #94A3B8;
   --color-text-inverse: #ffffff;
+  --color-text-primary-hover: #1E3A5F;
 
-  /* Enhanced border and divider colors */
-  --color-border: #e2e8f0;
-  --color-divider: #e2e8f0;
+  /* Border and divider colors */
+  --color-border: #E2E8F0;
+  --color-border-strong: #CBD5E1;
+  --color-divider: #E2E8F0;
 
-  /* Enhanced interactive states */
-  --color-primary-hover: #3b82f6;
-  --color-primary-active: #1d4ed8;
-  --color-primary-active-shadow: rgba(42, 92, 182, 0.35);
-  --color-surface-hover: #f1f5f9;
-  --color-surface-active: #e2e8f0;
-
-  /* Enhanced elevation */
+  /* Elevation */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 
-  /* Enhanced interactive states for text */
-  --color-text-hover: #2563eb;
-  --color-text-active: #1d4ed8;
-  --color-text-active-shadow: rgba(42, 92, 182, 0.35);
+  /* Transition durations */
+  --transition-fast: 150ms ease-out;
+  --transition-medium: 200ms ease-out;
+  --transition-slow: 300ms ease-out;
 
   /* Design system spacing */
   --spacing-0: 0px;
@@ -65,40 +75,23 @@
   --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-md: 8px;
-  --radius-md-2: 10px;
-  --radius-md-3: 12px;
-  --radius-md-4: 14px;
-  --radius-md-5: 16px;
-  --radius-lg: 8px;
-  --radius-lg-2: 12px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 
   /* Typography sizes */
-  --text-xs: 0.75rem;      /* 12px */
-  --text-sm: 0.875rem;     /* 14px */
-  --text-base: 1rem;       /* 16px */
-  --text-md: 1.125rem;     /* 18px */
-  --text-lg: 1.25rem;      /* 20px */
-  --text-lg-xl: 1.5rem;      /* 24px */
-  --text-2xl: 2.25rem;     /* 36px */
-  --text-3xl: 2.75rem;     /* 44px */
-  --text-hero: 3.5rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
 
-  /* Line heights */
-  --leading-none: 1;
-  --leading-tight: 1.2;
-  --leading-relaxed: 1.5;
-  --leading-loose: 1.8;
-
-  /* Typography weights */
+  /* Typo weights */
   --font-normal: 400;
   --font-medium: 500;
   --font-semibold: 600;
   --font-bold: 700;
-
-  /* Transition durations */
-  --transition-fast: 150ms ease-out;
-  --transition-medium: 200ms ease-out;
-  --transition-slow: 300ms ease-out;
 }
 
 @tailwind base;
@@ -124,9 +117,7 @@
     color: var(--color-primary-hover);
   }
   a:focus {
-    color: var(--color-primary-dark);
-    outline: 2px solid var(--color-primary-hover);
-    outline-offset: 2px;
+    outline: none;
   }
 
   /* Enhanced button styles */
@@ -175,8 +166,8 @@
     margin-left: var(--spacing-4);
   }
 
-  /* Enhanced accessible focus states */
-  [aria-current="true"] {
+  /* Active state indicator scoped to carousel indicators only */
+  .carousel-indicator[aria-current="true"] {
     box-shadow: 0 0 0 3px var(--color-primary-hover);
   }
 
@@ -185,7 +176,8 @@
     @apply w-3 h-3 rounded-full transition-colors;
   }
   .carousel-indicator[aria-current="true"] {
-    @apply bg-primary text-white;
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
   }
 
   /* Enhanced Loading skeletons */

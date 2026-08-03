@@ -10,7 +10,7 @@
     "id": "uuid",
     "email": "user@example.com",
     "name": "User Name",
-    "roles": ["Admin"],
+    "roles": ["Super Admin"],
     "permissions": ["products:read", "products:write", "products:delete"]
   }
 }
@@ -27,7 +27,7 @@ The JWT token is set as an HttpOnly cookie (`access_token`), not returned in the
   "id": "uuid",
   "email": "user@example.com",
   "name": "User Name",
-  "roles": ["Admin"],
+  "roles": ["Super Admin"],
   "permissions": ["products:read", "products:write", "products:delete"]
 }
 ```
@@ -39,14 +39,14 @@ The JWT token is set as an HttpOnly cookie (`access_token`), not returned in the
   "sub": "uuid",
   "email": "user@example.com",
   "name": "User Name",
-  "roles": ["Admin"],
+  "roles": ["Super Admin"],
   "permissions": ["products:read", "products:write", "products:delete"]
 }
 ```
 
 ## RBAC Convention
 
-- `roles`: Array of role names (e.g., `['Admin']`, `['Gerente']`, `['Operator']`, `['Viewer']`)
+- `roles`: Array of role names (e.g., `['Super Admin']`, `['Supervisor']`, `['Admin Comercial']`, `['Operador']`, `['Consulta']`)
 - `permissions`: Flat array of permission strings (e.g., `['products:read', 'products:write', 'products:delete', 'users:read', 'users:write', 'audit:read']`)
 - Frontend can use these directly for visibility decisions
 

@@ -18,6 +18,28 @@
 
 ## Historial de Cambios
 
+### Migración de roles RBAC a los 5 roles finales (2026-08-03)
+
+#### Propósito
+Reemplazar los roles legacy en inglés (`Admin`, `Gerente`, `Operator`, `Viewer`) por los 5 roles definitivos en español definidos por el negocio, sin tocar el schema Prisma (los roles son datos, no modelo).
+
+#### Contrato (fuente de verdad)
+| Rol | Permisos |
+|---|---|
+| Super Admin | products:read/write/delete, categories:read/write, brands:read/write, prices:read/write, users:read/write/manage, audit:read, publish:manage |
+| Supervisor | products:read, publish:manage, audit:read |
+| Admin Comercial | products:read/write, categories:read/write, brands:read/write, prices:read/write, publish:manage |
+| Operador | products:read, categories:read, brands:read, prices:read |
+| Consulta | products:read, categories:read, brands:read, prices:read |
+
+#### Cambios realizados
+- **seed.ts**: upsert de los 5 roles con descripciones en español; permisos reemplazados por la matriz exacta en cada corrida (idempotente); migración de roles legacy con reasignación de usuarios y limpieza de `user_roles` (FK RESTRICT); admin `admin@grupo-security.com` asignado a **Super Admin**.
+- **Controllers**: decoradores `@Roles` actualizados según la matriz (lectura → 5 roles; escritura → Super Admin + Admin Comercial; borrado/gestión usuarios/roles → Super Admin; auditoría → Super Admin + Supervisor).
+- **DTOs, fixtures y specs**: nombres de roles actualizados a los nuevos; 171 tests pasando.
+
+#### Mapa de migración
+Admin → Super Admin · Gerente → Admin Comercial · Operator → Operador · Viewer → Consulta (todos reasignados y luego eliminados).
+
 ### Dashboard.tsx Mejoras (2026-07-31)
 
 #### Propósito

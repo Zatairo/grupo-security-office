@@ -35,10 +35,10 @@ describe('RolesGuard', () => {
 
   describe('canActivate', () => {
     it('debe retornar true cuando el usuario tiene el rol requerido', () => {
-      mockReflector.getAllAndOverride.mockReturnValue(['Admin']);
+      mockReflector.getAllAndOverride.mockReturnValue(['Super Admin']);
 
       const result = rolesGuard.canActivate(
-        createMockContext({ roles: ['Admin', 'Operator'] }),
+        createMockContext({ roles: ['Super Admin', 'Operador'] }),
       );
 
       expect(result).toBe(true);
@@ -46,10 +46,10 @@ describe('RolesGuard', () => {
     });
 
     it('debe retornar false cuando el usuario no tiene el rol requerido', () => {
-      mockReflector.getAllAndOverride.mockReturnValue(['Admin']);
+      mockReflector.getAllAndOverride.mockReturnValue(['Super Admin']);
 
       const result = rolesGuard.canActivate(
-        createMockContext({ roles: ['Operator'] }),
+        createMockContext({ roles: ['Operador'] }),
       );
 
       expect(result).toBe(false);
@@ -59,7 +59,7 @@ describe('RolesGuard', () => {
       mockReflector.getAllAndOverride.mockReturnValue(null);
 
       const result = rolesGuard.canActivate(
-        createMockContext({ roles: ['Admin'] }),
+        createMockContext({ roles: ['Super Admin'] }),
       );
 
       expect(result).toBe(true);
@@ -69,14 +69,14 @@ describe('RolesGuard', () => {
       mockReflector.getAllAndOverride.mockReturnValue([]);
 
       const result = rolesGuard.canActivate(
-        createMockContext({ roles: ['Admin'] }),
+        createMockContext({ roles: ['Super Admin'] }),
       );
 
       expect(result).toBe(true);
     });
 
     it('debe retornar false cuando no hay usuario en request', () => {
-      mockReflector.getAllAndOverride.mockReturnValue(['Admin']);
+      mockReflector.getAllAndOverride.mockReturnValue(['Super Admin']);
 
       const result = rolesGuard.canActivate(createMockContext(undefined));
 
@@ -84,7 +84,7 @@ describe('RolesGuard', () => {
     });
 
     it('debe retornar false cuando user.roles es undefined', () => {
-      mockReflector.getAllAndOverride.mockReturnValue(['Admin']);
+      mockReflector.getAllAndOverride.mockReturnValue(['Super Admin']);
 
       const result = rolesGuard.canActivate(createMockContext({}));
 
@@ -92,7 +92,7 @@ describe('RolesGuard', () => {
     });
 
     it('debe retornar false cuando user.roles es null', () => {
-      mockReflector.getAllAndOverride.mockReturnValue(['Admin']);
+      mockReflector.getAllAndOverride.mockReturnValue(['Super Admin']);
 
       const result = rolesGuard.canActivate(createMockContext({ roles: null }));
 
@@ -100,10 +100,10 @@ describe('RolesGuard', () => {
     });
 
     it('debe retornar true cuando el usuario tiene uno de los roles requeridos', () => {
-      mockReflector.getAllAndOverride.mockReturnValue(['Admin', 'SuperAdmin']);
+      mockReflector.getAllAndOverride.mockReturnValue(['Super Admin', 'Supervisor']);
 
       const result = rolesGuard.canActivate(
-        createMockContext({ roles: ['Operator', 'SuperAdmin'] }),
+        createMockContext({ roles: ['Operador', 'Supervisor'] }),
       );
 
       expect(result).toBe(true);

@@ -16,21 +16,21 @@ export class PricesController {
   constructor(private readonly pricesService: PricesService) {}
 
   @Get('lists')
-  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Listar listas de precios' })
   findAllPriceLists() {
     return this.pricesService.findAllPriceLists();
   }
 
   @Get('lists/:id')
-  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Obtener lista de precios por ID' })
   findOnePriceList(@Param('id') id: string) {
     return this.pricesService.findOnePriceList(id);
   }
 
   @Post('lists')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Crear lista de precios' })
   @ApiResponse({ status: 201, description: 'Lista creada' })
   createPriceList(@Body() dto: CreatePriceListDto) {
@@ -38,35 +38,35 @@ export class PricesController {
   }
 
   @Put('lists/:id')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Actualizar lista de precios' })
   updatePriceList(@Param('id') id: string, @Body() dto: Partial<CreatePriceListDto>) {
     return this.pricesService.updatePriceList(id, dto);
   }
 
   @Delete('lists/:id')
-  @Roles('Admin')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Eliminar lista de precios' })
   removePriceList(@Param('id') id: string) {
     return this.pricesService.removePriceList(id);
   }
 
   @Get('product/:productId')
-  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Obtener precios de un producto' })
   findPricesByProduct(@Param('productId') productId: string) {
     return this.pricesService.findPricesByProduct(productId);
   }
 
   @Get('list/:priceListId')
-  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Obtener precios de una lista' })
   findPricesByPriceList(@Param('priceListId') priceListId: string) {
     return this.pricesService.findPricesByPriceList(priceListId);
   }
 
   @Post()
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Crear precio' })
   @ApiResponse({ status: 201, description: 'Precio creado' })
   createPrice(@Body() dto: CreatePriceDto) {
@@ -74,14 +74,14 @@ export class PricesController {
   }
 
   @Put(':id')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Actualizar precio' })
   updatePrice(@Param('id') id: string, @Body() dto: UpdatePriceDto) {
     return this.pricesService.updatePrice(id, dto);
   }
 
   @Delete(':id')
-  @Roles('Admin')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Eliminar precio' })
   removePrice(@Param('id') id: string) {
     return this.pricesService.removePrice(id);

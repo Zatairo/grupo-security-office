@@ -10,13 +10,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    'bg-brand-primary text-white hover:bg-brand-primary-hover shadow-sm shadow-brand-primary/20',
+    'bg-[var(--color-primary)] text-[var(--color-text-inverse)] hover:bg-[var(--color-primary-hover)] shadow-sm',
   secondary:
-    'bg-white text-brand-primary border border-neutral-300 hover:bg-brand-primary-light hover:border-brand-primary',
+    'bg-[var(--color-bg-primary)] text-[var(--color-primary)] border border-[var(--color-border)] hover:bg-[var(--color-primary-bg-subtle)] hover:border-[var(--color-primary)]',
   ghost:
-    'text-neutral-500 hover:text-brand-primary hover:bg-brand-primary-light border border-transparent',
+    'text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] border border-transparent',
   danger:
-    'bg-brand-error text-white hover:bg-red-700',
+    'bg-[var(--color-error)] text-[var(--color-text-inverse)] hover:bg-[var(--color-error-hover)]',
 }
 
 export default function Button({
@@ -30,7 +30,7 @@ export default function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60 disabled:cursor-not-allowed ${variantClasses[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] disabled:opacity-60 disabled:cursor-not-allowed ${variantClasses[variant]} ${className}`}
       disabled={disabled || loading}
       {...props}
     >

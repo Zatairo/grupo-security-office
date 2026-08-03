@@ -15,28 +15,28 @@ export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Get()
-  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Listar categorías' })
   findAll() {
     return this.categoriesService.findAll();
   }
 
   @Get('tree')
-  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Obtener árbol de categorías' })
   findTree() {
     return this.categoriesService.findTree();
   }
 
   @Get(':id')
-  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Obtener categoría por ID' })
   findOne(@Param('id') id: string) {
     return this.categoriesService.findOne(id);
   }
 
   @Post()
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Crear categoría' })
   @ApiResponse({ status: 201, description: 'Categoría creada' })
   create(@Body() dto: CreateCategoryDto) {
@@ -44,14 +44,14 @@ export class CategoriesController {
   }
 
   @Put(':id')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Actualizar categoría' })
   update(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
     return this.categoriesService.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles('Admin')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Eliminar categoría' })
   remove(@Param('id') id: string) {
     return this.categoriesService.remove(id);

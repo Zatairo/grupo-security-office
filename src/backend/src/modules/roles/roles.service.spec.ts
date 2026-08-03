@@ -13,8 +13,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 const mockRole = {
   id: 'role-1',
-  name: 'Admin',
-  description: 'Administrador',
+  name: 'Super Admin',
+  description: 'Acceso total al sistema',
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -61,7 +61,7 @@ describe('RolesService', () => {
       const result = await service.findAll();
 
       expect(result.data).toHaveLength(1);
-      expect(result.data[0].name).toBe('Admin');
+      expect(result.data[0].name).toBe('Super Admin');
       expect(result.data[0].permissions).toEqual(['products:read', 'products:write']);
       expect(result.data[0].userCount).toBe(3);
     });
@@ -73,7 +73,7 @@ describe('RolesService', () => {
 
       const result = await service.findOne('role-1');
 
-      expect(result.name).toBe('Admin');
+      expect(result.name).toBe('Super Admin');
       expect(result.permissions).toEqual(['products:read']);
       expect(result.users).toHaveLength(1);
     });
@@ -98,7 +98,7 @@ describe('RolesService', () => {
       const dto = { name: 'Editor', description: 'Editor de contenido', permissions: ['products:read'] };
       const result = await service.create(dto);
 
-      expect(result.name).toBe('Admin');
+      expect(result.name).toBe('Super Admin');
       expect(result.permissions).toContain('products:read');
       expect(mockPrisma.role.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -115,7 +115,7 @@ describe('RolesService', () => {
     it('debe rechazar nombre duplicado con ConflictException', async () => {
       mockPrisma.role.findUnique.mockResolvedValue(mockRole);
 
-      const dto = { name: 'Admin' };
+      const dto = { name: 'Super Admin' };
 
       await expect(service.create(dto)).rejects.toThrow(ConflictException);
       await expect(service.create(dto)).rejects.toThrow('Ya existe un rol con ese nombre');

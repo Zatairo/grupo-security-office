@@ -15,7 +15,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Listar usuarios' })
   @ApiQuery({ name: 'skip', required: false, type: Number })
   @ApiQuery({ name: 'take', required: false, type: Number })
@@ -33,14 +33,14 @@ export class UsersController {
   }
 
   @Get(':id')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Obtener usuario por ID' })
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
   }
 
   @Post()
-  @Roles('Admin')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Crear usuario' })
   @ApiResponse({ status: 201, description: 'Usuario creado' })
   @ApiResponse({ status: 409, description: 'Email ya registrado' })
@@ -49,14 +49,14 @@ export class UsersController {
   }
 
   @Put(':id')
-  @Roles('Admin')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Actualizar usuario' })
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(id, updateUserDto);
   }
 
   @Delete(':id')
-  @Roles('Admin')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Eliminar usuario' })
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);

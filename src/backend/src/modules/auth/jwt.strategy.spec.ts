@@ -50,7 +50,7 @@ describe('JwtStrategy', () => {
       sub: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
       email: 'admin@grupo-security.com',
       name: 'Admin Principal',
-      roles: ['Admin'],
+      roles: ['Super Admin'],
       permissions: ['products:read'],
     };
 

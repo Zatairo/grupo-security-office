@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../services/api'
 import { hasRole, hasPermission } from '../lib/rbac'
+import { ROLES } from '../lib/roles'
 
 interface User {
   id: string
@@ -41,7 +42,7 @@ export default function UsersPage() {
       const res = await api.get('/roles')
       return res.data.data
     },
-    enabled: hasRole('Admin'),
+    enabled: hasRole(ROLES.SUPER_ADMIN),
   })
 
   const toggleActive = useMutation({
@@ -55,7 +56,7 @@ export default function UsersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
   })
 
-  if (!hasRole('Admin') && !hasPermission('users:read')) {
+  if (!hasRole(ROLES.SUPER_ADMIN) && !hasPermission('users:read')) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
         <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -73,7 +74,7 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold text-security-700">Usuarios</h1>
           <p className="text-sm text-gray-500 mt-1">Gestiona los usuarios internos del sistema</p>
         </div>
-        {hasRole('Admin') && (
+        {hasRole(ROLES.SUPER_ADMIN) && (
           <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-security-500 text-white rounded-lg font-semibold hover:bg-security-600 transition-colors"
@@ -149,7 +150,7 @@ export default function UsersPage() {
                 </span>
               </div>
 
-              {hasRole('Admin') && (
+              {hasRole(ROLES.SUPER_ADMIN) && (
                 <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
                   <button
                     onClick={() => setEditingUser(user)}

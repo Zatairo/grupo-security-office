@@ -15,21 +15,21 @@ export class BrandsController {
   constructor(private readonly brandsService: BrandsService) {}
 
   @Get()
-  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Listar marcas' })
   findAll() {
     return this.brandsService.findAll();
   }
 
   @Get(':id')
-  @Roles('Admin', 'Gerente', 'Operator', 'Viewer')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Obtener marca por ID' })
   findOne(@Param('id') id: string) {
     return this.brandsService.findOne(id);
   }
 
   @Post()
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Crear marca' })
   @ApiResponse({ status: 201, description: 'Marca creada' })
   create(@Body() dto: CreateBrandDto) {
@@ -37,14 +37,14 @@ export class BrandsController {
   }
 
   @Put(':id')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Actualizar marca' })
   update(@Param('id') id: string, @Body() dto: UpdateBrandDto) {
     return this.brandsService.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles('Admin')
+  @Roles('Super Admin')
   @ApiOperation({ summary: 'Eliminar marca' })
   remove(@Param('id') id: string) {
     return this.brandsService.remove(id);

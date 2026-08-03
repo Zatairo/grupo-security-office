@@ -38,7 +38,7 @@ export class ImportController {
    * Retorna: headers detectados, mapeos sugeridos, validación de filas.
    */
   @Post('preview')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: 'Vista previa de importación (dry-run)' })
   @ApiConsumes('multipart/form-data')
@@ -90,7 +90,7 @@ export class ImportController {
    * Requiere que se haya ejecutado preview previamente.
    */
   @Post('execute')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(201)
   @ApiOperation({ summary: 'Ejecutar importación (commit)' })
   @ApiResponse({ status: 201, description: 'Importación ejecutada exitosamente' })
@@ -115,7 +115,7 @@ export class ImportController {
    * Progreso de una importación activa.
    */
   @Get('progress/:importId')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Consultar progreso de importación' })
   @ApiResponse({ status: 200, description: 'Progreso de la importación' })
   async getProgress(@Param('importId') importId: string) {
@@ -125,14 +125,14 @@ export class ImportController {
   // === Presets de Mapping ===
 
   @Get('mappings')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Listar presets de mapping del usuario' })
   async listPresets(@Req() req: any) {
     return this.importService.listPresets(req.user.id);
   }
 
   @Post('mappings')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(201)
   @ApiOperation({ summary: 'Guardar preset de mapping' })
   async savePreset(
@@ -148,7 +148,7 @@ export class ImportController {
   }
 
   @Delete('mappings/:id')
-  @Roles('Admin', 'Gerente')
+  @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(204)
   @ApiOperation({ summary: 'Eliminar preset de mapping' })
   async deletePreset(

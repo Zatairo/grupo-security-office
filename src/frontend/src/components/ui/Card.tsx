@@ -17,12 +17,12 @@ const paddingClasses = {
 
 const variantClasses = {
   default: 'bg-[var(--color-bg-card)] border border-[var(--color-border)]',
-  primary: 'bg-[var(--color-primary)] border border-[var(--color-border)]',
-  secondary: 'bg-gray-50 border border-gray-200',
-  success: 'bg-green-50 border border-green-200',
-  warning: 'bg-yellow-50 border border-yellow-200',
-  error: 'bg-red-50 border border-red-200',
-  info: 'bg-blue-50 border border-blue-200',
+  primary: 'bg-[var(--color-primary-bg-subtle)] border border-[var(--color-primary)]/20',
+  secondary: 'bg-[var(--color-secondary)]/5 border border-[var(--color-secondary)]/20',
+  success: 'bg-[var(--color-success-bg-subtle)] border border-[var(--color-success)]/20',
+  warning: 'bg-[var(--color-warning-bg-subtle)] border border-[var(--color-warning)]/20',
+  error: 'bg-[var(--color-error-bg-subtle)] border border-[var(--color-error)]/20',
+  info: 'bg-[var(--color-info-bg-subtle)] border border-[var(--color-info)]/20',
 }
 
 const elevatedClasses: Record<string, string> = {
