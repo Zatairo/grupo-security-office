@@ -6,10 +6,10 @@ import { hasRole, hasPermission } from '../../lib/rbac'
 import { ROLES } from '../../lib/roles'
 
 const COMMERCIAL_ITEMS = [
-  { to: '/products', label: 'Productos' },
-  { to: '/brands', label: 'Marcas' },
-  { to: '/categories', label: 'Categorías' },
-  { to: '/prices', label: 'Precios' },
+  { to: '/commercial/products', label: 'Productos' },
+  { to: '/commercial/brands', label: 'Marcas' },
+  { to: '/commercial/categories', label: 'Categorías' },
+  { to: '/commercial/price-lists', label: 'Precios' },
 ]
 
 export default function Header() {
@@ -23,9 +23,8 @@ export default function Header() {
   const commercialMenuRef = useRef<HTMLDivElement>(null)
   const navRef = useRef<HTMLElement>(null)
 
-  const isCommercialActive = COMMERCIAL_ITEMS.some((item) =>
-    location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
-  )
+  const isCommercialActive =
+    location.pathname === '/commercial' || location.pathname.startsWith('/commercial/')
 
   const openMenu = () => {
     const btn = commercialButtonRef.current
@@ -69,7 +68,7 @@ export default function Header() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchQuery.trim()) {
-      navigate(`/products?search=${encodeURIComponent(searchQuery)}`)
+      navigate(`/commercial/products?search=${encodeURIComponent(searchQuery)}`)
     }
   }
 
@@ -174,7 +173,7 @@ export default function Header() {
             <div className="relative flex-shrink-0">
               <div ref={commercialButtonRef} className="flex items-center">
                 <NavLink
-                  to="/products"
+                  to="/commercial/products"
                   onClick={() => setCommercialOpen(false)}
                   aria-label="Comercial: Productos"
                   className={`flex items-center px-3 py-1.5 text-sm font-condensed font-semibold whitespace-nowrap transition-all tracking-wider focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] rounded ${

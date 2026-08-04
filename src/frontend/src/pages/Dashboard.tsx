@@ -438,7 +438,7 @@ export default function Dashboard() {
         <section aria-label="Últimos productos">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-[var(--color-text-primary)]">Últimos Productos</h2>
-            <Link to="/products" className="text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] font-medium">
+            <Link to="/commercial/products" className="text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] font-medium">
               Ver todos →
             </Link>
           </div>
@@ -471,7 +471,7 @@ export default function Dashboard() {
         <section aria-label="Pendientes de publicación">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-[var(--color-text-primary)]">Pendientes de Publicación</h2>
-            <Link to="/products" className="text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] font-medium">
+            <Link to="/commercial/products" className="text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] font-medium">
               Ver todos →
             </Link>
           </div>
