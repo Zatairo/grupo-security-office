@@ -1,14 +1,70 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '../../stores/auth.store'
-import { useNavigate, NavLink } from 'react-router-dom'
+import { useNavigate, NavLink, useLocation } from 'react-router-dom'
 import api from '../../services/api'
 import { hasRole, hasPermission } from '../../lib/rbac'
 import { ROLES } from '../../lib/roles'
 
+const COMMERCIAL_ITEMS = [
+  { to: '/products', label: 'Productos' },
+  { to: '/brands', label: 'Marcas' },
+  { to: '/categories', label: 'Categorías' },
+  { to: '/prices', label: 'Precios' },
+]
+
 export default function Header() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchQuery, setSearchQuery] = useState('')
+  const [commercialOpen, setCommercialOpen] = useState(false)
+  const [menuLeft, setMenuLeft] = useState(0)
+  const commercialButtonRef = useRef<HTMLButtonElement>(null)
+  const commercialMenuRef = useRef<HTMLDivElement>(null)
+  const navRef = useRef<HTMLElement>(null)
+
+  const isCommercialActive = COMMERCIAL_ITEMS.some((item) =>
+    location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+  )
+
+  const openMenu = () => {
+    const btn = commercialButtonRef.current
+    const nav = navRef.current
+    if (btn && nav) {
+      setMenuLeft(btn.getBoundingClientRect().left - nav.getBoundingClientRect().left)
+    }
+    setCommercialOpen(true)
+  }
+
+  const toggleMenu = () => {
+    if (commercialOpen) setCommercialOpen(false)
+    else openMenu()
+  }
+
+  useEffect(() => {
+    if (!commercialOpen) return
+    const onClickOutside = (e: MouseEvent) => {
+      if (
+        commercialMenuRef.current &&
+        !commercialMenuRef.current.contains(e.target as Node) &&
+        commercialButtonRef.current &&
+        !commercialButtonRef.current.contains(e.target as Node)
+      ) {
+        setCommercialOpen(false)
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCommercialOpen(false)
+    }
+    document.addEventListener('click', onClickOutside)
+    document.addEventListener('mousedown', onClickOutside)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('click', onClickOutside)
+      document.removeEventListener('mousedown', onClickOutside)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [commercialOpen])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -109,22 +165,81 @@ export default function Header() {
       </div>
 
       {/* Nivel 2 - Navegación principal */}
-      <nav className="bg-[var(--color-bg-primary)] border-t border-[var(--color-border)]">
+      <nav ref={navRef} className="relative bg-[var(--color-bg-primary)] border-t border-[var(--color-border)]">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center gap-1 overflow-x-auto scrollbar-thin py-2">
-            <NavItem to="/" label="Dashboard" />
-            <NavItem to="/products" label="Productos" />
-            <NavItem to="/categories" label="Categorías" />
-            <NavItem to="/brands" label="Marcas" />
-            <NavItem to="/prices" label="Precios" />
+            <div className="flex-shrink-0">
+              <NavItem to="/" label="Dashboard" />
+            </div>
+            <div className="relative flex-shrink-0">
+              <button
+                ref={commercialButtonRef}
+                type="button"
+                onClick={toggleMenu}
+                aria-haspopup="menu"
+                aria-expanded={commercialOpen}
+                aria-controls="comercial-menu"
+                aria-label="Sección Comercial: Productos, Marcas, Categorías y Precios"
+                className={`flex items-center gap-1 px-3 py-1.5 text-sm font-condensed font-semibold whitespace-nowrap transition-all tracking-wider focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] rounded ${
+                  isCommercialActive
+                    ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
+                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-primary)]'
+                }`}
+              >
+                Comercial
+                <svg
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${commercialOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
             {(hasRole(ROLES.SUPER_ADMIN) || hasPermission('users:read')) && (
-              <NavItem to="/users" label="Usuarios" />
+              <div className="flex-shrink-0">
+                <NavItem to="/users" label="Usuarios" />
+              </div>
             )}
             {(hasRole(ROLES.SUPER_ADMIN) || hasPermission('audit:read')) && (
-              <NavItem to="/audit" label="Auditoría" />
+              <div className="flex-shrink-0">
+                <NavItem to="/audit" label="Auditoría" />
+              </div>
             )}
           </div>
         </div>
+
+        {commercialOpen && (
+          <div
+            ref={commercialMenuRef}
+            id="comercial-menu"
+            role="menu"
+            aria-label="Subsecciones comerciales"
+            style={{ left: menuLeft }}
+            className="absolute top-full z-[60] mt-1 min-w-[180px] py-1 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg shadow-lg"
+          >
+            {COMMERCIAL_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                role="menuitem"
+                tabIndex={0}
+                onClick={() => setCommercialOpen(false)}
+                className={({ isActive }) =>
+                  `block px-3 py-2 text-sm font-condensed font-semibold whitespace-nowrap transition-all tracking-wider focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] ${
+                    isActive
+                      ? 'text-[var(--color-primary)] bg-[var(--color-primary-bg-subtle)]'
+                      : 'text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)]'
+                  }`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+        )}
       </nav>
     </header>
   )
@@ -135,7 +250,7 @@ function NavItem({ to, label }: { to: string; label: string }) {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `px-3 py-1.5 text-sm font-condensed font-semibold whitespace-nowrap transition-all tracking-wider focus:outline-none ${
+        `px-3 py-1.5 text-sm font-condensed font-semibold whitespace-nowrap transition-all tracking-wider focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] rounded ${
           isActive
             ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
             : 'text-[var(--color-text-secondary)] hover:text-[var(--color-primary)]'
