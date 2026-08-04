@@ -379,68 +379,105 @@ export default function ProductFormModal({
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200">
-                          <th className="px-3 py-2">Lista</th>
-                          <th className="px-3 py-2">Moneda</th>
-                          <th className="px-3 py-2">Valor</th>
-                          <th className="px-3 py-2">Vigencia</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {priceLists.map((list) => {
-                          const row = prices[list.id]
-                          return (
-                            <tr key={list.id}>
-                              <td className="px-3 py-3">
-                                <div className="flex items-center gap-2">
-                                  <p className="font-medium text-gray-900">{list.name}</p>
-                                  {!list.isActive && (
-                                    <span className="text-[10px] font-semibold bg-gray-100 text-gray-500 px-2 py-0.5 rounded">
-                                      Inactiva
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-3 py-3 text-gray-500">{list.currency}</td>
-                              <td className="px-3 py-3">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={row?.value ?? ''}
-                                  placeholder="0"
-                                  onChange={(e) => setPriceRow(list.id, { value: e.target.value })}
-                                  className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm"
-                                />
-                              </td>
-                              <td className="px-3 py-3">
-                                {row ? (
-                                  <div className="flex gap-2 items-center">
-                                    <input
-                                      type="date"
-                                      value={row.validFrom}
-                                      onChange={(e) => setPriceRow(list.id, { validFrom: e.target.value })}
-                                      className="px-2 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-xs"
-                                    />
-                                    <span className="text-gray-400">—</span>
-                                    <input
-                                      type="date"
-                                      value={row.validUntil}
-                                      onChange={(e) => setPriceRow(list.id, { validUntil: e.target.value })}
-                                      className="px-2 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-xs"
-                                    />
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-gray-400">—</span>
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
+                    <div
+                      className="grid"
+                      style={{ gridTemplateColumns: `minmax(120px, auto) repeat(${priceLists.length}, minmax(160px, 1fr))` }}
+                    >
+                      <div className="sticky left-0 z-10 bg-security-50">
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
+                          Lista
+                        </div>
+                      </div>
+                      {priceLists.map((list) => (
+                        <div key={list.id} className="min-w-0 border-b border-gray-200 px-3 py-2">
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-sm font-semibold text-gray-900">{list.name}</p>
+                              {!list.isActive && (
+                                <span className="text-[10px] font-semibold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                  Inactiva
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-600 font-mono">{list.code}</span>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="sticky left-0 z-10 bg-security-50">
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
+                          Moneda
+                        </div>
+                      </div>
+                      {priceLists.map((list) => (
+                        <div key={list.id} className="min-w-0 border-b border-gray-200 px-3 py-2">
+                          <span className="text-sm text-gray-600">{list.currency}</span>
+                        </div>
+                      ))}
+
+                      <div className="sticky left-0 z-10 bg-security-50">
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
+                          Valor
+                        </div>
+                      </div>
+                      {priceLists.map((list) => {
+                        const row = prices[list.id]
+                        return (
+                          <div key={list.id} className="min-w-0 border-b border-gray-200 px-3 py-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={row?.value ?? ''}
+                              placeholder="0"
+                              aria-label={`Precio en ${list.name}`}
+                              onChange={(e) => setPriceRow(list.id, { value: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/40 focus:border-brand-primary text-sm relative focus:z-20"
+                            />
+                          </div>
+                        )
+                      })}
+
+                      <div className="sticky left-0 z-10 bg-security-50">
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
+                          Desde
+                        </div>
+                      </div>
+                      {priceLists.map((list) => {
+                        const row = prices[list.id]
+                        return (
+                          <div key={list.id} className="min-w-0 border-b border-gray-200 px-3 py-2">
+                            <input
+                              type="date"
+                              value={row?.validFrom ?? ''}
+                              aria-label={`Vigencia desde en ${list.name}`}
+                              onChange={(e) => setPriceRow(list.id, { validFrom: e.target.value })}
+                              className="w-full px-2 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/40 focus:border-brand-primary text-xs relative focus:z-20"
+                            />
+                          </div>
+                        )
+                      })}
+
+                      <div className="sticky left-0 z-10 bg-security-50">
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
+                          Hasta
+                        </div>
+                      </div>
+                      {priceLists.map((list) => {
+                        const row = prices[list.id]
+                        return (
+                          <div key={list.id} className="min-w-0 border-b border-gray-200 px-3 py-2">
+                            <input
+                              type="date"
+                              value={row?.validUntil ?? ''}
+                              aria-label={`Vigencia hasta en ${list.name}`}
+                              onChange={(e) => setPriceRow(list.id, { validUntil: e.target.value })}
+                              className="w-full px-2 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/40 focus:border-brand-primary text-xs relative focus:z-20"
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
                 <p className="text-xs text-gray-400 mt-3">
