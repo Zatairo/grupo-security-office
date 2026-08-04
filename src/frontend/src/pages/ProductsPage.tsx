@@ -7,6 +7,7 @@ import { useProducts } from '../features/products/hooks/useProducts'
 import { useProductMutations } from '../features/products/hooks/useProductMutations'
 import { ProductCard } from '../features/products/components/ProductCard'
 import { ProductTableRow } from '../features/products/components/ProductTableRow'
+import { ProductSpreadsheetTable } from '../features/products/components/ProductSpreadsheetTable'
 import ProductFormModal from '../features/products/components/ProductFormModal'
 import { hasPermission } from '../lib/rbac'
 import { Button } from '../components/ui'
@@ -35,7 +36,7 @@ export default function ProductsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(hasPersistedImportState)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('grid')
 
   const filters = {
     search,
@@ -173,6 +174,19 @@ export default function ProductsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
               </svg>
             </button>
+            <button
+              onClick={() => setViewMode('table')}
+              title="Vista de tabla (prices)"
+              className={`p-2.5 rounded-lg border transition-colors ${
+                viewMode === 'table'
+                  ? 'bg-security-500 text-white border-security-500'
+                  : 'bg-white text-neutral-500 border-neutral-300 hover:bg-neutral-50'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4h16a1 1 0 011 1v14a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1zM4 9h16M4 14h16M9 4v16" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -211,7 +225,7 @@ export default function ProductsPage() {
             ))
           )}
         </div>
-      ) : (
+      ) : viewMode === 'list' ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -248,6 +262,15 @@ export default function ProductsPage() {
             </tbody>
           </table>
         </div>
+      ) : (
+        <ProductSpreadsheetTable
+          products={products}
+          isLoading={isLoading}
+          onEdit={setEditingProduct}
+          onToggleActive={toggleActive.mutate}
+          onToggleVisibility={toggleVisibility.mutate}
+          onDelete={deleteProduct.mutate}
+        />
       )}
 
       {/* Pagination */}
