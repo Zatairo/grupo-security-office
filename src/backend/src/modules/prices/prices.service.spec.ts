@@ -7,7 +7,7 @@ jest.mock('../../prisma/prisma.service', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PricesService } from './prices.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -127,6 +127,33 @@ describe('PricesService', () => {
       await expect(service.createPriceList(dto)).rejects.toThrow(ConflictException);
       await expect(service.createPriceList(dto)).rejects.toThrow('Ya existe una lista con ese código');
     });
+
+    it('debe rechazar validUntil anterior a validFrom', async () => {
+      mockPrisma.priceList.findUnique.mockResolvedValue(null);
+
+      const dto = { name: 'Lista', code: 'L1', validFrom: '2026-12-31', validUntil: '2026-01-01' };
+
+      await expect(service.createPriceList(dto)).rejects.toThrow(BadRequestException);
+      await expect(service.createPriceList(dto)).rejects.toThrow('no puede ser anterior');
+    });
+
+    it('debe rechazar moneda no permitida', async () => {
+      mockPrisma.priceList.findUnique.mockResolvedValue(null);
+
+      const dto = { name: 'Lista', code: 'L1', currency: 'MXN' };
+
+      await expect(service.createPriceList(dto)).rejects.toThrow(BadRequestException);
+      await expect(service.createPriceList(dto)).rejects.toThrow('Moneda no permitida');
+    });
+
+    it('debe aceptar COP, USD y EUR', async () => {
+      for (const currency of ['COP', 'USD', 'EUR']) {
+        mockPrisma.priceList.findUnique.mockResolvedValue(null);
+        mockPrisma.priceList.create.mockResolvedValue({ ...mockPriceList, currency });
+        const result = await service.createPriceList({ name: 'Lista', code: `L-${currency}`, currency });
+        expect(result.currency).toBe(currency);
+      }
+    });
   });
 
   describe('updatePriceList', () => {
@@ -145,6 +172,70 @@ describe('PricesService', () => {
       mockPrisma.priceList.findUnique.mockResolvedValue(null);
 
       await expect(service.updatePriceList('no-existe', { name: 'Nope' })).rejects.toThrow(NotFoundException);
+    });
+
+    it('debe rechazar validUntil anterior a validFrom en update', async () => {
+      mockPrisma.priceList.findUnique.mockResolvedValueOnce(mockPriceList);
+
+      const dto = { validFrom: '2026-12-01', validUntil: '2026-11-01' };
+
+      await expect(service.updatePriceList('pl-1', dto)).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe validar contra la fecha persistida cuando solo se envía una', async () => {
+      mockPrisma.priceList.findUnique.mockResolvedValueOnce({
+        ...mockPriceList,
+        validFrom: new Date('2026-01-01'),
+        validUntil: null,
+      });
+
+      const dto = { validUntil: '2025-01-01' };
+
+      await expect(service.updatePriceList('pl-1', dto)).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe rechazar moneda no permitida en update', async () => {
+      mockPrisma.priceList.findUnique.mockResolvedValueOnce(mockPriceList);
+
+      const dto = { currency: 'MXN' };
+
+      await expect(service.updatePriceList('pl-1', dto)).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe permitir fechas válidas en update', async () => {
+      mockPrisma.priceList.findUnique.mockResolvedValueOnce(mockPriceList);
+      mockPrisma.priceList.update.mockResolvedValue({
+        ...mockPriceList,
+        validFrom: new Date('2026-01-01'),
+        validUntil: new Date('2026-12-31'),
+      });
+
+      const result = await service.updatePriceList('pl-1', {
+        validFrom: '2026-01-01',
+        validUntil: '2026-12-31',
+      });
+
+      expect(result.name).toBe('Lista Mayorista');
+    });
+  });
+
+  describe('togglePriceListActive', () => {
+    it('debe alternar isActive', async () => {
+      mockPrisma.priceList.findUnique.mockResolvedValue(mockPriceList);
+      mockPrisma.priceList.update.mockResolvedValue({ ...mockPriceList, isActive: false });
+
+      const result = await service.togglePriceListActive('pl-1');
+
+      expect(result.isActive).toBe(false);
+      expect(mockPrisma.priceList.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { isActive: false } }),
+      );
+    });
+
+    it('debe lanzar NotFoundException si la lista no existe', async () => {
+      mockPrisma.priceList.findUnique.mockResolvedValue(null);
+
+      await expect(service.togglePriceListActive('no-existe')).rejects.toThrow(NotFoundException);
     });
   });
 

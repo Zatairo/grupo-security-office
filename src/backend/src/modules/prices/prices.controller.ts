@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { PricesService } from './prices.service';
 import { CreatePriceDto } from './dto/create-price.dto';
@@ -42,6 +42,14 @@ export class PricesController {
   @ApiOperation({ summary: 'Actualizar lista de precios' })
   updatePriceList(@Param('id') id: string, @Body() dto: Partial<CreatePriceListDto>) {
     return this.pricesService.updatePriceList(id, dto);
+  }
+
+  @Patch('lists/:id/toggle-active')
+  @Roles('Super Admin', 'Admin Comercial')
+  @ApiOperation({ summary: 'Alternar estado activo de la lista de precios' })
+  @ApiResponse({ status: 200, description: 'Lista actualizada' })
+  togglePriceListActive(@Param('id') id: string) {
+    return this.pricesService.togglePriceListActive(id);
   }
 
   @Delete('lists/:id')

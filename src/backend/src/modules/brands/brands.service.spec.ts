@@ -1,5 +1,16 @@
 import { createPrismaMock } from '../../__test__/mocks/prisma.mock';
 
+jest.mock('fs', () => ({
+  existsSync: jest.fn().mockReturnValue(true),
+  unlinkSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  promises: {
+    writeFile: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
+import * as fs from 'fs';
+
 const mockPrisma = createPrismaMock();
 
 jest.mock('../../prisma/prisma.service', () => ({
@@ -7,7 +18,7 @@ jest.mock('../../prisma/prisma.service', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { BrandsService } from './brands.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -153,6 +164,81 @@ describe('BrandsService', () => {
       mockPrisma.brand.findUnique.mockResolvedValue(null);
 
       await expect(service.remove('no-existe')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('toggleActive', () => {
+    it('debe alternar isActive', async () => {
+      mockPrisma.brand.findUnique.mockResolvedValue(mockBrand);
+      mockPrisma.brand.update.mockResolvedValue({ ...mockBrand, isActive: false });
+
+      const result = await service.toggleActive('brand-1');
+
+      expect(result.isActive).toBe(false);
+      expect(mockPrisma.brand.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { isActive: false } }),
+      );
+    });
+
+    it('debe lanzar NotFoundException si la marca no existe', async () => {
+      mockPrisma.brand.findUnique.mockResolvedValue(null);
+
+      await expect(service.toggleActive('no-existe')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('uploadLogo', () => {
+    const validFile = {
+      originalname: 'logo.png',
+      mimetype: 'image/png',
+      buffer: Buffer.from('fake-image-bytes'),
+      size: 1024,
+    } as Express.Multer.File;
+
+    it('debe guardar el logo y actualizar la marca', async () => {
+      mockPrisma.brand.findUnique.mockResolvedValue(mockBrand);
+      mockPrisma.brand.update.mockResolvedValue({ ...mockBrand, logo: '/uploads/logo-nuevo.png' });
+
+      const result = await service.uploadLogo('brand-1', validFile);
+
+      expect(result.logo).toMatch(/^\/uploads\/.+\.png$/);
+      expect(fs.promises.writeFile).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.brand.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { logo: expect.stringMatching(/^\/uploads\//) } }),
+      );
+    });
+
+    it('debe borrar el logo anterior cuando es un upload interno', async () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      mockPrisma.brand.findUnique.mockResolvedValue({ ...mockBrand, logo: '/uploads/anterior.png' });
+      mockPrisma.brand.update.mockResolvedValue({ ...mockBrand, logo: '/uploads/nuevo.png' });
+
+      await service.uploadLogo('brand-1', validFile);
+
+      expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('anterior.png'));
+    });
+
+    it('no debe intentar borrar logos externos (no gestionados)', async () => {
+      mockPrisma.brand.findUnique.mockResolvedValue(mockBrand);
+      mockPrisma.brand.update.mockResolvedValue({ ...mockBrand, logo: '/uploads/nuevo.png' });
+
+      await service.uploadLogo('brand-1', validFile);
+
+      expect(fs.unlinkSync).not.toHaveBeenCalled();
+    });
+
+    it('debe lanzar BadRequestException con mimetype no permitido', async () => {
+      mockPrisma.brand.findUnique.mockResolvedValue(mockBrand);
+      const txt = { ...validFile, mimetype: 'text/plain', originalname: 'logo.txt' } as Express.Multer.File;
+
+      await expect(service.uploadLogo('brand-1', txt)).rejects.toThrow(BadRequestException);
+      await expect(service.uploadLogo('brand-1', txt)).rejects.toThrow('Tipo de archivo no permitido');
+    });
+
+    it('debe lanzar NotFoundException si la marca no existe', async () => {
+      mockPrisma.brand.findUnique.mockResolvedValue(null);
+
+      await expect(service.uploadLogo('no-existe', validFile)).rejects.toThrow(NotFoundException);
     });
   });
 });

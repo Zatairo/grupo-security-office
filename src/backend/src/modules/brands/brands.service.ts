@@ -1,7 +1,18 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
+import { UPLOADS_DIR, UPLOADS_URL_PREFIX } from '../../common/uploads-path';
+
+const ALLOWED_BRAND_IMAGE_MIMETYPES: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+};
+const MAX_BRAND_IMAGE_SIZE = 8 * 1024 * 1024; // 8 MB
 
 @Injectable()
 export class BrandsService {
@@ -79,6 +90,63 @@ export class BrandsService {
         ...(dto.website !== undefined && { website: dto.website }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
+    });
+  }
+
+  async toggleActive(id: string) {
+    const brand = await this.prisma.brand.findUnique({ where: { id } });
+    if (!brand) throw new NotFoundException('Marca no encontrada');
+
+    return this.prisma.brand.update({
+      where: { id },
+      data: { isActive: !brand.isActive },
+    });
+  }
+
+  /**
+   * Sube el logo de una marca: valida mimetype (png/jpeg/webp) y tamaño
+   * máximo (8 MB), guarda el archivo en UPLOADS_DIR con nombre único y
+   * borra el logo anterior si era un upload interno.
+   */
+  async uploadLogo(id: string, file: Express.Multer.File) {
+    const brand = await this.prisma.brand.findUnique({ where: { id } });
+    if (!brand) throw new NotFoundException('Marca no encontrada');
+
+    if (!file) {
+      throw new BadRequestException('Archivo requerido en el campo "file"');
+    }
+
+    const ext = ALLOWED_BRAND_IMAGE_MIMETYPES[file.mimetype];
+    if (!ext) {
+      throw new BadRequestException('Tipo de archivo no permitido. Use PNG, JPEG o WEBP.');
+    }
+
+    if (file.size > MAX_BRAND_IMAGE_SIZE) {
+      throw new BadRequestException('El archivo excede el tamaño máximo de 8MB');
+    }
+
+    const filename = `${randomUUID()}.${ext}`;
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
+    await fs.promises.writeFile(path.join(UPLOADS_DIR, filename), file.buffer);
+
+    const url = `${UPLOADS_URL_PREFIX}/${filename}`;
+
+    if (brand.logo?.startsWith(UPLOADS_URL_PREFIX)) {
+      const oldPath = path.join(UPLOADS_DIR, path.basename(brand.logo));
+      try {
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+      } catch {
+        // El logo anterior puede no existir en disco; no bloquea la actualización.
+      }
+    }
+
+    return this.prisma.brand.update({
+      where: { id },
+      data: { logo: url },
     });
   }
 

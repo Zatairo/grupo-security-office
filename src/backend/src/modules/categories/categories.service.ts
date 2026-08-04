@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -27,20 +27,25 @@ export class CategoriesService {
 
   async findTree() {
     const categories = await this.prisma.category.findMany({
-      where: { parentId: null },
-      include: {
-        children: {
-          include: {
-            children: true,
-            _count: { select: { products: true } },
-          },
-        },
-        _count: { select: { products: true } },
-      },
+      include: { _count: { select: { products: true } } },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
 
-    return { data: categories };
+    return { data: this.buildTree(categories) };
+  }
+
+  /**
+   * Ensambla el árbol de categorías de forma recursiva, soportando
+   * profundidad arbitraria. El orden lo resuelve Prisma en la consulta
+   * (orderBy); esta función solo conserva el orden y anida los hijos.
+   */
+  private buildTree(nodes: any[], parentId: string | null = null): any[] {
+    return nodes
+      .filter((n) => n.parentId === parentId)
+      .map((n) => ({
+        ...n,
+        children: this.buildTree(nodes, n.id),
+      }));
   }
 
   async findOne(id: string) {
@@ -63,10 +68,7 @@ export class CategoriesService {
     });
     if (existing) throw new ConflictException('Ya existe una categoría con ese slug');
 
-    if (dto.parentId) {
-      const parent = await this.prisma.category.findUnique({ where: { id: dto.parentId } });
-      if (!parent) throw new NotFoundException('Categoría padre no encontrada');
-    }
+    await this.validateParent(null, dto.parentId);
 
     const category = await this.prisma.category.create({
       data: {
@@ -91,10 +93,7 @@ export class CategoriesService {
       if (existing) throw new ConflictException('Ya existe una categoría con ese slug');
     }
 
-    if (dto.parentId) {
-      const parent = await this.prisma.category.findUnique({ where: { id: dto.parentId } });
-      if (!parent) throw new NotFoundException('Categoría padre no encontrada');
-    }
+    await this.validateParent(id, dto.parentId);
 
     const updated = await this.prisma.category.update({
       where: { id },
@@ -127,5 +126,44 @@ export class CategoriesService {
 
     await this.prisma.category.delete({ where: { id } });
     return { message: 'Categoría eliminada exitosamente' };
+  }
+
+  /**
+   * Valida que un parentId sea asignable sin romper la jerarquía:
+   *  1. parentId no puede ser la propia categoría (parentId === nodeId).
+   *  2. El nuevo padre no puede ser descendiente del nodo (evita ciclos
+   *     tipo A -> B -> A): se sube por la cadena de padres del nuevo padre
+   *     y si en algún nivel aparece el nodo, es porque el padre es un
+   *     descendiente de él.
+   * Mantiene además la validación de existencia del padre.
+   */
+  private async validateParent(nodeId: string | null, parentId?: string): Promise<void> {
+    if (!parentId) return;
+
+    if (parentId === nodeId) {
+      throw new BadRequestException('Una categoría no puede ser su propio padre');
+    }
+
+    const parent = await this.prisma.category.findUnique({ where: { id: parentId } });
+    if (!parent) throw new NotFoundException('Categoría padre no encontrada');
+
+    if (!nodeId) return;
+
+    let current = parent.parentId;
+    const visited = new Set<string>();
+    while (current) {
+      if (current === nodeId) {
+        throw new BadRequestException(
+          'La categoría padre no puede ser descendiente de esta categoría (evita ciclos en la jerarquía)',
+        );
+      }
+      if (visited.has(current)) break;
+      visited.add(current);
+      const ancestor = await this.prisma.category.findUnique({
+        where: { id: current },
+        select: { parentId: true },
+      });
+      current = ancestor?.parentId ?? null;
+    }
   }
 }
