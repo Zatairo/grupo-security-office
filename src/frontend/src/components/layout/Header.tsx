@@ -19,7 +19,7 @@ export default function Header() {
   const [searchQuery, setSearchQuery] = useState('')
   const [commercialOpen, setCommercialOpen] = useState(false)
   const [menuLeft, setMenuLeft] = useState(0)
-  const commercialButtonRef = useRef<HTMLButtonElement>(null)
+  const commercialButtonRef = useRef<HTMLDivElement>(null)
   const commercialMenuRef = useRef<HTMLDivElement>(null)
   const navRef = useRef<HTMLElement>(null)
 
@@ -172,31 +172,43 @@ export default function Header() {
               <NavItem to="/" label="Dashboard" />
             </div>
             <div className="relative flex-shrink-0">
-              <button
-                ref={commercialButtonRef}
-                type="button"
-                onClick={toggleMenu}
-                aria-haspopup="menu"
-                aria-expanded={commercialOpen}
-                aria-controls="comercial-menu"
-                aria-label="Sección Comercial: Productos, Marcas, Categorías y Precios"
-                className={`flex items-center gap-1 px-3 py-1.5 text-sm font-condensed font-semibold whitespace-nowrap transition-all tracking-wider focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] rounded ${
-                  isCommercialActive
-                    ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
-                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-primary)]'
-                }`}
-              >
-                Comercial
-                <svg
-                  className={`w-3.5 h-3.5 transition-transform duration-200 ${commercialOpen ? 'rotate-180' : ''}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  aria-hidden="true"
+              <div ref={commercialButtonRef} className="flex items-center">
+                <NavLink
+                  to="/products"
+                  onClick={() => setCommercialOpen(false)}
+                  aria-label="Comercial: Productos"
+                  className={`flex items-center px-3 py-1.5 text-sm font-condensed font-semibold whitespace-nowrap transition-all tracking-wider focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] rounded ${
+                    isCommercialActive
+                      ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
+                      : 'text-[var(--color-text-secondary)] hover:text-[var(--color-primary)]'
+                  }`}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
+                  Comercial
+                </NavLink>
+                <button
+                  type="button"
+                  onClick={toggleMenu}
+                  aria-haspopup="menu"
+                  aria-expanded={commercialOpen}
+                  aria-controls="comercial-menu"
+                  aria-label={commercialOpen ? 'Cerrar subsecciones comerciales' : 'Abrir subsecciones comerciales'}
+                  className={`flex items-center px-1 py-1.5 transition-colors rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] ${
+                    isCommercialActive
+                      ? 'text-[var(--color-primary)] hover:text-[var(--color-primary)]'
+                      : 'text-[var(--color-text-secondary)] hover:text-[var(--color-primary)]'
+                  }`}
+                >
+                  <svg
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${commercialOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
             </div>
             {(hasRole(ROLES.SUPER_ADMIN) || hasPermission('users:read')) && (
               <div className="flex-shrink-0">
