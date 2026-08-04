@@ -1,9 +1,22 @@
 import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { PriceInputDto } from './dto/price-input.dto';
 import { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
+import { UPLOADS_DIR, UPLOADS_URL_PREFIX } from '../../common/uploads-path';
+
+const ALLOWED_IMAGE_MIMETYPES: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
+const MAX_IMAGE_SIZE = 8 * 1024 * 1024; // 8 MB
 
 @Injectable()
 export class ProductsService {
@@ -163,7 +176,9 @@ export class ProductsService {
     const brand = await this.prisma.brand.findUnique({ where: { id: dto.brandId } });
     if (!brand) throw new NotFoundException('Marca no encontrada');
 
-    return this.prisma.product.create({
+    await this.validatePriceLists(dto.prices);
+
+    const product = await this.prisma.product.create({
       data: {
         sku: dto.sku,
         name: dto.name,
@@ -171,6 +186,7 @@ export class ProductsService {
         categoryId: dto.categoryId,
         brandId: dto.brandId,
         technicalSpecs: dto.technicalSpecs,
+        extraAttributes: dto.extraAttributes,
         isActive: dto.isActive ?? false,
         isVisible: dto.isVisible ?? false,
       },
@@ -179,6 +195,12 @@ export class ProductsService {
         brand: { select: { id: true, name: true } },
       },
     });
+
+    if (dto.prices && dto.prices.length > 0) {
+      await this.upsertPrices(product.id, dto.prices);
+    }
+
+    return product;
   }
 
   async update(id: string, dto: UpdateProductDto) {
@@ -200,7 +222,9 @@ export class ProductsService {
       if (!brand) throw new NotFoundException('Marca no encontrada');
     }
 
-    return this.prisma.product.update({
+    await this.validatePriceLists(dto.prices);
+
+    const updated = await this.prisma.product.update({
       where: { id },
       data: {
         ...(dto.sku && { sku: dto.sku }),
@@ -209,6 +233,7 @@ export class ProductsService {
         ...(dto.categoryId && { categoryId: dto.categoryId }),
         ...(dto.brandId && { brandId: dto.brandId }),
         ...(dto.technicalSpecs !== undefined && { technicalSpecs: dto.technicalSpecs }),
+        ...(dto.extraAttributes !== undefined && { extraAttributes: dto.extraAttributes }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
         ...(dto.isVisible !== undefined && { isVisible: dto.isVisible }),
       },
@@ -217,6 +242,12 @@ export class ProductsService {
         brand: { select: { id: true, name: true } },
       },
     });
+
+    if (dto.prices && dto.prices.length > 0) {
+      await this.upsertPrices(id, dto.prices);
+    }
+
+    return updated;
   }
 
   async toggleVisibility(id: string) {
@@ -243,11 +274,145 @@ export class ProductsService {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
 
+    const images = await this.prisma.productImage.findMany({ where: { productId: id } });
+
     await this.prisma.price.deleteMany({ where: { productId: id } });
     await this.prisma.productImage.deleteMany({ where: { productId: id } });
     await this.prisma.product.delete({ where: { id } });
 
+    for (const image of images) {
+      const filename = path.basename(image.url);
+      const filePath = path.join(UPLOADS_DIR, filename);
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch {
+        // El archivo puede no existir en disco; no bloquea el borrado lógico.
+      }
+    }
+
     return { message: 'Producto eliminado exitosamente' };
+  }
+
+  /**
+   * Sube una imagen para un producto y registra la fila ProductImage.
+   * Valida tipo (jpeg/png/webp/gif) y tamaño máximo (8 MB).
+   */
+  async uploadImage(productId: string, file: Express.Multer.File, isPrimary = false) {
+    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+
+    if (!file) {
+      throw new BadRequestException('Archivo requerido en el campo "file"');
+    }
+
+    const ext = ALLOWED_IMAGE_MIMETYPES[file.mimetype];
+    if (!ext) {
+      throw new BadRequestException('Tipo de archivo no permitido. Use JPEG, PNG, WEBP o GIF.');
+    }
+
+    if (file.size > MAX_IMAGE_SIZE) {
+      throw new BadRequestException('El archivo excede el tamaño máximo de 8MB');
+    }
+
+    const filename = `${randomUUID()}.${ext}`;
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
+    await fs.promises.writeFile(path.join(UPLOADS_DIR, filename), file.buffer);
+
+    const url = `${UPLOADS_URL_PREFIX}/${filename}`;
+
+    if (isPrimary) {
+      await this.prisma.productImage.updateMany({
+        where: { productId, isPrimary: true },
+        data: { isPrimary: false },
+      });
+    }
+
+    return this.prisma.productImage.create({
+      data: {
+        productId,
+        url,
+        alt: file.originalname || null,
+        isPrimary,
+        sortOrder: 0,
+      },
+    });
+  }
+
+  /**
+   * Elimina una imagen: borra el registro y el archivo del disco si existe.
+   */
+  async deleteImage(imageId: string) {
+    const image = await this.prisma.productImage.findUnique({ where: { id: imageId } });
+    if (!image) throw new NotFoundException('Imagen no encontrada');
+
+    const filename = path.basename(image.url);
+    const filePath = path.join(UPLOADS_DIR, filename);
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch {
+      // El archivo puede no existir en disco; no bloquea el borrado lógico.
+    }
+
+    await this.prisma.productImage.delete({ where: { id: imageId } });
+    return { message: 'Imagen eliminada exitosamente' };
+  }
+
+  /**
+   * Valida que todos los priceListId existan en BD.
+   */
+  private async validatePriceLists(prices?: PriceInputDto[]): Promise<void> {
+    if (!prices || prices.length === 0) return;
+
+    const ids = [...new Set(prices.map((p) => p.priceListId))];
+    const found = await this.prisma.priceList.findMany({
+      where: { id: { in: ids } },
+      select: { id: true },
+    });
+    const foundIds = new Set(found.map((pl) => pl.id));
+    const missing = ids.filter((id) => !foundIds.has(id));
+
+    if (missing.length > 0) {
+      throw new NotFoundException(
+        `Listas de precios no encontradas: ${missing.join(', ')}`,
+      );
+    }
+  }
+
+  /**
+   * Upsert individual por (productId, priceListId) dentro de una transacción.
+   * No borra precios no enviados para no perder datos.
+   */
+  private async upsertPrices(productId: string, prices: PriceInputDto[]): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      for (const price of prices) {
+        const validFrom = price.validFrom ? new Date(price.validFrom) : undefined;
+        const validUntil = price.validUntil ? new Date(price.validUntil) : undefined;
+
+        await tx.price.upsert({
+          where: { productId_priceListId: { productId, priceListId: price.priceListId } },
+          update: {
+            value: price.value,
+            ...(price.currency && { currency: price.currency }),
+            ...(price.validFrom !== undefined && { validFrom: validFrom ?? null }),
+            ...(price.validUntil !== undefined && { validUntil: validUntil ?? null }),
+          },
+          create: {
+            productId,
+            priceListId: price.priceListId,
+            value: price.value,
+            currency: price.currency ?? 'COP',
+            ...(validFrom && { validFrom }),
+            ...(validUntil && { validUntil }),
+          },
+        });
+      }
+    });
   }
 
   async importFromExcel(file: Buffer) {

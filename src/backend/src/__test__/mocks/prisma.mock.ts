@@ -74,6 +74,8 @@ export const createPrismaMock = () => ({
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    deleteMany: jest.fn(),
+    upsert: jest.fn(),
     count: jest.fn(),
   },
   auditLog: {
@@ -83,10 +85,14 @@ export const createPrismaMock = () => ({
     count: jest.fn(),
   },
   productImage: {
+    findUnique: jest.fn(),
     findMany: jest.fn(),
     create: jest.fn(),
+    delete: jest.fn(),
     deleteMany: jest.fn(),
+    updateMany: jest.fn(),
   },
   $connect: jest.fn(),
   $disconnect: jest.fn(),
+  $transaction: jest.fn(),
 });

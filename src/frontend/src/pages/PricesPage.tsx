@@ -100,7 +100,7 @@ export default function PricesPage() {
           </button>
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-security-700">{selectedList.name}</h1>
-            <p className="text-sm text-gray-500 mt-1">Código: <span className="font-mono">{selectedList.code}</span> · {selectedList.prices?.length || 0} precios</p>
+            <p className="text-sm text-gray-500 mt-1">Código: <span className="font-mono">{selectedList.code}</span> · {selectedList.priceCount ?? 0} precios</p>
           </div>
           {hasPermission('prices:write') && (
             <button onClick={() => setShowAddPriceModal(true)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-security-500 text-white rounded-lg font-semibold hover:bg-security-600 transition-colors">

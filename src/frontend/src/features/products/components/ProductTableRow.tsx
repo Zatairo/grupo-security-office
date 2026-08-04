@@ -1,6 +1,7 @@
 import type { Product } from '../types/product.types'
 import { ProductStatusBadge } from './ProductStatusBadge'
 import { hasPermission } from '../../../lib/rbac'
+import { formatCurrency } from '../../../lib/format'
 
 interface ProductTableRowProps {
   product: Product
@@ -21,16 +22,29 @@ export function ProductTableRow({
     <tr className="hover:bg-gray-50 transition-colors">
       <td className="px-6 py-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
+          <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
+            {product.images[0]?.url ? (
+              <img src={product.images[0].url} alt={product.name} className="w-10 h-10 object-cover" />
+            ) : (
+              <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            )}
           </div>
           <div>
             <p className="text-sm font-semibold text-gray-900">{product.name}</p>
             <p className="text-xs text-gray-400 font-mono">{product.sku}</p>
           </div>
         </div>
+      </td>
+      <td className="px-6 py-4">
+        {product.prices[0] ? (
+          <span className="text-sm font-semibold text-gray-900">
+            {formatCurrency(product.prices[0].value, product.prices[0].currency)}
+          </span>
+        ) : (
+          <span className="text-xs text-amber-600 font-medium">Sin precio</span>
+        )}
       </td>
       <td className="px-6 py-4 text-sm text-gray-600">{product.category?.name}</td>
       <td className="px-6 py-4 text-sm text-gray-600">{product.brand?.name}</td>

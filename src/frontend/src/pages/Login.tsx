@@ -32,8 +32,8 @@ export default function Login() {
       if (!EMAIL_REGEX.test(value)) {
         return 'Ingresa un correo electrónico corporativo válido'
       }
-      if (!value.endsWith('@gruposecurity.co')) {
-        return 'Solo se permiten correos corporativos '
+      if (!value.endsWith('@gruposecurity.co') && !value.endsWith('@grupo-security.com')) {
+        return 'Solo se permiten correos corporativos'
       }
     }
     if (name === 'password' && value) {

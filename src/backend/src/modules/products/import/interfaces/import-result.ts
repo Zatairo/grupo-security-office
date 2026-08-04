@@ -83,6 +83,11 @@ export interface ImportExecutionResult {
     skipped: number;
     /** Errores */
     errors: number;
+    /** Filas que cayeron a categoría/marca default por falta de inferencia */
+    defaultsByMissingInference: {
+      category: number;
+      brand: number;
+    };
   };
 
   /** Errores durante la ejecución */

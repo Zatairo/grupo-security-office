@@ -1,5 +1,7 @@
-import { IsString, MinLength, IsOptional, IsBoolean, IsObject } from 'class-validator';
+import { IsString, MinLength, IsOptional, IsBoolean, IsObject, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { PriceInputDto } from './price-input.dto';
 
 export class UpdateProductDto {
   @ApiPropertyOptional({ example: 'DS-2CD2143G2-I-v2' })
@@ -33,6 +35,18 @@ export class UpdateProductDto {
   @IsObject()
   @IsOptional()
   technicalSpecs?: Record<string, any>;
+
+  @ApiPropertyOptional()
+  @IsObject()
+  @IsOptional()
+  extraAttributes?: Record<string, any>;
+
+  @ApiPropertyOptional({ type: [PriceInputDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PriceInputDto)
+  @IsOptional()
+  prices?: PriceInputDto[];
 
   @ApiPropertyOptional()
   @IsBoolean()

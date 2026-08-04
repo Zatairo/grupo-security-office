@@ -20,7 +20,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'audit:read',
   ],
   'Admin Comercial': [
-    'products:read', 'products:write',
+    'products:read', 'products:write', 'products:delete',
     'categories:read', 'categories:write',
     'brands:read', 'brands:write',
     'prices:read', 'prices:write',
@@ -122,14 +122,14 @@ async function main() {
   // Migra roles antiguos (Admin, Gerente, Operator, Viewer) → nuevos
   await migrateLegacyRoles();
 
-  // Create admin user
+  // Create super admin user (definitivo del negocio)
   const hashedPassword = await bcrypt.hash('admin123', 12);
 
   const adminUser = await prisma.user.upsert({
-    where: { email: 'admin@grupo-security.com' },
+    where: { email: 'admin@gruposecurity.co' },
     update: {},
     create: {
-      email: 'admin@grupo-security.com',
+      email: 'admin@gruposecurity.co',
       name: 'Administrador',
       password: hashedPassword,
       isActive: true,
@@ -142,7 +142,7 @@ async function main() {
     create: { userId: adminUser.id, roleId: superAdminRole.id },
   });
 
-  console.log('✅ Admin user created (admin@grupo-security.com / admin123) → Super Admin');
+  console.log('✅ Admin user created (admin@gruposecurity.co / admin123) → Super Admin');
 
   // Create sample categories
   const cctv = await prisma.category.upsert({

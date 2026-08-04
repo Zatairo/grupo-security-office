@@ -113,4 +113,38 @@ export class ProductsController {
   async importExcel(@UploadedFile() file: Express.Multer.File) {
     return this.productsService.importFromExcel(file.buffer);
   }
+
+  @Post(':id/images')
+  @Roles('Super Admin', 'Admin Comercial')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 8 * 1024 * 1024 } }))
+  @ApiOperation({ summary: 'Subir imagen de producto' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        isPrimary: { type: 'string', description: "'true' | 'false'", default: 'false' },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Imagen subida' })
+  @ApiResponse({ status: 400, description: 'Archivo inválido o excede 8MB' })
+  @ApiResponse({ status: 404, description: 'Producto no encontrado' })
+  uploadImage(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('isPrimary') isPrimary?: string,
+  ) {
+    return this.productsService.uploadImage(id, file, isPrimary === 'true');
+  }
+
+  @Delete('images/:imageId')
+  @Roles('Super Admin', 'Admin Comercial')
+  @ApiOperation({ summary: 'Eliminar imagen de producto' })
+  @ApiResponse({ status: 200, description: 'Imagen eliminada' })
+  @ApiResponse({ status: 404, description: 'Imagen no encontrada' })
+  removeImage(@Param('imageId') imageId: string) {
+    return this.productsService.deleteImage(imageId);
+  }
 }

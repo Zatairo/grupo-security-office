@@ -75,6 +75,14 @@ export class RowNormalizerService {
     const categoryName = normalizeCategoryName(getValue('category'));
     const brandName = normalizeBrandName(getValue('brand'));
 
+    // Inferir marca/categoría cuando no vienen mapeadas en columnas
+    const inference = this.inferCategoryAndBrand({
+      sku,
+      name,
+      mappedCategoryName: categoryName,
+      mappedBrandName: brandName,
+    });
+
     // Normalizar precios
     const prices = this.normalizePrices(getValue, mapping.entries);
 
@@ -93,8 +101,10 @@ export class RowNormalizerService {
       sku,
       name,
       description: description || undefined,
-      categoryName,
-      brandName,
+      categoryName: inference.categoryName,
+      brandName: inference.brandName,
+      categoryInferredSlug: inference.categoryInferredSlug,
+      brandInferredSlug: inference.brandInferredSlug,
       prices,
       technicalSpecs,
       extraAttributes,
@@ -212,5 +222,140 @@ export class RowNormalizerService {
     }
 
     return Object.keys(extras).length > 0 ? extras : undefined;
+  }
+
+  /**
+   * Inferencia de marca y categoría cuando las columnas mapeadas llegan vacías.
+   *
+   * - Marca: SKUs DS-/IDS- o nombres con "hikvision" → slug existente `hikvision`.
+   * - Categoría: keywords sobre nombre/SKU contra categorías existentes
+   *   (slugs: control-de-acceso, alarmas, smart-home, nvr, cctv, camaras-ip).
+   *
+   * La resolución final a IDs se hace en batch execution SOLO contra
+   * categorías/marcas existentes; si el slug no existe, se cae al default.
+   */
+  private inferCategoryAndBrand(params: {
+    sku: string;
+    name: string;
+    mappedCategoryName: string;
+    mappedBrandName: string;
+  }): {
+    categoryName: string;
+    brandName: string;
+    categoryInferredSlug?: string;
+    brandInferredSlug?: string;
+  } {
+    const { sku, name, mappedCategoryName, mappedBrandName } = params;
+
+    const brandInference = this.inferBrand(sku, name, mappedBrandName);
+    const categoryInference = this.inferCategory(sku, name, mappedCategoryName);
+
+    return {
+      categoryName: categoryInference.categoryName,
+      brandName: brandInference.brandName,
+      categoryInferredSlug: categoryInference.inferredSlug,
+      brandInferredSlug: brandInference.inferredSlug,
+    };
+  }
+
+  /**
+   * Inferencia de marca. Solo usa marcas existentes (Hikvision).
+   * Si no hay match, deja la marca vacía → default "Sin marca".
+   */
+  private inferBrand(
+    sku: string,
+    name: string,
+    mappedBrandName: string,
+  ): { brandName: string; inferredSlug?: string } {
+    if (mappedBrandName) {
+      return { brandName: mappedBrandName };
+    }
+
+    const skuUpper = sku.toUpperCase();
+    const nameLower = name.toLowerCase();
+    const matchesHikvision =
+      skuUpper.startsWith('DS-') ||
+      skuUpper.startsWith('IDS-') ||
+      nameLower.includes('hikvision');
+
+    if (matchesHikvision) {
+      return { brandName: 'Hikvision', inferredSlug: 'hikvision' };
+    }
+
+    return { brandName: '' };
+  }
+
+  /**
+   * Categorías conocidas por slug con keywords priorizadas.
+   * Orden de prioridad: control-de-acceso, alarmas, smart-home, nvr, cctv, camaras-ip.
+   */
+  private readonly CATEGORY_RULES: Array<{
+    slug: string;
+    name: string;
+    keywords: string[];
+  }> = [
+    {
+      slug: 'control-de-acceso',
+      name: 'Control de Acceso',
+      keywords: ['control de acceso', 'lector', 'prox', 'cerradura'],
+    },
+    {
+      slug: 'alarmas',
+      name: 'Alarmas',
+      keywords: ['alarma', 'sirena', 'sensor', 'detector'],
+    },
+    {
+      slug: 'smart-home',
+      name: 'Smart Home',
+      keywords: ['intercom', 'smart', 'wifi', 'hub'],
+    },
+    {
+      slug: 'nvr',
+      name: 'NVR',
+      keywords: ['nvr'],
+    },
+    {
+      slug: 'cctv',
+      name: 'CCTV',
+      keywords: ['dvr', 'xvr'],
+    },
+    {
+      slug: 'camaras-ip',
+      name: 'Cámaras IP',
+      keywords: ['camara', 'domo', 'torreta', 'turret', 'bala', 'dome', 'colorvu', 'bullet'],
+    },
+  ];
+
+  /**
+   * Inferencia de categoría por keywords en nombre/SKU.
+   * Solo sugiere slugs de categorías existentes; si no hay match,
+   * devuelve vacío → default "Sin categoría".
+   */
+  private inferCategory(
+    sku: string,
+    name: string,
+    mappedCategoryName: string,
+  ): { categoryName: string; inferredSlug?: string } {
+    if (mappedCategoryName) {
+      return { categoryName: mappedCategoryName };
+    }
+
+    // Normalizar acentos para matchear "cámara" → "camara"
+    const normalizeForMatch = (value: string): string =>
+      value
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+    const haystack = `${normalizeForMatch(name)} ${normalizeForMatch(sku)}`;
+
+    for (const rule of this.CATEGORY_RULES) {
+      const hasMatch = rule.keywords.some((keyword) => haystack.includes(keyword));
+      if (hasMatch) {
+        return { categoryName: rule.name, inferredSlug: rule.slug };
+      }
+    }
+
+    return { categoryName: '' };
   }
 }

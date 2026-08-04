@@ -40,6 +40,7 @@ function App() {
         <Route path="users" element={<UsersPage />} />
         <Route path="audit" element={<AuditPage />} />
       </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

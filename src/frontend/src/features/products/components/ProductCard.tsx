@@ -1,6 +1,7 @@
 import type { Product } from '../types/product.types'
 import { ProductStatusBadge } from './ProductStatusBadge'
 import { hasPermission } from '../../../lib/rbac'
+import { formatCurrency } from '../../../lib/format'
 
 interface ProductCardProps {
   product: Product
@@ -13,9 +14,17 @@ export function ProductCard({ product, onEdit, onToggleActive, onDelete }: Produ
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow group">
       <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center relative">
-        <svg className="w-20 h-20 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-        </svg>
+        {product.images[0]?.url ? (
+          <img
+            src={product.images[0].url}
+            alt={product.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <svg className="w-20 h-20 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+        )}
         {/* Status badges */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
           {product.isActive && (
@@ -49,6 +58,17 @@ export function ProductCard({ product, onEdit, onToggleActive, onDelete }: Produ
         <p className="text-[10px] font-semibold text-security-600 uppercase">{product.brand?.name}</p>
         <h3 className="text-sm font-medium text-gray-800 mt-1 line-clamp-2 leading-tight min-h-[2.5rem]">{product.name}</h3>
         <p className="text-xs text-gray-400 font-mono mt-1">{product.sku}</p>
+        <div className="mt-2">
+          {product.prices[0] ? (
+            <p className="text-sm font-bold text-security-700">
+              {formatCurrency(product.prices[0].value, product.prices[0].currency)}
+            </p>
+          ) : (
+            <span className="inline-block text-[10px] font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded">
+              Sin precio
+            </span>
+          )}
+        </div>
         <div className="mt-3 flex items-center gap-2">
           {hasPermission('products:write') && (
             <button

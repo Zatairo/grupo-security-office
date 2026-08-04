@@ -28,7 +28,7 @@ Reemplazar los roles legacy en inglés (`Admin`, `Gerente`, `Operator`, `Viewer`
 |---|---|
 | Super Admin | products:read/write/delete, categories:read/write, brands:read/write, prices:read/write, users:read/write/manage, audit:read, publish:manage |
 | Supervisor | products:read, publish:manage, audit:read |
-| Admin Comercial | products:read/write, categories:read/write, brands:read/write, prices:read/write, publish:manage |
+| Admin Comercial | products:read/write/delete, categories:read/write, brands:read/write, prices:read/write, publish:manage |
 | Operador | products:read, categories:read, brands:read, prices:read |
 | Consulta | products:read, categories:read, brands:read, prices:read |
 

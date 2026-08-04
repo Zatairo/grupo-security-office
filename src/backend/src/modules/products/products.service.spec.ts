@@ -1,5 +1,12 @@
 import { createPrismaMock } from '../../__test__/mocks/prisma.mock';
 
+jest.mock('fs', () => ({
+  existsSync: jest.fn().mockReturnValue(true),
+  unlinkSync: jest.fn(),
+}));
+
+import * as fs from 'fs';
+
 const mockPrisma = createPrismaMock();
 mockPrisma.price.deleteMany = jest.fn();
 
@@ -142,6 +149,59 @@ describe('ProductsService', () => {
 
       await expect(service.create(dto)).rejects.toThrow(NotFoundException);
     });
+
+    it('debe persistir extraAttributes y precios inline', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.priceList.findMany.mockResolvedValue([{ id: 'pl-1' }]);
+      mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
+      mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
+
+      const dto = {
+        sku: 'CAM-003',
+        name: 'Cámara IP',
+        categoryId: 'cat-1',
+        brandId: 'brand-1',
+        extraAttributes: { garantia: '1 año', ip: '127.0.0.1' },
+        prices: [{ priceListId: 'pl-1', value: 1500000, currency: 'COP' }],
+      };
+
+      await service.create(dto as any);
+
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ extraAttributes: dto.extraAttributes }),
+        }),
+      );
+      expect(mockPrisma.priceList.findMany).toHaveBeenCalledWith({
+        where: { id: { in: ['pl-1'] } },
+        select: { id: true },
+      });
+      expect(mockPrisma.price.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { productId_priceListId: { productId: 'prod-1', priceListId: 'pl-1' } },
+          create: expect.objectContaining({ priceListId: 'pl-1', value: 1500000, currency: 'COP' }),
+        }),
+      );
+    });
+
+    it('debe rechazar precios con lista de precios inexistente', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.priceList.findMany.mockResolvedValue([]);
+
+      const dto = {
+        sku: 'CAM-004',
+        name: 'Cámara',
+        categoryId: 'cat-1',
+        brandId: 'brand-1',
+        prices: [{ priceListId: 'pl-inexistente', value: 1000 }],
+      };
+
+      await expect(service.create(dto as any)).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('update', () => {
@@ -162,6 +222,36 @@ describe('ProductsService', () => {
       mockPrisma.product.findUnique.mockResolvedValue(null);
 
       await expect(service.update('no-existe', { name: 'Nope' })).rejects.toThrow(NotFoundException);
+    });
+
+    it('debe actualizar extraAttributes y hacer upsert de precios', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(mockProduct);
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.priceList.findMany.mockResolvedValue([{ id: 'pl-1' }]);
+      mockPrisma.product.update.mockResolvedValue({ ...mockProductWithRelations, name: 'Cámara IP Pro' });
+      mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
+
+      const dto = {
+        name: 'Cámara IP Pro',
+        extraAttributes: { garantia: '2 años' },
+        prices: [{ priceListId: 'pl-1', value: 2000000 }],
+      };
+
+      const result = await service.update('prod-1', dto as any);
+
+      expect(result.name).toBe('Cámara IP Pro');
+      expect(mockPrisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ extraAttributes: { garantia: '2 años' } }),
+        }),
+      );
+      expect(mockPrisma.price.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { productId_priceListId: { productId: 'prod-1', priceListId: 'pl-1' } },
+        }),
+      );
     });
   });
 
@@ -206,8 +296,13 @@ describe('ProductsService', () => {
   });
 
   describe('remove', () => {
-    it('debe eliminar un producto y sus relaciones', async () => {
+    it('debe eliminar un producto, sus relaciones y sus archivos de imagen en disco', async () => {
       mockPrisma.product.findUnique.mockResolvedValue(mockProduct);
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      mockPrisma.productImage.findMany.mockResolvedValue([
+        { id: 'img-1', url: '/uploads/img-1.png' },
+        { id: 'img-2', url: '/uploads/img-2.png' },
+      ]);
       mockPrisma.price.deleteMany.mockResolvedValue({ count: 0 });
       mockPrisma.productImage.deleteMany.mockResolvedValue({ count: 0 });
       mockPrisma.product.delete.mockResolvedValue(mockProduct);
@@ -217,6 +312,22 @@ describe('ProductsService', () => {
       expect(result.message).toBe('Producto eliminado exitosamente');
       expect(mockPrisma.price.deleteMany).toHaveBeenCalledWith({ where: { productId: 'prod-1' } });
       expect(mockPrisma.productImage.deleteMany).toHaveBeenCalledWith({ where: { productId: 'prod-1' } });
+      expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('img-1.png'));
+      expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('img-2.png'));
+    });
+
+    it('debe borrar el producto aunque el archivo de imagen no exista en disco', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(mockProduct);
+      mockPrisma.productImage.findMany.mockResolvedValue([{ id: 'img-1', url: '/uploads/img-1.png' }]);
+      mockPrisma.price.deleteMany.mockResolvedValue({ count: 0 });
+      mockPrisma.productImage.deleteMany.mockResolvedValue({ count: 0 });
+      mockPrisma.product.delete.mockResolvedValue(mockProduct);
+      (fs.existsSync as jest.Mock).mockReturnValue(false);
+
+      const result = await service.remove('prod-1');
+
+      expect(result.message).toBe('Producto eliminado exitosamente');
+      expect(fs.unlinkSync).not.toHaveBeenCalled();
     });
 
     it('debe lanzar NotFoundException si el producto no existe', async () => {

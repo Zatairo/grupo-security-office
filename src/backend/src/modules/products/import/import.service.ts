@@ -290,6 +290,7 @@ export class ImportService {
         updated: result.updated,
         skipped: result.skipped,
         errors: result.errors.length,
+        defaultsByMissingInference: result.defaultsByMissingInference ?? { category: 0, brand: 0 },
       },
       executionErrors: result.errors,
       durationMs: result.durationMs,

@@ -4,6 +4,11 @@ import api from '../services/api'
 import { hasRole, hasPermission } from '../lib/rbac'
 import { ROLES } from '../lib/roles'
 
+function formatAuditTimestamp(value: string | Date): string {
+  const date = new Date(value)
+  return `${date.toLocaleString()}.${String(date.getMilliseconds()).padStart(3, '0')}`
+}
+
 export default function AuditPage() {
   const [entity, setEntity] = useState('')
   const [action, setAction] = useState('')
@@ -84,7 +89,7 @@ export default function AuditPage() {
             ) : (
               logs?.data?.map((log: any) => (
                 <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 text-sm text-gray-500">{new Date(log.createdAt).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-sm text-gray-500">{formatAuditTimestamp(log.createdAt)}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 bg-security-100 rounded-full flex items-center justify-center">

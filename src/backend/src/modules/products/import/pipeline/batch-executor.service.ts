@@ -70,6 +70,7 @@ export class BatchExecutorService {
       errors: [],
       productIds: [],
       durationMs: 0,
+      defaultsByMissingInference: { category: 0, brand: 0 },
     };
 
     // Pre-cargar categorías y marcas existentes
@@ -109,6 +110,8 @@ export class BatchExecutorService {
         result.skipped += batchResult.skipped;
         result.productIds.push(...batchResult.productIds);
         result.errors.push(...batchResult.errors);
+        result.defaultsByMissingInference.category += batchResult.defaults.category;
+        result.defaultsByMissingInference.brand += batchResult.defaults.brand;
 
         this.logger.log(
           `Batch ${batchIndex + 1}/${batches.length} completado: ` +
@@ -159,6 +162,7 @@ export class BatchExecutorService {
     skipped: number;
     productIds: string[];
     errors: BatchError[];
+    defaults: { category: number; brand: number };
   }> {
     return this.prisma.$transaction(async (tx) => {
       const batchResult = {
@@ -167,6 +171,7 @@ export class BatchExecutorService {
         skipped: 0,
         productIds: [] as string[],
         errors: [] as BatchError[],
+        defaults: { category: 0, brand: 0 },
       };
 
       // Pre-cargar SKUs existentes en este batch
@@ -185,14 +190,18 @@ export class BatchExecutorService {
           const categoryResult = await this.resolveCategory(
             tx,
             row.categoryName,
+            row.categoryInferredSlug,
             categoryMap,
+            batchResult.defaults,
           );
 
           // Resolver marca (siempre retorna un ID — default "Sin marca" si vacío)
           const brandResult = await this.resolveBrand(
             tx,
             row.brandName,
+            row.brandInferredSlug,
             brandMap,
+            batchResult.defaults,
           );
 
           const existingProductId = existingSkuMap.get(row.sku);
@@ -259,31 +268,31 @@ export class BatchExecutorService {
   /**
    * Resuelve una categoría por nombre: busca existente o crea nueva.
    * Si el nombre está vacío, retorna la categoría default "Sin categoría".
+   *
+   * Si viene un slug inferido, solo se usa la categoría EXISTENTE por slug;
+   * si no existe, se cae al default y se cuenta como "default por falta de inferencia".
    */
   private async resolveCategory(
     tx: any,
     name: string,
+    inferredSlug: string | undefined,
     categoryMap: Map<string, { id: string; name: string; slug: string }>,
+    defaults: { category: number; brand: number },
   ): Promise<{ id: string }> {
     const normalizedName = name?.toLowerCase().trim() ?? '';
 
+    // Inferencia: solo usar categoría existente por slug
+    if (inferredSlug) {
+      const found = await tx.category.findFirst({ where: { slug: inferredSlug } });
+      if (found) return found;
+      defaults.category++;
+      return this.resolveDefaultCategory(tx, categoryMap);
+    }
+
     // Si no hay nombre, usar default "Sin categoría"
     if (!normalizedName) {
-      const defaultSlug = 'sin-categoria';
-      const existing = categoryMap.get('sin categoría');
-      if (existing) return existing;
-
-      const found = await tx.category.findFirst({ where: { slug: defaultSlug } });
-      if (found) {
-        categoryMap.set('sin categoría', found);
-        return found;
-      }
-
-      const created = await tx.category.create({
-        data: { name: 'Sin categoría', slug: defaultSlug, isActive: true },
-      });
-      categoryMap.set('sin categoría', created);
-      return created;
+      defaults.category++;
+      return this.resolveDefaultCategory(tx, categoryMap);
     }
 
     const existing = categoryMap.get(normalizedName);
@@ -307,33 +316,57 @@ export class BatchExecutorService {
   }
 
   /**
+   * Retorna (creando si hace falta) la categoría default "Sin categoría".
+   */
+  private async resolveDefaultCategory(
+    tx: any,
+    categoryMap: Map<string, { id: string; name: string; slug: string }>,
+  ): Promise<{ id: string }> {
+    const defaultSlug = 'sin-categoria';
+    const existing = categoryMap.get('sin categoría');
+    if (existing) return existing;
+
+    const found = await tx.category.findFirst({ where: { slug: defaultSlug } });
+    if (found) {
+      categoryMap.set('sin categoría', found);
+      return found;
+    }
+
+    const created = await tx.category.create({
+      data: { name: 'Sin categoría', slug: defaultSlug, isActive: true },
+    });
+    categoryMap.set('sin categoría', created);
+    return created;
+  }
+
+  /**
    * Resuelve una marca por nombre: busca existente o crea nueva.
    * Si el nombre está vacío, retorna la marca default "Sin marca".
+   *
+   * Si viene un slug inferido, solo se usa la marca EXISTENTE por slug;
+   * si no existe, se cae al default y se cuenta como "default por falta de inferencia".
    */
   private async resolveBrand(
     tx: any,
     name: string,
+    inferredSlug: string | undefined,
     brandMap: Map<string, { id: string; name: string; slug: string }>,
+    defaults: { category: number; brand: number },
   ): Promise<{ id: string }> {
     const normalizedName = name?.toLowerCase().trim() ?? '';
 
+    // Inferencia: solo usar marca existente por slug
+    if (inferredSlug) {
+      const found = await tx.brand.findFirst({ where: { slug: inferredSlug } });
+      if (found) return found;
+      defaults.brand++;
+      return this.resolveDefaultBrand(tx, brandMap);
+    }
+
     // Si no hay nombre, usar default "Sin marca"
     if (!normalizedName) {
-      const defaultSlug = 'sin-marca';
-      const existing = brandMap.get('sin marca');
-      if (existing) return existing;
-
-      const found = await tx.brand.findFirst({ where: { slug: defaultSlug } });
-      if (found) {
-        brandMap.set('sin marca', found);
-        return found;
-      }
-
-      const created = await tx.brand.create({
-        data: { name: 'Sin marca', slug: defaultSlug, isActive: true },
-      });
-      brandMap.set('sin marca', created);
-      return created;
+      defaults.brand++;
+      return this.resolveDefaultBrand(tx, brandMap);
     }
 
     const existing = brandMap.get(normalizedName);
@@ -353,6 +386,30 @@ export class BatchExecutorService {
 
     brandMap.set(normalizedName, newBrand);
     return newBrand;
+  }
+
+  /**
+   * Retorna (creando si hace falta) la marca default "Sin marca".
+   */
+  private async resolveDefaultBrand(
+    tx: any,
+    brandMap: Map<string, { id: string; name: string; slug: string }>,
+  ): Promise<{ id: string }> {
+    const defaultSlug = 'sin-marca';
+    const existing = brandMap.get('sin marca');
+    if (existing) return existing;
+
+    const found = await tx.brand.findFirst({ where: { slug: defaultSlug } });
+    if (found) {
+      brandMap.set('sin marca', found);
+      return found;
+    }
+
+    const created = await tx.brand.create({
+      data: { name: 'Sin marca', slug: defaultSlug, isActive: true },
+    });
+    brandMap.set('sin marca', created);
+    return created;
   }
 
   /**
@@ -446,6 +503,7 @@ export class BatchExecutorService {
           skipped: result.skipped,
           errors: result.errors.length,
           durationMs: result.durationMs,
+          defaultsByMissingInference: result.defaultsByMissingInference,
           columnsMapped,
           columnsExtra,
           columnsSkipped,

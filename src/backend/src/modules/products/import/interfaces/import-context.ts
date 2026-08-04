@@ -120,6 +120,12 @@ export interface NormalizedRow {
   /** Nombre de marca (se resolverá a ID en batch execution) */
   brandName: string;
 
+  /** Slug de categoría inferido (si la categoría no vino mapeada y se infirió) */
+  categoryInferredSlug?: string;
+
+  /** Slug de marca inferido (si la marca no vino mapeada y se infirió) */
+  brandInferredSlug?: string;
+
   /** Precios mapeados por lista de precios */
   prices: PriceEntry[];
 
@@ -180,6 +186,12 @@ export interface BatchExecutionResult {
 
   /** Duración total en ms */
   durationMs: number;
+
+  /** Filas que cayeron a categoría/marca default por falta de inferencia */
+  defaultsByMissingInference?: {
+    category: number;
+    brand: number;
+  };
 }
 
 /**

@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, type FormEvent } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../../services/api'
 import type { Product, Category, Brand } from '../types/product.types'
+import { usePriceLists } from '../hooks/usePriceLists'
 
 interface ProductFormModalProps {
   product: Product | null
@@ -9,6 +10,51 @@ interface ProductFormModalProps {
   brands: Brand[]
   onClose: () => void
   onSaved: () => void
+}
+
+type Tab = 'basic' | 'specs' | 'prices' | 'images'
+
+interface PriceRow {
+  value: string
+  validFrom: string
+  validUntil: string
+}
+
+const inputClass =
+  'w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm'
+
+const tabs: { id: Tab; label: string }[] = [
+  { id: 'basic', label: 'Información' },
+  { id: 'specs', label: 'Especificaciones' },
+  { id: 'prices', label: 'Precios' },
+  { id: 'images', label: 'Imágenes' },
+]
+
+function seedPrices(product: Product | null): Record<string, PriceRow> {
+  const map: Record<string, PriceRow> = {}
+  product?.prices?.forEach((p) => {
+    map[p.priceList.id] = {
+      value: String(p.value),
+      validFrom: p.validFrom ? p.validFrom.slice(0, 10) : '',
+      validUntil: p.validUntil ? p.validUntil.slice(0, 10) : '',
+    }
+  })
+  return map
+}
+
+function parseJsonField(
+  raw: string
+): { ok: true; value: Record<string, unknown> | null } | { ok: false; error: string } {
+  if (!raw.trim()) return { ok: true, value: null }
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return { ok: true, value: parsed as Record<string, unknown> }
+    }
+    return { ok: false, error: 'Debe ser un objeto JSON, ej: {"clave": "valor"}' }
+  } catch {
+    return { ok: false, error: 'JSON inválido' }
+  }
 }
 
 export default function ProductFormModal({
@@ -19,6 +65,7 @@ export default function ProductFormModal({
   onSaved,
 }: ProductFormModalProps) {
   const queryClient = useQueryClient()
+  const [tab, setTab] = useState<Tab>('basic')
   const [form, setForm] = useState({
     sku: product?.sku || '',
     name: product?.name || '',
@@ -28,9 +75,61 @@ export default function ProductFormModal({
     isActive: product?.isActive ?? false,
     isVisible: product?.isVisible ?? false,
   })
+  const [technicalSpecsText, setTechnicalSpecsText] = useState(() =>
+    product?.technicalSpecs ? JSON.stringify(product.technicalSpecs, null, 2) : ''
+  )
+  const [extraAttributesText, setExtraAttributesText] = useState(() =>
+    product?.extraAttributes ? JSON.stringify(product.extraAttributes, null, 2) : ''
+  )
+  const [specErrors, setSpecErrors] = useState<{
+    technicalSpecs?: string
+    extraAttributes?: string
+  }>({})
+  const [prices, setPrices] = useState<Record<string, PriceRow>>(() => seedPrices(product))
+
+  const { priceLists, isLoading: isLoadingLists } = usePriceLists()
+
+  const { data: productDetail } = useQuery({
+    queryKey: ['product', product?.id],
+    queryFn: async () => {
+      const res = await api.get(`/products/${product!.id}`)
+      return res.data as Product
+    },
+    enabled: !!product,
+  })
+
+  const images = productDetail?.images ?? product?.images ?? []
+
+  const refreshProduct = () => {
+    if (product?.id) {
+      queryClient.invalidateQueries({ queryKey: ['product', product.id] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+    }
+  }
+
+  const uploadImage = useMutation({
+    mutationFn: ({ file, isPrimary }: { file: File; isPrimary: boolean }) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      if (isPrimary) fd.append('isPrimary', 'true')
+      return api.post(`/products/${product!.id}/images`, fd)
+    },
+    onSuccess: refreshProduct,
+  })
+
+  const deleteImage = useMutation({
+    mutationFn: (imageId: string) => api.delete(`/products/images/${imageId}`),
+    onSuccess: refreshProduct,
+  })
+
+  const markPrimary = useMutation({
+    mutationFn: (imageId: string) =>
+      api.patch(`/products/images/${imageId}`, { isPrimary: true }),
+    onSuccess: refreshProduct,
+  })
 
   const mutation = useMutation({
-    mutationFn: async (data: typeof form) => {
+    mutationFn: async (data: Record<string, unknown>) => {
       if (product) {
         return api.put(`/products/${product.id}`, data)
       }
@@ -42,109 +141,414 @@ export default function ProductFormModal({
     },
   })
 
+  const buildPricesPayload = () =>
+    priceLists
+      .filter((list) => {
+        const value = prices[list.id]?.value
+        return value !== undefined && value.trim() !== ''
+      })
+      .map((list) => {
+        const row = prices[list.id]
+        return {
+          priceListId: list.id,
+          value: Number(row!.value),
+          currency: list.currency,
+          ...(row!.validFrom ? { validFrom: row!.validFrom } : {}),
+          ...(row!.validUntil ? { validUntil: row!.validUntil } : {}),
+        }
+      })
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const tech = parseJsonField(technicalSpecsText)
+    const extra = parseJsonField(extraAttributesText)
+    if (!tech.ok || !extra.ok) {
+      setSpecErrors({
+        technicalSpecs: tech.ok ? undefined : tech.error,
+        extraAttributes: extra.ok ? undefined : extra.error,
+      })
+      setTab('specs')
+      return
+    }
+    mutation.mutate({
+      sku: form.sku,
+      name: form.name,
+      description: form.description,
+      categoryId: form.categoryId,
+      brandId: form.brandId,
+      isActive: form.isActive,
+      isVisible: form.isVisible,
+      technicalSpecs: tech.value ?? undefined,
+      extraAttributes: extra.value ?? undefined,
+      prices: buildPricesPayload(),
+    })
+  }
+
+  const setPriceRow = (listId: string, patch: Partial<PriceRow>) => {
+    setPrices((prev) => ({
+      ...prev,
+      [listId]: {
+        value: '',
+        validFrom: '',
+        validUntil: '',
+        ...prev[listId],
+        ...patch,
+      },
+    }))
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl">
+      <div className="bg-white rounded-xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[90vh]">
         <div className="px-6 py-4 border-b border-gray-200 bg-security-700 rounded-t-xl">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white">
               {product ? 'Editar Producto' : 'Nuevo Producto'}
             </h2>
-            <button onClick={onClose} className="p-2 text-security-200 hover:text-white hover:bg-security-600 rounded-lg transition-colors">
+            <button
+              onClick={onClose}
+              className="p-2 text-security-200 hover:text-white hover:bg-security-600 rounded-lg transition-colors"
+            >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
         </div>
-        
-        <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(form) }} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 sm:col-span-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">SKU</label>
-              <input
-                type="text"
-                value={form.sku}
-                onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-                required
-              />
-            </div>
-            <div className="col-span-2 sm:col-span-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-                required
-              />
-            </div>
+
+        {/* Tabs */}
+        <div className="px-6 pt-4 border-b border-gray-200 flex gap-1 overflow-x-auto">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                tab === t.id
+                  ? 'border-security-600 text-security-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            {tab === 'basic' && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">SKU</label>
+                    <input
+                      type="text"
+                      value={form.sku}
+                      onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre</label>
+                    <input
+                      type="text"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Descripción</label>
+                  <textarea
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    className={`${inputClass} resize-none`}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Categoría</label>
+                    <select
+                      value={form.categoryId}
+                      onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                      className={inputClass}
+                      required
+                    >
+                      <option value="">Seleccionar...</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Marca</label>
+                    <select
+                      value={form.brandId}
+                      onChange={(e) => setForm({ ...form, brandId: e.target.value })}
+                      className={inputClass}
+                      required
+                    >
+                      <option value="">Seleccionar...</option>
+                      {brands.map((brand) => (
+                        <option key={brand.id} value={brand.id}>
+                          {brand.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.isActive}
+                      onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                      className="w-4 h-4 text-security-600 border-gray-300 rounded focus:ring-brand-primary/30 focus:border-brand-primary"
+                    />
+                    <span className="text-sm text-gray-700">Activo</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.isVisible}
+                      onChange={(e) => setForm({ ...form, isVisible: e.target.checked })}
+                      className="w-4 h-4 text-security-600 border-gray-300 rounded focus:ring-brand-primary/30 focus:border-brand-primary"
+                    />
+                    <span className="text-sm text-gray-700">Visible</span>
+                  </label>
+                </div>
+              </>
+            )}
+
+            {tab === 'specs' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Especificaciones técnicas (JSON)
+                  </label>
+                  <textarea
+                    value={technicalSpecsText}
+                    onChange={(e) => {
+                      setTechnicalSpecsText(e.target.value)
+                      setSpecErrors((prev) => ({ ...prev, technicalSpecs: undefined }))
+                    }}
+                    className={`${inputClass} font-mono resize-y`}
+                    rows={7}
+                    placeholder='{"resolucion": "4MP", "lente": "2.8mm", "vision_nocturna": "30m"}'
+                  />
+                  {specErrors.technicalSpecs && (
+                    <p className="text-xs text-red-600 mt-1">{specErrors.technicalSpecs}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Atributos extra (JSON)
+                  </label>
+                  <textarea
+                    value={extraAttributesText}
+                    onChange={(e) => {
+                      setExtraAttributesText(e.target.value)
+                      setSpecErrors((prev) => ({ ...prev, extraAttributes: undefined }))
+                    }}
+                    className={`${inputClass} font-mono resize-y`}
+                    rows={7}
+                    placeholder='{"garantia": "12 meses", "peso": "0.8kg"}'
+                  />
+                  {specErrors.extraAttributes && (
+                    <p className="text-xs text-red-600 mt-1">{specErrors.extraAttributes}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {tab === 'prices' && (
+              <div>
+                {isLoadingLists ? (
+                  <p className="text-sm text-gray-400 py-6 text-center">Cargando listas de precios...</p>
+                ) : priceLists.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-6 text-center">
+                    No hay listas de precios. Créalas desde la sección de Precios.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200">
+                          <th className="px-3 py-2">Lista</th>
+                          <th className="px-3 py-2">Moneda</th>
+                          <th className="px-3 py-2">Valor</th>
+                          <th className="px-3 py-2">Vigencia</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {priceLists.map((list) => {
+                          const row = prices[list.id]
+                          return (
+                            <tr key={list.id}>
+                              <td className="px-3 py-3">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium text-gray-900">{list.name}</p>
+                                  {!list.isActive && (
+                                    <span className="text-[10px] font-semibold bg-gray-100 text-gray-500 px-2 py-0.5 rounded">
+                                      Inactiva
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 text-gray-500">{list.currency}</td>
+                              <td className="px-3 py-3">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={row?.value ?? ''}
+                                  placeholder="0"
+                                  onChange={(e) => setPriceRow(list.id, { value: e.target.value })}
+                                  className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm"
+                                />
+                              </td>
+                              <td className="px-3 py-3">
+                                {row ? (
+                                  <div className="flex gap-2 items-center">
+                                    <input
+                                      type="date"
+                                      value={row.validFrom}
+                                      onChange={(e) => setPriceRow(list.id, { validFrom: e.target.value })}
+                                      className="px-2 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-xs"
+                                    />
+                                    <span className="text-gray-400">—</span>
+                                    <input
+                                      type="date"
+                                      value={row.validUntil}
+                                      onChange={(e) => setPriceRow(list.id, { validUntil: e.target.value })}
+                                      className="px-2 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-xs"
+                                    />
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <p className="text-xs text-gray-400 mt-3">
+                  Los precios se guardan junto con el producto.
+                </p>
+              </div>
+            )}
+
+            {tab === 'images' && (
+              <div>
+                {!product ? (
+                  <div className="text-center py-10">
+                    <svg
+                      className="w-14 h-14 text-gray-300 mx-auto mb-3"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1}
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
+                    </svg>
+                    <p className="text-sm text-gray-500 font-medium">
+                      Guarda el producto primero para poder subir imágenes.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <label className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      Subir imagen
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploadImage.isPending}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            uploadImage.mutate({ file, isPrimary: images.length === 0 })
+                          }
+                          e.target.value = ''
+                        }}
+                      />
+                    </label>
+                    {uploadImage.isPending && (
+                      <p className="text-xs text-gray-400">Subiendo imagen...</p>
+                    )}
+                    {uploadImage.isError && (
+                      <p className="text-xs text-red-600">Error al subir la imagen.</p>
+                    )}
+
+                    {images.length === 0 ? (
+                      <p className="text-sm text-gray-400">No hay imágenes aún.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                        {images.map((img) => (
+                          <div key={img.id} className="border border-gray-200 rounded-lg p-2">
+                            <img
+                              src={img.url}
+                              alt={img.alt ?? product.name}
+                              className="w-full h-28 object-cover rounded-md bg-gray-100"
+                            />
+                            <div className="flex items-center justify-between mt-2">
+                              <button
+                                type="button"
+                                disabled={img.isPrimary || markPrimary.isPending}
+                                onClick={() => markPrimary.mutate(img.id)}
+                                className={`text-xs font-medium rounded px-2 py-1 transition-colors ${
+                                  img.isPrimary
+                                    ? 'bg-security-100 text-security-700 cursor-default'
+                                    : 'text-gray-500 hover:text-security-600 hover:bg-security-50'
+                                }`}
+                              >
+                                {img.isPrimary ? 'Principal' : 'Marcar principal'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={deleteImage.isPending}
+                                onClick={() => {
+                                  if (confirm('¿Eliminar esta imagen?')) {
+                                    deleteImage.mutate(img.id)
+                                  }
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                title="Eliminar"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Descripción</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary resize-none"
-              rows={3}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Categoría</label>
-              <select
-                value={form.categoryId}
-                onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-                required
-              >
-                <option value="">Seleccionar...</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Marca</label>
-              <select
-                value={form.brandId}
-                onChange={(e) => setForm({ ...form, brandId: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-                required
-              >
-                <option value="">Seleccionar...</option>
-                {brands.map((brand) => (
-                  <option key={brand.id} value={brand.id}>{brand.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                className="w-4 h-4 text-security-600 border-gray-300 rounded focus:ring-brand-primary/30 focus:border-brand-primary"
-              />
-              <span className="text-sm text-gray-700">Activo</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.isVisible}
-                onChange={(e) => setForm({ ...form, isVisible: e.target.checked })}
-                className="w-4 h-4 text-security-600 border-gray-300 rounded focus:ring-brand-primary/30 focus:border-brand-primary"
-              />
-              <span className="text-sm text-gray-700">Visible</span>
-            </label>
-          </div>
-
-          <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
+          <div className="flex gap-3 justify-end px-6 py-4 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
