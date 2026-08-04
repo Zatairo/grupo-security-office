@@ -36,7 +36,7 @@ export default function ProductsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(hasPersistedImportState)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('grid')
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
 
   const filters = {
     search,

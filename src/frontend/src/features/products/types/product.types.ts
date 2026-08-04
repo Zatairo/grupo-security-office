@@ -41,6 +41,7 @@ export interface Product {
   images: ProductImage[]
   prices: ProductPrice[]
   createdAt: string
+  updatedAt: string
 }
 
 export interface ProductListResponse {

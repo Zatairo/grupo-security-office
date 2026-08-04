@@ -1,20 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Product, ProductPrice } from '../types/product.types'
 import { ProductStatusBadge } from './ProductStatusBadge'
-import { usePriceLists } from '../hooks/usePriceLists'
 import { hasPermission } from '../../../lib/rbac'
-import { formatCurrency } from '../../../lib/format'
+import { formatCurrency, formatDate } from '../../../lib/format'
 
 type SortDir = 'asc' | 'desc'
-type SortKey = 'product' | 'category' | 'brand' | 'status' | `price:${string}`
-type PriceGroup = 'Con IVA' | 'Sin IVA' | 'Precios'
-
-interface PriceColumn {
-  id: string
-  name: string
-  code: string
-  currency: string
-}
+type SortKey = 'sku' | 'product' | 'brand' | 'category' | 'updatedAt'
 
 interface ProductSpreadsheetTableProps {
   products?: Product[]
@@ -25,26 +16,86 @@ interface ProductSpreadsheetTableProps {
   onDelete: (id: string) => void
 }
 
-const GROUP_RANK: Record<PriceGroup, number> = { 'Con IVA': 0, 'Sin IVA': 1, Precios: 2 }
+// --- Anchos fijos por columna (grilla tipo Excel) ---
+const COLUMN_WIDTHS = {
+  select: 44,
+  sku: 140,
+  product: 320,
+  brand: 140,
+  category: 160,
+  price: 124,
+  visible: 96,
+  active: 96,
+  updated: 140,
+  actions: 120,
+} as const
 
-function groupOf(list: Pick<PriceColumn, 'name' | 'code'>): PriceGroup {
-  const text = `${list.name} ${list.code}`.toLowerCase()
-  if (text.includes('sin iva') || text.includes('sin_iva') || text.includes('without_iva')) {
-    return 'Sin IVA'
-  }
-  if (text.includes('iva')) {
-    return 'Con IVA'
-  }
-  return 'Precios'
+const TOTAL_COLS = 13
+
+const widthStyle = (w: number) => ({
+  width: `${w}px`,
+  minWidth: `${w}px`,
+  maxWidth: `${w}px`,
+})
+
+// --- Mapeo de columnas de precio ---
+type PriceColumnKey = 'base' | 'clienteFinal' | 'oro' | 'instalador'
+
+interface PriceColumnSpec {
+  key: PriceColumnKey
+  label: string
+  match: (list: { name: string; code: string }) => boolean
 }
 
-function priceOf(product: Product, listId: string): ProductPrice | undefined {
-  return product.prices?.find((p) => p.priceList.id === listId)
+// Matchers case-insensitive sobre nombre + código de la lista. Coinciden con los
+// nombres reales que crea el importador Excel (row-normalizer): "Cliente Final (con
+// IVA)", "DPP Oro (con IVA)", "Oro (sin IVA)", "Instalador (con IVA)", "Tienda
+// (con IVA)", "DPP Platino (con IVA)", "Installer (sin IVA)".
+const PRICE_COLUMN_SPECS: PriceColumnSpec[] = [
+  {
+    key: 'clienteFinal',
+    label: 'Precio cliente final',
+    match: (list) => `${list.name} ${list.code}`.toLowerCase().includes('cliente final'),
+  },
+  {
+    key: 'oro',
+    label: 'Precio oro',
+    match: (list) => `${list.name} ${list.code}`.toLowerCase().includes('oro'),
+  },
+  {
+    key: 'instalador',
+    label: 'Precio instalador',
+    match: (list) => `${list.name} ${list.code}`.toLowerCase().includes('instalador'),
+  },
+]
+
+// Resuelve las 4 columnas de precio para un producto:
+// - clienteFinal/oro/instalador: primera lista que cumple su matcher, sin repetir listas.
+// - base: primer precio de product.prices que NO se usó en las anteriores; si todos se
+//   usaron, cae al primero disponible (fallback documentado).
+function resolvePriceColumns(product: Product): Record<PriceColumnKey, ProductPrice | undefined> {
+  const prices = product.prices ?? []
+  const used = new Set<ProductPrice>()
+  const result: Record<PriceColumnKey, ProductPrice | undefined> = {
+    base: undefined,
+    clienteFinal: undefined,
+    oro: undefined,
+    instalador: undefined,
+  }
+  for (const spec of PRICE_COLUMN_SPECS) {
+    const found = prices.find((p) => !used.has(p) && spec.match(p.priceList))
+    if (found) {
+      result[spec.key] = found
+      used.add(found)
+    }
+  }
+  result.base = prices.find((p) => !used.has(p)) ?? prices[0]
+  return result
 }
 
 // El wire serializa Decimal de Prisma como string (ej. "179838.75", "0"); el tipo
 // declara `number`. Esta normalización única garantiza comportamiento idéntico con
-// string (wire) y number (local), y evita coerción implícita en display y sort.
+// string (wire) y number (local).
 function numericValue(price: ProductPrice | undefined): number | undefined {
   return price ? Number(price.value) : undefined
 }
@@ -68,9 +119,8 @@ function PriceCellValue({ price }: { price: ProductPrice | undefined }) {
   )
 }
 
-const cellBase = 'border-r border-b border-neutral-100'
-const thBase = `${cellBase} px-4 py-3 text-left text-xs text-gray-600 whitespace-nowrap bg-gray-50`
-const thSticky = `${cellBase} px-4 py-3 text-left text-xs text-gray-600 whitespace-nowrap bg-gray-50 sticky left-0 z-20 min-w-[11rem]`
+const cellBase = 'border-r border-b border-neutral-200'
+const thBase = `${cellBase} sticky top-0 z-30 px-3 py-2.5 text-left text-xs font-semibold text-gray-600 whitespace-nowrap bg-gray-50`
 
 export function ProductSpreadsheetTable({
   products = [],
@@ -80,75 +130,40 @@ export function ProductSpreadsheetTable({
   onToggleVisibility,
   onDelete,
 }: ProductSpreadsheetTableProps) {
-  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const canWrite = hasPermission('products:write')
+  const canDelete = hasPermission('products:delete')
+
+  const [sortKey, setSortKey] = useState<SortKey | null>('product')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
-  const { priceLists } = usePriceLists()
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const headerCheckboxRef = useRef<HTMLInputElement>(null)
 
-  const columns: PriceColumn[] = useMemo(() => {
-    const map = new Map<string, PriceColumn>()
-    priceLists.forEach((list) =>
-      map.set(list.id, { id: list.id, name: list.name, code: list.code, currency: list.currency })
-    )
-    products.forEach((p) =>
-      p.prices?.forEach((pr) => {
-        if (!map.has(pr.priceList.id)) {
-          map.set(pr.priceList.id, {
-            id: pr.priceList.id,
-            name: pr.priceList.name,
-            code: pr.priceList.code,
-            currency: pr.currency,
-          })
-        }
-      })
-    )
-    return Array.from(map.values()).sort(
-      (a, b) => GROUP_RANK[groupOf(a)] - GROUP_RANK[groupOf(b)]
-    )
-  }, [priceLists, products])
+  const allSelected = products.length > 0 && products.every((p) => selectedIds.has(p.id))
+  const someSelected = selectedIds.size > 0 && !allSelected
 
-  const groups = useMemo(() => {
-    const result: { group: PriceGroup; lists: PriceColumn[] }[] = []
-    columns.forEach((list) => {
-      const group = groupOf(list)
-      const last = result[result.length - 1]
-      if (last && last.group === group) {
-        last.lists.push(list)
-      } else {
-        result.push({ group, lists: [list] })
-      }
-    })
-    return result
-  }, [columns])
-
-  const totalCols = 4 + columns.length + 1
+  useEffect(() => {
+    if (headerCheckboxRef.current) {
+      headerCheckboxRef.current.indeterminate = someSelected
+    }
+  }, [someSelected])
 
   const sortedProducts = useMemo(() => {
     if (!sortKey) return products
     const dir = sortDir === 'asc' ? 1 : -1
     const next = [...products]
-    if (sortKey.startsWith('price:')) {
-      const listId = sortKey.slice('price:'.length)
-      next.sort((a, b) => {
-        const va = numericValue(priceOf(a, listId))
-        const vb = numericValue(priceOf(b, listId))
-        if (va === undefined && vb === undefined) return 0
-        if (va === undefined) return 1
-        if (vb === undefined) return -1
-        return (va - vb) * dir
-      })
-      return next
-    }
     const valueOf = (p: Product): string => {
       switch (sortKey) {
         case 'product':
           return p.name ?? ''
-        case 'category':
-          return p.category?.name ?? ''
+        case 'sku':
+          return p.sku ?? ''
         case 'brand':
           return p.brand?.name ?? ''
-        case 'status':
-          return `${p.isActive ? 'Activo' : 'Inactivo'} ${p.isVisible ? 'Visible' : 'Oculto'}`
+        case 'category':
+          return p.category?.name ?? ''
+        case 'updatedAt':
+          return p.updatedAt ?? ''
         default:
           return ''
       }
@@ -180,80 +195,129 @@ export function ProductSpreadsheetTable({
   const headerButtonClass =
     'flex items-center gap-1.5 font-semibold uppercase tracking-wide hover:text-security-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-security-500/40 focus-visible:rounded'
 
+  const toggleRow = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allSelected) {
+        products.forEach((p) => next.delete(p.id))
+      } else {
+        products.forEach((p) => next.add(p.id))
+      }
+      return next
+    })
+  }
+
   return (
     <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
-      <div className="overflow-x-auto">
+      <div className="overflow-auto max-h-[calc(100vh-18rem)]">
         <table className="min-w-max border-separate border-spacing-0 text-sm">
           <thead>
             <tr>
-              <th rowSpan={2} scope="col" aria-sort={sortKey === 'product' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined} className={thSticky}>
+              <th
+                scope="col"
+                style={widthStyle(COLUMN_WIDTHS.select)}
+                className={`${thBase} z-40 px-0`}
+              >
+                <input
+                  ref={headerCheckboxRef}
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  aria-label="Seleccionar todos los productos de la página"
+                  className="h-4 w-4 accent-security-500 cursor-pointer"
+                />
+              </th>
+              <th
+                scope="col"
+                style={widthStyle(COLUMN_WIDTHS.sku)}
+                aria-sort={sortKey === 'sku' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+                className={thBase}
+              >
+                <button onClick={() => handleSort('sku')} className={headerButtonClass}>
+                  SKU
+                  {sortIndicator('sku')}
+                </button>
+              </th>
+              <th
+                scope="col"
+                style={widthStyle(COLUMN_WIDTHS.product)}
+                aria-sort={sortKey === 'product' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+                className={`${thBase} sticky left-0 z-40`}
+              >
                 <button onClick={() => handleSort('product')} className={headerButtonClass}>
                   Producto
                   {sortIndicator('product')}
                 </button>
               </th>
-              <th rowSpan={2} scope="col" className={thBase}>
-                <button onClick={() => handleSort('category')} className={headerButtonClass}>
-                  Categoría
-                  {sortIndicator('category')}
-                </button>
-              </th>
-              <th rowSpan={2} scope="col" className={thBase}>
+              <th
+                scope="col"
+                style={widthStyle(COLUMN_WIDTHS.brand)}
+                aria-sort={sortKey === 'brand' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+                className={thBase}
+              >
                 <button onClick={() => handleSort('brand')} className={headerButtonClass}>
                   Marca
                   {sortIndicator('brand')}
                 </button>
               </th>
-              <th rowSpan={2} scope="col" className={thBase}>
-                <button onClick={() => handleSort('status')} className={headerButtonClass}>
-                  Estado
-                  {sortIndicator('status')}
+              <th
+                scope="col"
+                style={widthStyle(COLUMN_WIDTHS.category)}
+                aria-sort={sortKey === 'category' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+                className={thBase}
+              >
+                <button onClick={() => handleSort('category')} className={headerButtonClass}>
+                  Categoría
+                  {sortIndicator('category')}
                 </button>
               </th>
-              {groups.map(({ group, lists }) => (
+              {PRICE_COLUMN_SPECS.map((spec) => (
                 <th
-                  key={group}
-                  scope="colgroup"
-                  colSpan={lists.length}
-                  className={`${cellBase} px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-widest text-security-700 bg-gray-100`}
+                  key={spec.key}
+                  scope="col"
+                  style={widthStyle(COLUMN_WIDTHS.price)}
+                  className={`${thBase} text-right`}
                 >
-                  {group}
+                  {spec.label}
                 </th>
               ))}
-              <th rowSpan={2} scope="col" className={`border-b border-neutral-100 px-4 py-3 text-left text-xs text-gray-600 whitespace-nowrap bg-gray-50`}>
+              <th scope="col" style={widthStyle(COLUMN_WIDTHS.visible)} className={`${thBase} text-center`}>
+                Visible
+              </th>
+              <th scope="col" style={widthStyle(COLUMN_WIDTHS.active)} className={`${thBase} text-center`}>
+                Activo
+              </th>
+              <th
+                scope="col"
+                style={widthStyle(COLUMN_WIDTHS.updated)}
+                aria-sort={sortKey === 'updatedAt' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+                className={thBase}
+              >
+                <button onClick={() => handleSort('updatedAt')} className={headerButtonClass}>
+                  Actualizado
+                  {sortIndicator('updatedAt')}
+                </button>
+              </th>
+              <th scope="col" style={widthStyle(COLUMN_WIDTHS.actions)} className={`${thBase} text-center`}>
                 Acciones
               </th>
-            </tr>
-            <tr>
-              {groups.flatMap(({ lists }) =>
-                lists.map((list) => {
-                  const key: SortKey = `price:${list.id}`
-                  return (
-                    <th
-                      key={list.id}
-                      scope="col"
-                      aria-sort={sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
-                      className={thBase}
-                    >
-                      <button onClick={() => handleSort(key)} className={headerButtonClass} title={`Ordenar por ${list.name}`}>
-                        {list.name}
-                        {sortIndicator(key)}
-                      </button>
-                    </th>
-                  )
-                })
-              )}
             </tr>
           </thead>
           <tbody>
             {isLoading
               ? Array.from({ length: 6 }).map((_, rowIndex) => (
                   <tr key={rowIndex} className="animate-pulse">
-                    {Array.from({ length: totalCols }).map((_, colIndex) => (
-                      <td
-                        key={colIndex}
-                        className={`${cellBase} px-4 py-4 ${colIndex === 0 ? 'sticky left-0 z-10 bg-white' : ''}`}
-                      >
+                    {Array.from({ length: TOTAL_COLS }).map((_, colIndex) => (
+                      <td key={colIndex} className={`${cellBase} px-3 py-4 ${colIndex === 2 ? 'sticky left-0 z-10 bg-white' : ''}`}>
                         <div className="h-3 bg-gray-100 rounded w-20"></div>
                       </td>
                     ))}
@@ -261,82 +325,132 @@ export function ProductSpreadsheetTable({
                 ))
               : sortedProducts.length === 0 && (
                   <tr>
-                    <td colSpan={totalCols} className="px-6 py-12 text-center text-gray-400">
+                    <td colSpan={TOTAL_COLS} className="px-6 py-12 text-center text-gray-400">
                       No hay productos
                     </td>
                   </tr>
                 )}
             {!isLoading &&
               sortedProducts.map((product) => {
+                const selected = selectedIds.has(product.id)
                 const activeClass = product.isActive
                   ? 'bg-emerald-100 text-emerald-700'
                   : 'bg-red-100 text-red-700'
                 const visibleClass = product.isVisible
                   ? 'bg-security-100 text-security-700'
                   : 'bg-gray-100 text-gray-600'
+                const prices = resolvePriceColumns(product)
+
                 return (
-                  <tr key={product.id} className="group/row transition-colors hover:bg-gray-50">
-                    <td className="sticky left-0 z-10 bg-white group-hover/row:bg-gray-50 min-w-[11rem] px-4 py-3 border-r border-b border-neutral-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
+                  <tr
+                    key={product.id}
+                    onClick={canWrite ? () => onEdit(product) : undefined}
+                    className={`group/row transition-colors ${
+                      selected ? 'bg-security-50/60' : ''
+                    } ${canWrite ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                  >
+                    <td
+                      style={widthStyle(COLUMN_WIDTHS.select)}
+                      className={`${cellBase} px-2 py-3 text-center`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleRow(product.id)}
+                        aria-label={`Seleccionar ${product.name}`}
+                        className="h-4 w-4 accent-security-500 cursor-pointer"
+                      />
+                    </td>
+                    <td style={widthStyle(COLUMN_WIDTHS.sku)} className={`${cellBase} px-3 py-3`}>
+                      <span className="text-xs text-gray-500 font-mono truncate block">{product.sku}</span>
+                    </td>
+                    <td
+                      style={widthStyle(COLUMN_WIDTHS.product)}
+                      className={`${cellBase} sticky left-0 z-10 px-3 py-3 ${
+                        selected ? 'bg-security-50/60' : 'bg-white group-hover/row:bg-gray-50'
+                      }`}
+                    >
+                      <div
+                        role={canWrite ? 'button' : undefined}
+                        tabIndex={canWrite ? 0 : undefined}
+                        aria-label={canWrite ? `Editar ${product.name}` : undefined}
+                        title={product.name}
+                        onKeyDown={(e) => {
+                          if (!canWrite) return
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            onEdit(product)
+                          }
+                        }}
+                        className={`flex items-start gap-3 ${
+                          canWrite
+                            ? 'focus:outline-none focus-visible:ring-2 focus-visible:ring-security-500/40 focus-visible:rounded cursor-pointer'
+                            : ''
+                        }`}
+                      >
+                        <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
                           {product.images[0]?.url ? (
-                            <img src={product.images[0].url} alt={product.name} className="w-9 h-9 object-cover" />
+                            <img src={product.images[0].url} alt="" className="w-8 h-8 object-cover" />
                           ) : (
                             <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                             </svg>
                           )}
                         </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">{product.name}</p>
-                          <p className="text-xs text-gray-400 font-mono">{product.sku}</p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 line-clamp-2 break-words">
+                            {product.name}
+                          </p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 border-r border-b border-neutral-100 min-w-[10rem]">
-                      {product.category?.name}
+                    <td style={widthStyle(COLUMN_WIDTHS.brand)} className={`${cellBase} px-3 py-3`}>
+                      <span className="text-sm text-gray-600">{product.brand?.name}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 border-r border-b border-neutral-100 min-w-[10rem]">
-                      {product.brand?.name}
+                    <td style={widthStyle(COLUMN_WIDTHS.category)} className={`${cellBase} px-3 py-3`}>
+                      <span className="text-sm text-gray-600">{product.category?.name}</span>
                     </td>
-                    <td className="px-4 py-3 border-r border-b border-neutral-100 min-w-[10rem]">
-                      <div className="flex items-center gap-2">
-                        <ProductStatusBadge
-                          label={product.isActive ? 'Activo' : 'Inactivo'}
-                          className={`px-2 py-1 text-xs font-medium rounded ${activeClass}`}
-                          onClick={() => onToggleActive(product.id)}
-                        />
-                        <ProductStatusBadge
-                          label={product.isVisible ? 'Visible' : 'Oculto'}
-                          className={`px-2 py-1 text-xs font-medium rounded ${visibleClass}`}
-                          onClick={() => onToggleVisibility(product.id)}
-                        />
-                      </div>
+                    {PRICE_COLUMN_SPECS.map((spec) => (
+                      <td key={spec.key} style={widthStyle(COLUMN_WIDTHS.price)} className={`${cellBase} px-3 py-3`}>
+                        <div className="flex justify-end">
+                          <PriceCellValue price={prices[spec.key]} />
+                        </div>
+                      </td>
+                    ))}
+                    <td
+                      style={widthStyle(COLUMN_WIDTHS.visible)}
+                      className={`${cellBase} px-2 py-3 text-center`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ProductStatusBadge
+                        label={product.isVisible ? 'Visible' : 'Oculto'}
+                        onClick={() => onToggleVisibility(product.id)}
+                        className={`px-2 py-1 text-xs font-medium rounded whitespace-nowrap ${visibleClass}`}
+                      />
                     </td>
-                    {columns.map((list) => {
-                      const price = priceOf(product, list.id)
-                      return (
-                        <td key={list.id} className="border-r border-b border-neutral-100 p-0 align-middle min-w-[11rem]">
-                          {hasPermission('products:write') ? (
-                            <button
-                              onClick={() => onEdit(product)}
-                              title={`Editar precio en ${list.name}`}
-                              aria-label={`Editar precio en ${list.name} de ${product.name}`}
-                              className="relative flex w-full items-center justify-end gap-1.5 px-3 py-3 hover:bg-security-50 focus:outline-none focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-security-500/40"
-                            >
-                              <PriceCellValue price={price} />
-                            </button>
-                          ) : (
-                            <div className="px-3 py-3 flex justify-end">
-                              <PriceCellValue price={price} />
-                            </div>
-                          )}
-                        </td>
-                      )
-                    })}
-                    <td className="px-4 py-3 border-b border-neutral-100">
-                      <div className="flex items-center gap-1 justify-end">
-                        {hasPermission('products:write') && (
+                    <td
+                      style={widthStyle(COLUMN_WIDTHS.active)}
+                      className={`${cellBase} px-2 py-3 text-center`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ProductStatusBadge
+                        label={product.isActive ? 'Activo' : 'Inactivo'}
+                        onClick={() => onToggleActive(product.id)}
+                        className={`px-2 py-1 text-xs font-medium rounded whitespace-nowrap ${activeClass}`}
+                      />
+                    </td>
+                    <td style={widthStyle(COLUMN_WIDTHS.updated)} className={`${cellBase} px-3 py-3`}>
+                      <span className="text-sm text-gray-600 tabular-nums">{formatDate(product.updatedAt)}</span>
+                    </td>
+                    <td
+                      style={widthStyle(COLUMN_WIDTHS.actions)}
+                      className={`${cellBase} px-2 py-3`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        {canWrite && (
                           <button
                             onClick={() => onEdit(product)}
                             className="p-2 text-gray-400 hover:text-security-600 hover:bg-security-50 rounded-lg transition-colors"
@@ -347,10 +461,10 @@ export function ProductSpreadsheetTable({
                             </svg>
                           </button>
                         )}
-                        {hasPermission('products:delete') && (
+                        {canDelete && (
                           <button
                             onClick={() => {
-                              if (confirm('¿Eliminar este producto?')) {
+                              if (window.confirm('¿Eliminar este producto?')) {
                                 onDelete(product.id)
                               }
                             }}
