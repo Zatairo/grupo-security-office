@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../services/api'
 import { hasPermission } from '../lib/rbac'
+import { getApiErrorMessage } from '../lib/apiError'
 
 interface PriceList {
   id: string
@@ -77,6 +78,14 @@ export default function PricesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['priceList'] })
       queryClient.invalidateQueries({ queryKey: ['priceLists'] })
+    },
+  })
+
+  const toggleList = useMutation({
+    mutationFn: (id: string) => api.patch(`/prices/lists/${id}/toggle-active`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['priceLists'] })
+      queryClient.invalidateQueries({ queryKey: ['priceList'] })
     },
   })
 
@@ -271,9 +280,25 @@ export default function PricesPage() {
                   </span>
                   <span>{list.currency}</span>
                 </div>
-                <span className={`px-2 py-1 text-xs font-medium rounded ${list.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                  {list.isActive ? 'Activa' : 'Inactiva'}
-                </span>
+                {hasPermission('prices:write') ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleList.mutate(list.id) }}
+                    className="flex items-center gap-2"
+                    aria-pressed={list.isActive}
+                    title={list.isActive ? 'Desactivar lista' : 'Activar lista'}
+                  >
+                    <span className={`w-9 h-5 rounded-full relative transition-colors ${list.isActive ? 'bg-emerald-500' : 'bg-gray-300'}`}>
+                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${list.isActive ? 'left-4' : 'left-0.5'}`} />
+                    </span>
+                    <span className={`text-xs font-medium ${list.isActive ? 'text-emerald-700' : 'text-gray-500'}`}>
+                      {list.isActive ? 'Activa' : 'Inactiva'}
+                    </span>
+                  </button>
+                ) : (
+                  <span className={`px-2 py-1 text-xs font-medium rounded ${list.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                    {list.isActive ? 'Activa' : 'Inactiva'}
+                  </span>
+                )}
               </div>
               {(list.validFrom || list.validUntil) && (
                 <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-gray-400">
@@ -305,6 +330,7 @@ function PriceListModal({ list, onClose, onSuccess }: { list?: PriceList; onClos
     validFrom: list?.validFrom?.split('T')[0] || '',
     validUntil: list?.validUntil?.split('T')[0] || '',
   })
+  const [formError, setFormError] = useState<string | null>(null)
 
   const mutation = useMutation({
     mutationFn: (data: typeof form) => {
@@ -312,7 +338,14 @@ function PriceListModal({ list, onClose, onSuccess }: { list?: PriceList; onClos
       return list ? api.put(`/prices/lists/${list.id}`, payload) : api.post('/prices/lists', payload)
     },
     onSuccess,
+    onError: (error) => setFormError(getApiErrorMessage(error, 'No se pudo guardar la lista de precios')),
   })
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setFormError(null)
+    mutation.mutate(form)
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -325,7 +358,12 @@ function PriceListModal({ list, onClose, onSuccess }: { list?: PriceList; onClos
             </button>
           </div>
         </div>
-        <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(form) }} className="p-6 space-y-4">
+        <form onSubmit={submit} className="p-6 space-y-4">
+          {formError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2.5 text-sm" role="alert">
+              {formError}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre</label>
@@ -340,6 +378,7 @@ function PriceListModal({ list, onClose, onSuccess }: { list?: PriceList; onClos
               <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary">
                 <option value="COP">COP - Peso Colombiano</option>
                 <option value="USD">USD - Dólar</option>
+                <option value="EUR">EUR - Euro</option>
               </select>
             </div>
             <div>
@@ -428,6 +467,7 @@ function PriceModal({ priceListId, priceListName, products, price, onClose, onSu
               <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary">
                 <option value="COP">COP</option>
                 <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
               </select>
             </div>
             <div>
