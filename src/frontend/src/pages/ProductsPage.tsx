@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import ImportWizard from '../features/products/import/components/ImportWizard'
 import { IMPORT_WIZARD_STORAGE_KEY } from '../features/products/import/store/import.store'
 import type { Product } from '../features/products/types/product.types'
@@ -9,6 +9,7 @@ import { ProductCard } from '../features/products/components/ProductCard'
 import { ProductTableRow } from '../features/products/components/ProductTableRow'
 import { ProductSpreadsheetTable } from '../features/products/components/ProductSpreadsheetTable'
 import ProductFormModal from '../features/products/components/ProductFormModal'
+import { fetchMyCatalogs } from '../services/catalogs.service'
 import { hasPermission } from '../lib/rbac'
 import { Button } from '../components/ui'
 
@@ -32,16 +33,25 @@ export default function ProductsPage() {
   const [categoryId, setCategoryId] = useState('')
   const [brandId, setBrandId] = useState('')
   const [status, setStatus] = useState('')
+  const [catalogId, setCatalogId] = useState('')
   const [page, setPage] = useState(1)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(hasPersistedImportState)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
 
+  const myCatalogsQuery = useQuery({
+    queryKey: ['myCatalogs'],
+    queryFn: fetchMyCatalogs,
+  })
+  const myCatalogs = myCatalogsQuery.data ?? []
+  const activeCatalogId = catalogId || (myCatalogs.length === 1 ? myCatalogs[0]?.id ?? '' : '')
+
   const filters = {
     search,
     categoryId,
     brandId,
+    catalogId: activeCatalogId || undefined,
     isVisible: status === 'visible' ? true : status === 'hidden' ? false : undefined,
     isActive: status === 'active' ? true : status === 'inactive' ? false : undefined,
   }
@@ -55,7 +65,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [search, categoryId, brandId, status])
+  }, [search, categoryId, brandId, status, activeCatalogId])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -113,6 +123,31 @@ export default function ProductsPage() {
             />
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
+            {myCatalogs.length > 1 && (
+              <select
+                value={catalogId}
+                onChange={(e) => setCatalogId(e.target.value)}
+                className="px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm bg-white"
+                aria-label="Filtrar por catálogo"
+              >
+                <option value="">Todos los catálogos</option>
+                {myCatalogs.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {myCatalogs.length === 1 && (
+              <select
+                value={activeCatalogId}
+                disabled
+                className="px-3 py-2.5 border border-neutral-300 rounded-lg text-sm bg-neutral-50 text-neutral-500 cursor-not-allowed"
+                aria-label="Catálogo activo"
+              >
+                <option value={activeCatalogId}>{myCatalogs[0]?.name}</option>
+              </select>
+            )}
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}

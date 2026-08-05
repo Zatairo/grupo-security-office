@@ -9,6 +9,7 @@ import CategoriesPage from './pages/CategoriesPage'
 import BrandsPage from './pages/BrandsPage'
 import PricesPage from './pages/PricesPage'
 import CatalogsPage from './pages/CatalogsPage'
+import CatalogDetailPage from './pages/CatalogDetailPage'
 import AssignmentsPage from './pages/AssignmentsPage'
 import CommercialSettingsPage from './pages/CommercialSettingsPage'
 import UsersPage from './pages/UsersPage'
@@ -44,6 +45,7 @@ function App() {
           <Route path="brands" element={<BrandsPage />} />
           <Route path="price-lists" element={<PricesPage />} />
           <Route path="catalogs" element={<CatalogsPage />} />
+          <Route path="catalogs/:catalogId" element={<CatalogDetailPage />} />
           <Route path="assignments" element={<AssignmentsPage />} />
           <Route path="settings" element={<CommercialSettingsPage />} />
         </Route>
