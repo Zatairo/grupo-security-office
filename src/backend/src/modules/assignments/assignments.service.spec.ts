@@ -155,14 +155,14 @@ describe('AssignmentsService', () => {
   describe('update', () => {
     it('debe actualizar level', async () => {
       mockPrisma.assignment.findUnique.mockResolvedValue(mockAssignment);
-      mockPrisma.assignment.update.mockResolvedValue({ ...mockAssignment, level: 'admin' });
+      mockPrisma.assignment.update.mockResolvedValue({ ...mockAssignment, level: 'manage' });
 
-      const result = await service.update('assign-1', { level: 'admin' });
+      const result = await service.update('assign-1', { level: 'manage' });
 
-      expect(result.level).toBe('admin');
+      expect(result.level).toBe('manage');
       expect(mockPrisma.assignment.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ level: 'admin' }),
+          data: expect.objectContaining({ level: 'manage' }),
         }),
       );
     });
@@ -179,8 +179,8 @@ describe('AssignmentsService', () => {
     it('debe lanzar NotFoundException si la asignación no existe', async () => {
       mockPrisma.assignment.findUnique.mockResolvedValue(null);
 
-      await expect(service.update('no-existe', { level: 'admin' })).rejects.toThrow(NotFoundException);
-      await expect(service.update('no-existe', { level: 'admin' })).rejects.toThrow('Asignación no encontrada');
+      await expect(service.update('no-existe', { level: 'manage' })).rejects.toThrow(NotFoundException);
+      await expect(service.update('no-existe', { level: 'manage' })).rejects.toThrow('Asignación no encontrada');
     });
   });
 
