@@ -51,6 +51,20 @@ describe('CatalogsService', () => {
       expect(result.data).toHaveLength(1);
       expect(result.data[0].productCount).toBe(197);
     });
+
+    it('debe aplicar ACL: usuario con asignación CATALOG ve solo los suyos', async () => {
+      mockPrisma.assignment.findMany.mockResolvedValue([{ resourceId: 'catalog-1' }]);
+      mockPrisma.catalog.findMany.mockResolvedValue([mockCatalogWithCount]);
+
+      const result = await service.findAll('user-1', ['Operador']);
+
+      expect(result.data).toHaveLength(1);
+      expect(mockPrisma.catalog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: { in: ['catalog-1'] } }),
+        }),
+      );
+    });
   });
 
   describe('findMine', () => {
@@ -65,6 +79,61 @@ describe('CatalogsService', () => {
         }),
       );
       expect(result.data[0].productCount).toBe(197);
+    });
+
+    describe('regla ACL por asignaciones', () => {
+      it('Super Admin ve todos los catálogos activos sin consultar asignaciones', async () => {
+        mockPrisma.catalog.findMany.mockResolvedValue([mockCatalogWithCount]);
+
+        const result = await service.findMine('user-admin', ['Super Admin']);
+
+        expect(result.data).toHaveLength(1);
+        expect(mockPrisma.assignment.findMany).not.toHaveBeenCalled();
+        expect(mockPrisma.catalog.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: expect.objectContaining({ isActive: true }) }),
+        );
+      });
+
+      it('usuario con asignación CATALOG ve solo ese catálogo', async () => {
+        mockPrisma.assignment.findMany.mockResolvedValue([
+          { resourceId: 'catalog-1' },
+          { resourceId: 'catalog-2' },
+        ]);
+        mockPrisma.catalog.findMany.mockResolvedValue([mockCatalogWithCount]);
+
+        const result = await service.findMine('user-1', ['Operador']);
+
+        expect(result.data).toHaveLength(1);
+        expect(mockPrisma.assignment.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              userId: 'user-1',
+              resourceType: 'CATALOG',
+              isActive: true,
+            }),
+          }),
+        );
+        expect(mockPrisma.catalog.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              isActive: true,
+              id: { in: ['catalog-1', 'catalog-2'] },
+            }),
+          }),
+        );
+      });
+
+      it('usuario sin asignaciones CATALOG ve todos los activos', async () => {
+        mockPrisma.assignment.findMany.mockResolvedValue([]);
+        mockPrisma.catalog.findMany.mockResolvedValue([mockCatalogWithCount]);
+
+        const result = await service.findMine('user-2', ['Operador']);
+
+        expect(result.data).toHaveLength(1);
+        expect(mockPrisma.catalog.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: expect.objectContaining({ isActive: true }) }),
+        );
+      });
     });
   });
 
@@ -83,6 +152,61 @@ describe('CatalogsService', () => {
 
       await expect(service.findOne('no-existe')).rejects.toThrow(NotFoundException);
       await expect(service.findOne('no-existe')).rejects.toThrow('Catálogo no encontrado');
+    });
+
+    describe('ACL por recurso en findOne', () => {
+      it('Super Admin accede sin consultar asignaciones', async () => {
+        mockPrisma.catalog.findUnique.mockResolvedValue(mockCatalogWithCount);
+
+        const result = await service.findOne('catalog-1', 'user-admin', ['Super Admin']);
+
+        expect(result.id).toBe('catalog-1');
+        expect(mockPrisma.assignment.findMany).not.toHaveBeenCalled();
+      });
+
+      it('usuario sin asignaciones CATALOG accede (comportamiento abierto)', async () => {
+        mockPrisma.catalog.findUnique.mockResolvedValue(mockCatalogWithCount);
+        mockPrisma.assignment.findMany.mockResolvedValue([]);
+
+        const result = await service.findOne('catalog-1', 'user-2', ['Operador']);
+
+        expect(result.id).toBe('catalog-1');
+        expect(mockPrisma.assignment.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              userId: 'user-2',
+              resourceType: 'CATALOG',
+              isActive: true,
+            }),
+          }),
+        );
+      });
+
+      it('usuario con asignación accede a su propio catálogo', async () => {
+        mockPrisma.catalog.findUnique.mockResolvedValue(mockCatalogWithCount);
+        mockPrisma.assignment.findMany.mockResolvedValue([
+          { resourceId: 'catalog-1' },
+        ]);
+
+        const result = await service.findOne('catalog-1', 'user-1', ['Operador']);
+
+        expect(result.id).toBe('catalog-1');
+      });
+
+      it('usuario con asignación recibe 404 por catálogo ajeno (no revela existencia)', async () => {
+        mockPrisma.catalog.findUnique.mockResolvedValue({
+          ...mockCatalogWithCount,
+          id: 'catalog-ajeno',
+        });
+        mockPrisma.assignment.findMany.mockResolvedValue([
+          { resourceId: 'catalog-1' },
+        ]);
+
+        await expect(service.findOne('catalog-ajeno', 'user-1', ['Operador']))
+          .rejects.toThrow(NotFoundException);
+        await expect(service.findOne('catalog-ajeno', 'user-1', ['Operador']))
+          .rejects.toThrow('Catálogo no encontrado');
+      });
     });
   });
 

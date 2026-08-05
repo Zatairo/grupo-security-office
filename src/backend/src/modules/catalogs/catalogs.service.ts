@@ -7,8 +7,43 @@ import { UpdateCatalogDto } from './dto/update-catalog.dto';
 export class CatalogsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll() {
+  /**
+   * Construye el where de catálogos según la capa ACL (adicional al RBAC).
+   * Regla:
+   *  - Super Admin → todos los catálogos (baseWhere).
+   *  - Usuario con asignaciones activas de tipo CATALOG → solo esos catálogos.
+   *  - Usuario sin asignaciones de tipo CATALOG → todos (baseWhere).
+   */
+  private async buildAclWhere(
+    userId: string | undefined,
+    roles: string[],
+    onlyActive: boolean,
+  ): Promise<Record<string, unknown>> {
+    const baseWhere: Record<string, unknown> = onlyActive ? { isActive: true } : {};
+
+    if (!userId || roles.includes('Super Admin')) {
+      return baseWhere;
+    }
+
+    const assignments = await this.prisma.assignment.findMany({
+      where: { userId, resourceType: 'CATALOG', isActive: true },
+      select: { resourceId: true },
+    });
+
+    if (assignments.length === 0) {
+      return baseWhere;
+    }
+
+    return {
+      ...baseWhere,
+      id: { in: assignments.map((a) => a.resourceId) },
+    };
+  }
+
+  async findAll(userId?: string, roles: string[] = []) {
+    const where = await this.buildAclWhere(userId, roles, false);
     const catalogs = await this.prisma.catalog.findMany({
+      where,
       include: {
         _count: { select: { products: true } },
       },
@@ -23,9 +58,10 @@ export class CatalogsService {
     };
   }
 
-  async findMine() {
+  async findMine(userId?: string, roles: string[] = []) {
+    const where = await this.buildAclWhere(userId, roles, true);
     const catalogs = await this.prisma.catalog.findMany({
-      where: { isActive: true },
+      where,
       include: {
         _count: { select: { products: true } },
       },
@@ -40,7 +76,7 @@ export class CatalogsService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, userId?: string, roles: string[] = []) {
     const catalog = await this.prisma.catalog.findUnique({
       where: { id },
       include: {
@@ -49,10 +85,43 @@ export class CatalogsService {
     });
 
     if (!catalog) throw new NotFoundException('Catálogo no encontrado');
+
+    await this.assertCatalogAccess(id, userId, roles);
+
     return {
       ...catalog,
       productCount: catalog._count.products,
     };
+  }
+
+  /**
+   * ACL por recurso para GET /:id (misma regla que findAll/findMine):
+   *  - Super Admin → acceso total.
+   *  - Usuario con asignaciones activas CATALOG → solo sus resourceId (404 si no).
+   *  - Usuario sin asignaciones CATALOG → acceso abierto.
+   */
+  private async assertCatalogAccess(
+    resourceId: string,
+    userId?: string,
+    roles: string[] = [],
+  ): Promise<void> {
+    if (!userId || roles.includes('Super Admin')) {
+      return;
+    }
+
+    const assignments = await this.prisma.assignment.findMany({
+      where: { userId, resourceType: 'CATALOG', isActive: true },
+      select: { resourceId: true },
+    });
+
+    if (assignments.length === 0) {
+      return;
+    }
+
+    const allowedIds = assignments.map((a) => a.resourceId);
+    if (!allowedIds.includes(resourceId)) {
+      throw new NotFoundException('Catálogo no encontrado');
+    }
   }
 
   async create(dto: CreateCatalogDto) {

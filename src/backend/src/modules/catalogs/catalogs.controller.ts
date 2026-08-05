@@ -4,6 +4,7 @@ import { CatalogsService } from './catalogs.service';
 import { CreateCatalogDto } from './dto/create-catalog.dto';
 import { UpdateCatalogDto } from './dto/update-catalog.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
@@ -17,22 +18,22 @@ export class CatalogsController {
   @Get('mine')
   @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Listar catálogos activos' })
-  findMine() {
-    return this.catalogsService.findMine();
+  findMine(@CurrentUser() user: any) {
+    return this.catalogsService.findMine(user?.sub ?? user?.id, user?.roles ?? []);
   }
 
   @Get()
   @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Listar catálogos' })
-  findAll() {
-    return this.catalogsService.findAll();
+  findAll(@CurrentUser() user: any) {
+    return this.catalogsService.findAll(user?.sub ?? user?.id, user?.roles ?? []);
   }
 
   @Get(':id')
   @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Obtener catálogo por ID con conteo de productos' })
-  findOne(@Param('id') id: string) {
-    return this.catalogsService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.catalogsService.findOne(id, user?.sub ?? user?.id, user?.roles ?? []);
   }
 
   @Post()

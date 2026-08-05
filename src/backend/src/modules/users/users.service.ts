@@ -147,6 +147,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('Usuario no encontrado');
 
+    await this.prisma.assignment.deleteMany({ where: { userId: id } });
     await this.prisma.userRole.deleteMany({ where: { userId: id } });
     await this.prisma.user.delete({ where: { id } });
 

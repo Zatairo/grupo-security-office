@@ -156,13 +156,28 @@ describe('UsersService', () => {
   describe('remove', () => {
     it('debe eliminar un usuario', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.assignment.deleteMany.mockResolvedValue({ count: 0 });
       mockPrisma.userRole.deleteMany.mockResolvedValue({ count: 0 });
       mockPrisma.user.delete.mockResolvedValue(mockUser);
 
       const result = await service.remove('user-1');
 
       expect(result.message).toBe('Usuario eliminado exitosamente');
+      expect(mockPrisma.assignment.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } });
       expect(mockPrisma.userRole.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } });
+      expect(mockPrisma.user.delete).toHaveBeenCalledWith({ where: { id: 'user-1' } });
+    });
+
+    it('debe eliminar usuario con assignment activa sin errores (limpia assignments físicamente)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.assignment.deleteMany.mockResolvedValue({ count: 2 });
+      mockPrisma.userRole.deleteMany.mockResolvedValue({ count: 1 });
+      mockPrisma.user.delete.mockResolvedValue(mockUser);
+
+      const result = await service.remove('user-1');
+
+      expect(result.message).toBe('Usuario eliminado exitosamente');
+      expect(mockPrisma.assignment.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } });
       expect(mockPrisma.user.delete).toHaveBeenCalledWith({ where: { id: 'user-1' } });
     });
 

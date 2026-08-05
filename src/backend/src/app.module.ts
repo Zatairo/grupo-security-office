@@ -10,6 +10,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { BrandsModule } from './modules/brands/brands.module';
 import { CatalogsModule } from './modules/catalogs/catalogs.module';
+import { AssignmentsModule } from './modules/assignments/assignments.module';
 import { PricesModule } from './modules/prices/prices.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { HealthModule } from './modules/health/health.module';
@@ -39,6 +40,7 @@ import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
     CategoriesModule,
     BrandsModule,
     CatalogsModule,
+    AssignmentsModule,
     PricesModule,
     AuditModule,
     HealthModule,
