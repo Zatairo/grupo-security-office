@@ -83,6 +83,19 @@ describe('ProductsService', () => {
         }),
       );
     });
+
+    it('debe filtrar por catalogId', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([]);
+      mockPrisma.product.count.mockResolvedValue(0);
+
+      await service.findAll({ catalogId: 'catalog-2' });
+
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ catalogId: 'catalog-2' }),
+        }),
+      );
+    });
   });
 
   describe('findOne', () => {
@@ -106,6 +119,7 @@ describe('ProductsService', () => {
       mockPrisma.product.findUnique.mockResolvedValueOnce(null);
       mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
       mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'cat-def', code: 'CAT-DEFAULT' });
       mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
 
       const dto = {
@@ -120,6 +134,54 @@ describe('ProductsService', () => {
       const result = await service.create(dto);
 
       expect(result.sku).toBe('CAM-001');
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ catalogId: 'cat-def' }),
+        }),
+      );
+    });
+
+    it('debe usar el catalogId enviado en el create', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'catalog-2', code: 'CAT-VENTAS' });
+      mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
+
+      const dto = {
+        sku: 'CAM-001',
+        name: 'Cámara IP',
+        categoryId: 'cat-1',
+        brandId: 'brand-1',
+        catalogId: 'catalog-2',
+      };
+
+      await service.create(dto);
+
+      expect(mockPrisma.catalog.findUnique).toHaveBeenCalledWith({ where: { id: 'catalog-2' } });
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ catalogId: 'catalog-2' }),
+        }),
+      );
+    });
+
+    it('debe lanzar NotFoundException si el catálogo enviado no existe', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.catalog.findUnique.mockResolvedValue(null);
+
+      const dto = {
+        sku: 'CAM-001',
+        name: 'Cámara IP',
+        categoryId: 'cat-1',
+        brandId: 'brand-1',
+        catalogId: 'no-existe',
+      };
+
+      await expect(service.create(dto)).rejects.toThrow(NotFoundException);
+      await expect(service.create(dto)).rejects.toThrow('Catálogo no encontrado');
     });
 
     it('debe rechazar SKU duplicado con ConflictException', async () => {
@@ -154,6 +216,7 @@ describe('ProductsService', () => {
       mockPrisma.product.findUnique.mockResolvedValueOnce(null);
       mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
       mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'cat-def', code: 'CAT-DEFAULT' });
       mockPrisma.priceList.findMany.mockResolvedValue([{ id: 'pl-1' }]);
       mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
       mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
@@ -190,6 +253,7 @@ describe('ProductsService', () => {
       mockPrisma.product.findUnique.mockResolvedValueOnce(null);
       mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
       mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'cat-def', code: 'CAT-DEFAULT' });
       mockPrisma.priceList.findMany.mockResolvedValue([]);
 
       const dto = {

@@ -74,11 +74,17 @@ export class BatchExecutorService {
     };
 
     // Pre-cargar categorías y marcas existentes
-    const [existingCategories, existingBrands, existingPriceLists] = await Promise.all([
+    const [existingCategories, existingBrands, existingPriceLists, defaultCatalog] = await Promise.all([
       this.prisma.category.findMany({ select: { id: true, name: true, slug: true } }),
       this.prisma.brand.findMany({ select: { id: true, name: true, slug: true } }),
       this.prisma.priceList.findMany({ select: { id: true, code: true, name: true } }),
+      this.prisma.catalog.findUnique({ where: { code: 'CAT-DEFAULT' }, select: { id: true } }),
     ]);
+
+    if (!defaultCatalog) {
+      throw new Error('Catálogo por defecto (CAT-DEFAULT) no encontrado');
+    }
+    const defaultCatalogId = defaultCatalog.id;
 
     const categoryMap = new Map<string, { id: string; name: string; slug: string }>(
       existingCategories.map((c) => [c.name.toLowerCase(), c]),
@@ -102,6 +108,7 @@ export class BatchExecutorService {
           categoryMap,
           brandMap,
           priceListMap,
+          defaultCatalogId,
           ctx,
         );
 
@@ -155,6 +162,7 @@ export class BatchExecutorService {
     categoryMap: Map<string, { id: string; name: string; slug: string }>,
     brandMap: Map<string, { id: string; name: string; slug: string }>,
     priceListMap: Map<string, { id: string; code: string; name: string }>,
+    defaultCatalogId: string,
     ctx: ImportContext,
   ): Promise<{
     created: number;
@@ -236,6 +244,7 @@ export class BatchExecutorService {
                 description: row.description ?? undefined,
                 categoryId: categoryResult.id,
                 brandId: brandResult.id,
+                catalogId: defaultCatalogId,
                 technicalSpecs: (row.technicalSpecs as Prisma.InputJsonValue) ?? Prisma.JsonNull,
                 extraAttributes: (row.extraAttributes as Prisma.InputJsonValue) ?? Prisma.JsonNull,
                 isActive: true,

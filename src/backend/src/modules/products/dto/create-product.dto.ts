@@ -27,6 +27,11 @@ export class CreateProductDto {
   @IsString()
   brandId: string;
 
+  @ApiPropertyOptional({ example: 'catalog-uuid-here', description: 'Si no se envía, se asigna el catálogo por defecto (CAT-DEFAULT)' })
+  @IsString()
+  @IsOptional()
+  catalogId?: string;
+
   @ApiPropertyOptional({ example: { resolution: '4MP', lens: '2.8mm', nightVision: '30m' } })
   @IsObject()
   @IsOptional()

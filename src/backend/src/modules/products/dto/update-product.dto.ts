@@ -32,6 +32,11 @@ export class UpdateProductDto {
   brandId?: string;
 
   @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  catalogId?: string;
+
+  @ApiPropertyOptional()
   @IsObject()
   @IsOptional()
   technicalSpecs?: Record<string, any>;

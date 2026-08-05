@@ -36,6 +36,7 @@ export class ProductsController {
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'categoryId', required: false, type: String })
   @ApiQuery({ name: 'brandId', required: false, type: String })
+  @ApiQuery({ name: 'catalogId', required: false, type: String })
   @ApiQuery({ name: 'isVisible', required: false, type: Boolean })
   @ApiQuery({ name: 'isActive', required: false, type: Boolean })
   findAll(
@@ -47,6 +48,7 @@ export class ProductsController {
       search: query.search,
       categoryId: query.categoryId,
       brandId: query.brandId,
+      catalogId: query.catalogId,
       isVisible: query.isVisible,
       isActive: query.isActive,
     });
