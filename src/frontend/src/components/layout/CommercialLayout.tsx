@@ -1,4 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { hasRole } from '../../lib/rbac'
+import { ROLES } from '../../lib/roles'
 
 const COMMERCIAL_TABS = [
   { to: '/commercial/products', label: 'Productos', end: true },
@@ -6,9 +8,13 @@ const COMMERCIAL_TABS = [
   { to: '/commercial/brands', label: 'Marcas', end: false },
   { to: '/commercial/price-lists', label: 'Listas de precios', end: false },
   { to: '/commercial/catalogs', label: 'Catálogos', end: false },
-  { to: '/commercial/assignments', label: 'Asignaciones', end: false },
+  { to: '/commercial/assignments', label: 'Asignaciones', end: false, superAdminOnly: true },
   { to: '/commercial/settings', label: 'Configuración', end: false },
 ]
+
+const isSuperAdmin = (): boolean => hasRole(ROLES.SUPER_ADMIN)
+
+const VISIBLE_TABS = COMMERCIAL_TABS.filter((tab) => !tab.superAdminOnly || isSuperAdmin())
 
 export default function CommercialLayout() {
   return (
@@ -16,7 +22,7 @@ export default function CommercialLayout() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="border-b border-[var(--color-border)]">
           <div className="flex items-center overflow-x-auto scrollbar-thin">
-            {COMMERCIAL_TABS.map((tab) => (
+            {VISIBLE_TABS.map((tab) => (
               <NavLink
                 key={tab.to}
                 to={tab.to}

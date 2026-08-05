@@ -23,6 +23,13 @@ function basePriceValue(product: Product): number | undefined {
   return first ? Number(first.value) : undefined
 }
 
+function isNotFoundError(error: unknown): boolean {
+  if (error && typeof error === 'object' && 'response' in error) {
+    return (error as { response?: { status?: number } }).response?.status === 404
+  }
+  return false
+}
+
 export default function CatalogDetailPage() {
   const { catalogId } = useParams<{ catalogId: string }>()
 
@@ -63,6 +70,8 @@ export default function CatalogDetailPage() {
   }
 
   if (catalogQuery.error || !catalog) {
+    const accessDenied = catalogQuery.error ? isNotFoundError(catalogQuery.error) : false
+
     return (
       <div className="space-y-6">
         <nav aria-label="Breadcrumb">
@@ -81,14 +90,26 @@ export default function CatalogDetailPage() {
             </li>
           </ol>
         </nav>
-        <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
-          <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="flex-1">
-            {getApiErrorMessage(catalogQuery.error, 'Catálogo no encontrado')}
-          </span>
-        </div>
+        {accessDenied ? (
+          <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-amber-50 border-amber-200 text-amber-800" role="alert">
+            <svg className="w-5 h-5 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4" />
+            </svg>
+            <span className="flex-1">
+              <span className="font-semibold block">Sin acceso a este catálogo</span>
+              El catálogo no existe o no está dentro de tus asignaciones.
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
+            <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="flex-1">
+              {getApiErrorMessage(catalogQuery.error, 'Catálogo no encontrado')}
+            </span>
+          </div>
+        )}
         <Link
           to="/commercial/catalogs"
           className="inline-flex items-center gap-2 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] rounded"

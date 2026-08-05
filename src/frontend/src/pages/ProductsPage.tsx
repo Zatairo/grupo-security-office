@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import ImportWizard from '../features/products/import/components/ImportWizard'
 import { IMPORT_WIZARD_STORAGE_KEY } from '../features/products/import/store/import.store'
@@ -68,6 +69,32 @@ export default function ProductsPage() {
   }, [search, categoryId, brandId, status, activeCatalogId])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  if (!myCatalogsQuery.isLoading && !myCatalogsQuery.isError && myCatalogs.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-condensed font-bold text-security-800">Productos</h1>
+          <p className="text-sm text-neutral-500 mt-1">Gestiona tu catálogo de productos</p>
+        </div>
+        <div className="bg-white rounded-xl border border-neutral-200 p-12 text-center">
+          <svg className="w-16 h-16 text-neutral-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+          </svg>
+          <h2 className="text-lg font-condensed font-semibold text-neutral-800">Sin catálogos asignados</h2>
+          <p className="text-neutral-500 text-sm mt-1 max-w-md mx-auto">
+            No tienes catálogos asignados para consultar productos. Contacta a tu administrador para solicitar asignaciones.
+          </p>
+          <Link
+            to="/commercial/catalogs"
+            className="inline-flex items-center gap-2 mt-4 px-4 py-2.5 rounded-lg border border-neutral-300 text-sm font-medium text-[var(--color-primary)] hover:border-[var(--color-primary)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+          >
+            Ver Catálogos
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
