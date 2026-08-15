@@ -31,11 +31,6 @@ export class UpdateProductDto {
   @IsOptional()
   brandId?: string;
 
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
-  catalogId?: string;
-
   @ApiPropertyOptional({ example: 'lista-uuid-here', description: 'Lista comercial a la que se reasigna el producto.' })
   @IsString()
   @IsUUID()

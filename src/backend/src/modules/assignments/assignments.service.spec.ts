@@ -26,8 +26,8 @@ const mockAcl = {
 const mockAssignment = {
   id: 'assign-1',
   userId: 'user-1',
-  resourceType: 'CATALOG',
-  resourceId: 'catalog-1',
+  resourceType: 'LISTA',
+  resourceId: 'lista-1',
   level: 'view',
   isActive: true,
   createdAt: new Date(),
@@ -66,11 +66,11 @@ describe('AssignmentsService', () => {
     it('debe filtrar por userId y resourceType', async () => {
       mockPrisma.assignment.findMany.mockResolvedValue([mockAssignment]);
 
-      await service.findAll({ userId: 'user-1', resourceType: 'CATALOG' });
+      await service.findAll({ userId: 'user-1', resourceType: 'LISTA' });
 
       expect(mockPrisma.assignment.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ userId: 'user-1', resourceType: 'CATALOG' }),
+          where: expect.objectContaining({ userId: 'user-1', resourceType: 'LISTA' }),
         }),
       );
     });
@@ -79,11 +79,11 @@ describe('AssignmentsService', () => {
   describe('create', () => {
     it('debe crear una asignación con level por defecto view', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
-      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'catalog-1' });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1' });
       mockPrisma.assignment.findUnique.mockResolvedValue(null);
       mockPrisma.assignment.create.mockResolvedValue(mockAssignment);
 
-      const dto = { userId: 'user-1', resourceType: 'CATALOG', resourceId: 'catalog-1' };
+      const dto = { userId: 'user-1', resourceType: 'LISTA', resourceId: 'lista-1' };
       const result = await service.create(dto);
 
       expect(result.id).toBe('assign-1');
@@ -97,18 +97,26 @@ describe('AssignmentsService', () => {
     it('debe lanzar 404 si el usuario no existe', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
 
-      const dto = { userId: 'no-existe', resourceType: 'CATALOG', resourceId: 'catalog-1' };
+      const dto = { userId: 'no-existe', resourceType: 'LISTA', resourceId: 'lista-1' };
       await expect(service.create(dto)).rejects.toThrow(NotFoundException);
       await expect(service.create(dto)).rejects.toThrow('Usuario no encontrado');
     });
 
-    it('debe lanzar 404 si el recurso CATALOG no existe', async () => {
+    it('debe rechazar resourceType CATALOG como tipo de recurso no soportado', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
-      mockPrisma.catalog.findUnique.mockResolvedValue(null);
 
-      const dto = { userId: 'user-1', resourceType: 'CATALOG', resourceId: 'no-existe' };
+      const dto = { userId: 'user-1', resourceType: 'CATALOG', resourceId: 'catalog-1' };
       await expect(service.create(dto)).rejects.toThrow(NotFoundException);
-      await expect(service.create(dto)).rejects.toThrow('El recurso CATALOG no existe');
+      await expect(service.create(dto)).rejects.toThrow('Tipo de recurso no soportado: CATALOG');
+    });
+
+    it('debe lanzar 404 si el recurso LISTA no existe', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
+      mockPrisma.lista.findUnique.mockResolvedValue(null);
+
+      const dto = { userId: 'user-1', resourceType: 'LISTA', resourceId: 'no-existe' };
+      await expect(service.create(dto)).rejects.toThrow(NotFoundException);
+      await expect(service.create(dto)).rejects.toThrow('El recurso LISTA no existe');
     });
 
     it('debe lanzar 404 si el recurso PRICE_LIST no existe', async () => {
@@ -131,17 +139,17 @@ describe('AssignmentsService', () => {
 
     it('debe lanzar 409 si ya existe una asignación activa', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
-      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'catalog-1' });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1' });
       mockPrisma.assignment.findUnique.mockResolvedValue(mockAssignment);
 
-      const dto = { userId: 'user-1', resourceType: 'CATALOG', resourceId: 'catalog-1' };
+      const dto = { userId: 'user-1', resourceType: 'LISTA', resourceId: 'lista-1' };
       await expect(service.create(dto)).rejects.toThrow(ConflictException);
       await expect(service.create(dto)).rejects.toThrow('Ya existe una asignación activa para ese recurso');
     });
 
     it('debe reactivar un par desactivado (soft-delete) sin colisión', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
-      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'catalog-1' });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1' });
       mockPrisma.assignment.findUnique.mockResolvedValue({
         ...mockAssignment,
         isActive: false,
@@ -152,7 +160,7 @@ describe('AssignmentsService', () => {
         level: 'edit',
       });
 
-      const dto = { userId: 'user-1', resourceType: 'CATALOG', resourceId: 'catalog-1', level: 'edit' };
+      const dto = { userId: 'user-1', resourceType: 'LISTA', resourceId: 'lista-1', level: 'edit' };
       const result = await service.create(dto);
 
       expect(result.isActive).toBe(true);

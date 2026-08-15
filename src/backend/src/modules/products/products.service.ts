@@ -108,13 +108,12 @@ export class ProductsService {
       search?: string;
       categoryId?: string;
       brandId?: string;
-      catalogId?: string;
       isVisible?: boolean;
       isActive?: boolean;
     },
     ctx?: AccessContext,
   ) {
-    const { skip = 0, take = 50, search, categoryId, brandId, catalogId, isVisible, isActive } = params || {};
+    const { skip = 0, take = 50, search, categoryId, brandId, isVisible, isActive } = params || {};
 
     // ACL por Lista (deny-by-default) cuando se provee contexto de usuario.
     // ctx opcional: los llamadores legacy/tests sin ctx conservan el comportamiento abierto.
@@ -134,7 +133,6 @@ export class ProductsService {
       }),
       ...(categoryId && { categoryId }),
       ...(brandId && { brandId }),
-      ...(catalogId && { catalogId }),
       ...(isVisible !== undefined && { isVisible }),
       ...(isActive !== undefined && { isActive }),
     };
@@ -169,7 +167,6 @@ export class ProductsService {
       include: {
         category: true,
         brand: true,
-        catalog: { select: { id: true, name: true, code: true } },
         images: { orderBy: { sortOrder: 'asc' } },
         prices: {
           include: { priceList: true },
@@ -198,8 +195,6 @@ export class ProductsService {
     const brand = await this.prisma.brand.findUnique({ where: { id: dto.brandId } });
     if (!brand) throw new NotFoundException('Marca no encontrada');
 
-    const catalogId = await this.resolveCatalogId(dto.catalogId);
-
     await this.validatePriceLists(dto.prices);
 
     // Compatibilidad: toda creación de producto debe quedar asociada a una Lista.
@@ -219,7 +214,6 @@ export class ProductsService {
         description: dto.description,
         categoryId: dto.categoryId,
         brandId: dto.brandId,
-        catalogId,
         listaId: lista.id,
         technicalSpecs: dto.technicalSpecs,
         extraAttributes: dto.extraAttributes,
@@ -268,11 +262,6 @@ export class ProductsService {
       if (!brand) throw new NotFoundException('Marca no encontrada');
     }
 
-    if (dto.catalogId) {
-      const catalog = await this.prisma.catalog.findUnique({ where: { id: dto.catalogId } });
-      if (!catalog) throw new NotFoundException('Catálogo no encontrado');
-    }
-
     await this.validatePriceLists(dto.prices);
 
     const updated = await this.prisma.product.update({
@@ -283,7 +272,6 @@ export class ProductsService {
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.categoryId && { categoryId: dto.categoryId }),
         ...(dto.brandId && { brandId: dto.brandId }),
-        ...(dto.catalogId && { catalogId: dto.catalogId }),
         ...(dto.listaId !== undefined && { listaId }),
         ...(dto.technicalSpecs !== undefined && { technicalSpecs: dto.technicalSpecs }),
         ...(dto.extraAttributes !== undefined && { extraAttributes: dto.extraAttributes }),
@@ -423,27 +411,6 @@ export class ProductsService {
   }
 
   /**
-   * Resuelve el catalogId de un producto: usa el enviado (validando existencia)
-   * o el catálogo por defecto CAT-DEFAULT si no se envía.
-   */
-  private async resolveCatalogId(catalogId?: string): Promise<string> {
-    if (catalogId) {
-      const catalog = await this.prisma.catalog.findUnique({ where: { id: catalogId } });
-      if (!catalog) throw new NotFoundException('Catálogo no encontrado');
-      return catalog.id;
-    }
-
-    const defaultCatalog = await this.prisma.catalog.findUnique({
-      where: { code: 'CAT-DEFAULT' },
-      select: { id: true },
-    });
-    if (!defaultCatalog) {
-      throw new NotFoundException('Catálogo por defecto no encontrado');
-    }
-    return defaultCatalog.id;
-  }
-
-  /**
    * Resuelve la Lista a la que pertenece un producto.
    * Si se envía listaId, valida su existencia; si falta, asigna LISTA-GENERAL (fallback documentado).
    * Retorna también defaultVisibility para propagarla al crear productos sin isVisible explícito.
@@ -550,15 +517,6 @@ export class ProductsService {
     // Get existing categories and brands for name-to-id mapping
     const categories = await this.prisma.category.findMany();
     const brands = await this.prisma.brand.findMany();
-    const defaultCatalog = await this.prisma.catalog.findUnique({
-      where: { code: 'CAT-DEFAULT' },
-      select: { id: true },
-    });
-    const defaultCatalogId = defaultCatalog?.id;
-
-    if (!defaultCatalogId) {
-      throw new NotFoundException('Catálogo por defecto no encontrado');
-    }
 
     // Fallback explícito documentado: LISTA-GENERAL (lista semilla) para productos importados.
     const defaultLista = await this.prisma.lista.findUnique({
@@ -651,7 +609,6 @@ export class ProductsService {
              description: description || null,
              categoryId,
              brandId,
-             catalogId: defaultCatalogId,
              listaId: defaultListaId,
              isActive: true,
              isVisible: false,

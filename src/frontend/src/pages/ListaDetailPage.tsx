@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import api from '../services/api'
 import { fetchListaById, fetchListaProducts, fetchListaPrices, fetchListaAssignments, fetchListaAudit } from '../services/listas.service'
-import { canManageListas, hasPermission } from '../lib/rbac'
+import { fetchPriceLists, createPrice, updatePrice, deletePrice } from '../services/prices.service'
+import type { Price, PricePayload, UpdatePricePayload } from '../services/prices.service'
+import { canManageListas, hasPermission, hasRole } from '../lib/rbac'
+import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatDate } from '../lib/format'
-import { Button } from '../components/ui'
+import { Button, Modal } from '../components/ui'
 import ProductFormModal from '../features/products/components/ProductFormModal'
 import ImportWizard from '../features/products/import/components/ImportWizard'
 import { hasPersistedImportState } from '../features/products/import/store/import.store'
@@ -167,7 +170,7 @@ export default function ListaDetailPage() {
         <ProductosTab products={products ?? []} canManage={canManageListas()} listaId={id ?? ''} />
       )}
       {tab === 'prices' && (
-        <PreciosTab products={products ?? []} prices={prices ?? []} />
+        <PreciosTab products={products ?? []} prices={prices ?? []} listaId={id ?? ''} />
       )}
       {tab === 'access' && <AccesosTab assignments={assignments ?? []} />}
       {tab === 'audit' && <AuditoriaTab logs={auditLogs ?? []} />}
@@ -291,8 +294,36 @@ function ProductosTab({
   )
 }
 
-function PreciosTab({ products, prices }: { products: any[]; prices: any[] }) {
+const CURRENCIES = ['COP', 'USD', 'EUR']
+
+function PreciosTab({
+  products,
+  prices,
+  listaId,
+}: {
+  products: any[]
+  prices: any[]
+  listaId: string
+}) {
+  const queryClient = useQueryClient()
   const [selectedProductId, setSelectedProductId] = useState<string>('')
+  const [modal, setModal] = useState<{ mode: 'create' } | { mode: 'edit'; price: any } | null>(null)
+  const [deletingPrice, setDeletingPrice] = useState<any | null>(null)
+  const canEdit = canManageListas() || hasPermission('products:write')
+  const canDelete = hasRole(ROLES.SUPER_ADMIN)
+
+  const invalidatePrices = () => {
+    queryClient.invalidateQueries({ queryKey: ['lista-prices', listaId] })
+    queryClient.invalidateQueries({ queryKey: ['lista-products', listaId] })
+  }
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deletePrice(id),
+    onSuccess: () => {
+      invalidatePrices()
+      setDeletingPrice(null)
+    },
+  })
 
   if (products.length === 0) {
     return (
@@ -304,25 +335,41 @@ function PreciosTab({ products, prices }: { products: any[]; prices: any[] }) {
 
   const effectiveId = selectedProductId || products[0]?.id || ''
   const productPrices = prices.filter((p: any) => p.productId === effectiveId)
+  const selectedProduct = products.find((p: any) => p.id === effectiveId)
 
   return (
     <div className="space-y-4">
-      <div>
-        <label htmlFor="price-product-select" className="block text-sm font-medium text-neutral-800 mb-1.5">
-          Producto
-        </label>
-        <select
-          id="price-product-select"
-          value={effectiveId}
-          onChange={(e) => setSelectedProductId(e.target.value)}
-          className="w-full max-w-md px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
-        >
-          {products.map((p: any) => (
-            <option key={p.id} value={p.id}>
-              {p.name} ({p.sku})
-            </option>
-          ))}
-        </select>
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="w-full max-w-md">
+          <label htmlFor="price-product-select" className="block text-sm font-medium text-neutral-800 mb-1.5">
+            Producto
+          </label>
+          <select
+            id="price-product-select"
+            value={effectiveId}
+            onChange={(e) => setSelectedProductId(e.target.value)}
+            className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
+          >
+            {products.map((p: any) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({p.sku})
+              </option>
+            ))}
+          </select>
+        </div>
+        {canEdit && (
+          <Button
+            variant="secondary"
+            icon={
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            }
+            onClick={() => setModal({ mode: 'create' })}
+          >
+            Nuevo Precio
+          </Button>
+        )}
       </div>
 
       {productPrices.length === 0 ? (
@@ -339,32 +386,352 @@ function PreciosTab({ products, prices }: { products: any[]; prices: any[] }) {
                   <th className="px-4 py-3 text-right text-xs font-condensed font-semibold text-neutral-500 uppercase">Valor</th>
                   <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Moneda</th>
                   <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Vigencia</th>
+                  {canEdit && (
+                    <th className="px-4 py-3 text-right text-xs font-condensed font-semibold text-neutral-500 uppercase">Acciones</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
-                {productPrices.map((p: any) => (
-                  <tr key={p.id} className="hover:bg-neutral-50">
-                    <td className="px-4 py-3 text-sm text-neutral-700">{p.priceList?.name ?? p.priceList?.code ?? '-'}</td>
-                    <td className="px-4 py-3 text-sm text-neutral-700 text-right">{Number(p.value).toLocaleString('es-CO')}</td>
-                    <td className="px-4 py-3 text-sm text-neutral-700">{p.currency}</td>
-                    <td className="px-4 py-3 text-sm text-neutral-500">
-                      {p.validFrom && p.validUntil
-                        ? `${formatDate(p.validFrom)} → ${formatDate(p.validUntil)}`
-                        : p.validFrom
-                          ? `Desde ${formatDate(p.validFrom)}`
-                          : p.validUntil
-                            ? `Hasta ${formatDate(p.validUntil)}`
-                            : 'Sin vigencia'}
-                    </td>
-                  </tr>
-                ))}
+                {productPrices.map((p: any) => {
+                  const expired = !!p.validUntil && new Date(p.validUntil).getTime() < Date.now()
+                  const active = !expired && (!p.validFrom || new Date(p.validFrom).getTime() <= Date.now())
+                  return (
+                    <tr key={p.id} className={`hover:bg-neutral-50 ${expired ? 'bg-amber-50' : ''}`}>
+                      <td className="px-4 py-3 text-sm text-neutral-700">{p.priceList?.name ?? p.priceList?.code ?? '-'}</td>
+                      <td className="px-4 py-3 text-sm text-neutral-700 text-right">{Number(p.value).toLocaleString('es-CO')}</td>
+                      <td className="px-4 py-3 text-sm text-neutral-700">{p.currency}</td>
+                      <td className="px-4 py-3 text-sm text-neutral-500">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>
+                            {p.validFrom && p.validUntil
+                              ? `${formatDate(p.validFrom)} → ${formatDate(p.validUntil)}`
+                              : p.validFrom
+                                ? `Desde ${formatDate(p.validFrom)}`
+                                : p.validUntil
+                                  ? `Hasta ${formatDate(p.validUntil)}`
+                                  : 'Sin vigencia'}
+                          </span>
+                          {expired && (
+                            <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                              Vencido
+                            </span>
+                          )}
+                          {active && (
+                            <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">
+                              Vigente
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      {canEdit && (
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => setModal({ mode: 'edit', price: p })}
+                              className="px-2.5 py-1 text-xs font-medium text-neutral-600 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                            >
+                              Editar
+                            </button>
+                            {canDelete && (
+                              <button
+                                onClick={() => setDeletingPrice(p)}
+                                className="px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
+                              >
+                                Eliminar
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
+
+      {modal && (
+        <PriceFormModal
+          mode={modal.mode}
+          price={modal.mode === 'edit' ? modal.price : undefined}
+          productId={effectiveId}
+          productName={selectedProduct?.name}
+          listaId={listaId}
+          onClose={() => setModal(null)}
+          onSaved={invalidatePrices}
+        />
+      )}
+
+      {deletingPrice && (
+        <Modal
+          open
+          onClose={() => {
+            if (!deleteMutation.isPending) setDeletingPrice(null)
+          }}
+          title="Eliminar precio"
+          footer={
+            <>
+              <Button variant="secondary" disabled={deleteMutation.isPending} onClick={() => setDeletingPrice(null)}>
+                Cancelar
+              </Button>
+              <Button variant="danger" loading={deleteMutation.isPending} onClick={() => deleteMutation.mutate(deletingPrice.id)}>
+                Eliminar
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-neutral-600">
+            ¿Seguro que deseas eliminar el precio de la tarifa{' '}
+            <span className="font-medium text-neutral-800">{deletingPrice.priceList?.name ?? '-'}</span> para este
+            producto? Esta acción no se puede deshacer.
+          </p>
+          {deleteMutation.isError && (
+            <div className="mt-3 p-3 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
+              {getApiErrorMessage(deleteMutation.error, 'No se pudo eliminar el precio')}
+            </div>
+          )}
+        </Modal>
+      )}
     </div>
   )
+}
+
+function PriceFormModal({
+  mode,
+  price,
+  productId,
+  productName,
+  listaId,
+  onClose,
+  onSaved,
+}: {
+  mode: 'create' | 'edit'
+  price?: any
+  productId: string
+  productName?: string
+  listaId: string
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [value, setValue] = useState(mode === 'edit' && price ? String(price.value) : '')
+  const [currency, setCurrency] = useState(mode === 'edit' && price ? (price.currency ?? '') : '')
+  const [priceListId, setPriceListId] = useState(mode === 'edit' && price ? (price.priceListId ?? '') : '')
+  const [validFrom, setValidFrom] = useState(mode === 'edit' && price ? toDateInputValue(price.validFrom) : '')
+  const [validUntil, setValidUntil] = useState(mode === 'edit' && price ? toDateInputValue(price.validUntil) : '')
+  const [formError, setFormError] = useState('')
+
+  const { data: priceLists = [], isLoading: priceListsLoading, isError: priceListsError } = useQuery({
+    queryKey: ['priceLists'],
+    queryFn: fetchPriceLists,
+  })
+
+  const mutation = useMutation({
+    mutationFn: async (): Promise<Price> => {
+      if (mode === 'edit' && price) {
+        const payload: UpdatePricePayload = {
+          value: Number(value),
+          currency,
+          listaId,
+          validFrom: validFrom || null,
+          validUntil: validUntil || null,
+        }
+        return updatePrice(price.id, payload)
+      }
+      const payload: PricePayload = {
+        productId,
+        priceListId,
+        value: Number(value),
+        currency,
+        ...(listaId ? { listaId } : {}),
+        ...(validFrom ? { validFrom } : {}),
+        ...(validUntil ? { validUntil } : {}),
+      }
+      return createPrice(payload)
+    },
+    onSuccess: () => {
+      onSaved()
+      onClose()
+    },
+  })
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const num = Number(value)
+    if (!value || !Number.isFinite(num) || num <= 0) {
+      setFormError('El valor debe ser mayor que 0.')
+      return
+    }
+    if (!currency) {
+      setFormError('La moneda es requerida.')
+      return
+    }
+    if (mode === 'create' && !priceListId) {
+      setFormError('Selecciona una tarifa.')
+      return
+    }
+    if (validFrom && validUntil && validUntil < validFrom) {
+      setFormError('La fecha de fin no puede ser anterior a la fecha de inicio.')
+      return
+    }
+    setFormError('')
+    mutation.mutate()
+  }
+
+  const handlePriceListChange = (v: string) => {
+    setPriceListId(v)
+    if (!currency) {
+      const pl = priceLists.find((item) => item.id === v)
+      setCurrency(pl?.currency ?? '')
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={() => {
+        if (!mutation.isPending) onClose()
+      }}
+      title={mode === 'edit' ? 'Editar precio' : 'Nuevo precio'}
+      footer={
+        <>
+          <Button variant="secondary" disabled={mutation.isPending} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" form="price-form" loading={mutation.isPending}>
+            {mode === 'edit' ? 'Guardar cambios' : 'Crear precio'}
+          </Button>
+        </>
+      }
+    >
+      <form id="price-form" onSubmit={handleSubmit} className="space-y-4">
+        {(formError || mutation.isError) && (
+          <div className="p-3 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
+            {formError || getApiErrorMessage(mutation.error, 'No se pudo guardar el precio')}
+          </div>
+        )}
+
+        <div>
+          <label htmlFor="price-form-product" className="block text-sm font-medium text-neutral-800 mb-1.5">
+            Producto
+          </label>
+          <input
+            id="price-form-product"
+            value={productName ?? productId}
+            disabled
+            className="w-full px-3 py-2.5 border border-neutral-200 rounded-lg bg-neutral-50 text-sm text-neutral-500"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="price-form-price-list" className="block text-sm font-medium text-neutral-800 mb-1.5">
+            Tarifa <span className="text-red-500">*</span>
+          </label>
+          {mode === 'edit' ? (
+            <input
+              id="price-form-price-list"
+              value={price?.priceList?.name ?? price?.priceListId ?? ''}
+              disabled
+              className="w-full px-3 py-2.5 border border-neutral-200 rounded-lg bg-neutral-50 text-sm text-neutral-500"
+            />
+          ) : (
+            <select
+              id="price-form-price-list"
+              value={priceListId}
+              onChange={(e) => handlePriceListChange(e.target.value)}
+              required
+              className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
+            >
+              <option value="">Selecciona una tarifa</option>
+              {priceLists.map((pl) => (
+                <option key={pl.id} value={pl.id}>
+                  {pl.name} ({pl.code})
+                </option>
+              ))}
+            </select>
+          )}
+          {priceListsLoading && <p className="text-xs text-neutral-400 mt-1">Cargando tarifas…</p>}
+          {priceListsError && <p className="text-xs text-red-600 mt-1">No se pudieron cargar las tarifas.</p>}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="price-form-value" className="block text-sm font-medium text-neutral-800 mb-1.5">
+              Valor <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="price-form-value"
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              required
+              autoFocus
+              placeholder="0.00"
+              className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
+            />
+          </div>
+          <div>
+            <label htmlFor="price-form-currency" className="block text-sm font-medium text-neutral-800 mb-1.5">
+              Moneda <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="price-form-currency"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              required
+              className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
+            >
+              <option value="">Selecciona moneda</option>
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="price-form-valid-from" className="block text-sm font-medium text-neutral-800 mb-1.5">
+              Vigencia desde
+            </label>
+            <input
+              id="price-form-valid-from"
+              type="date"
+              value={validFrom}
+              onChange={(e) => setValidFrom(e.target.value)}
+              className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
+            />
+          </div>
+          <div>
+            <label htmlFor="price-form-valid-until" className="block text-sm font-medium text-neutral-800 mb-1.5">
+              Vigencia hasta
+            </label>
+            <input
+              id="price-form-valid-until"
+              type="date"
+              value={validUntil}
+              onChange={(e) => setValidUntil(e.target.value)}
+              className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
+            />
+          </div>
+        </div>
+
+        <p className="text-xs text-neutral-400">
+          La vigencia es opcional. Si defines ambas fechas, la de fin no puede ser anterior a la de inicio.
+        </p>
+      </form>
+    </Modal>
+  )
+}
+
+function toDateInputValue(iso?: string | null): string {
+  if (!iso) return ''
+  return iso.slice(0, 10)
 }
 
 function AccesosTab({ assignments }: { assignments: any[] }) {

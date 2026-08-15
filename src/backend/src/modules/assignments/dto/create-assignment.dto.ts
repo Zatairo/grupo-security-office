@@ -1,7 +1,7 @@
 import { IsString, IsUUID, IsIn, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export const ASSIGNMENT_RESOURCE_TYPES = ['CATALOG', 'PRICE_LIST', 'CATEGORY', 'LISTA'] as const;
+export const ASSIGNMENT_RESOURCE_TYPES = ['PRICE_LIST', 'CATEGORY', 'LISTA'] as const;
 export const ASSIGNMENT_LEVELS = ['view', 'edit', 'manage'] as const;
 
 export class CreateAssignmentDto {
@@ -10,7 +10,7 @@ export class CreateAssignmentDto {
   @IsUUID()
   userId: string;
 
-  @ApiProperty({ example: 'CATALOG', enum: ASSIGNMENT_RESOURCE_TYPES })
+  @ApiProperty({ example: 'LISTA', enum: ASSIGNMENT_RESOURCE_TYPES })
   @IsString()
   @IsIn(ASSIGNMENT_RESOURCE_TYPES)
   resourceType: string;

@@ -81,19 +81,6 @@ model RolePermission {
   @@map("role_permissions")
 }
 
-model Catalog {
-  id          String    @id @default(uuid())
-  name        String
-  code        String    @unique
-  description String?
-  isActive    Boolean   @default(true)
-  products    Product[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  @@map("catalogs")
-}
-
 model Lista {
   id                String    @id @default(uuid())
   code              String    @unique
@@ -132,7 +119,6 @@ model Product {
   description     String?
   categoryId      String
   brandId         String
-  catalogId       String
   listaId         String?
   technicalSpecs  Json?
   extraAttributes Json?
@@ -140,7 +126,6 @@ model Product {
   isVisible       Boolean        @default(false)
   category        Category       @relation(fields: [categoryId], references: [id])
   brand           Brand          @relation(fields: [brandId], references: [id])
-  catalog         Catalog        @relation(fields: [catalogId], references: [id])
   lista           Lista?         @relation(fields: [listaId], references: [id])
   prices          Price[]
   images          ProductImage[]
@@ -151,7 +136,6 @@ model Product {
 
   @@index([categoryId])
   @@index([brandId])
-  @@index([catalogId])
   @@index([listaId])
   @@index([isActive, isVisible])
   @@map("products")

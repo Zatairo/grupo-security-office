@@ -357,4 +357,69 @@ describe('ListasService — ACL (T1–T20)', () => {
       service.update(LISTA_ID, { validFrom: '2026-12-31', validUntil: '2026-01-01' }, EDITER),
     ).rejects.toThrow(BadRequestException);
   });
+
+  // ---- Cobertura complementaria (reemplaza ACL de la entidad Catalog eliminada) ----
+  // El test T16 muta assignments[VIEWER.userId] a inactivo; se restaura por suite.
+  describe('cobertura complementaria (reemplaza entidad Catalog eliminada)', () => {
+    beforeEach(() => {
+      assignments[VIEWER.userId] = [{ resourceType: 'LISTA', resourceId: LISTA_ID, level: 'view', isActive: true }];
+    });
+
+    it('findAll filtra por isActive=true', async () => {
+      mockPrisma.lista.findMany.mockResolvedValue([mockLista]);
+
+      await service.findAll(VIEWER, { isActive: true });
+
+      expect(mockPrisma.lista.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ isActive: true, id: { in: [LISTA_ID] } }),
+        }),
+      );
+    });
+
+    it('findProducts scopea por listaId y aplica search/categoryId', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([{ id: 'prod-1', sku: 'S', name: 'Cam' }]);
+
+      const res = await service.findProducts(LISTA_ID, VIEWER, { search: 'cam', categoryId: 'cat-1' });
+
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            listaId: LISTA_ID,
+            categoryId: 'cat-1',
+            OR: expect.any(Array),
+          }),
+        }),
+      );
+      expect(res.data).toHaveLength(1);
+    });
+
+    it('findPrices scopea precios por la Lista del producto', async () => {
+      mockPrisma.price.findMany.mockResolvedValue([{ id: 'price-1', value: 1000 }]);
+
+      const res = await service.findPrices(LISTA_ID, VIEWER);
+
+      expect(mockPrisma.price.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ product: expect.objectContaining({ listaId: LISTA_ID }) }),
+        }),
+      );
+      expect(res.data).toHaveLength(1);
+    });
+
+    it('findAssignments exige manage (403 para view)', async () => {
+      await expect(service.findAssignments(LISTA_ID, VIEWER)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('findAudit exige manage (403 para view)', async () => {
+      await expect(service.findAudit(LISTA_ID, VIEWER)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('update con archivedAt requiere manage (403 para edit)', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      await expect(
+        service.update(LISTA_ID, { archivedAt: '2026-01-01T00:00:00Z' }, EDITER),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
 });

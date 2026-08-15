@@ -9,7 +9,6 @@ import { RolesModule } from './modules/roles/roles.module';
 import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { BrandsModule } from './modules/brands/brands.module';
-import { CatalogsModule } from './modules/catalogs/catalogs.module';
 import { AssignmentsModule } from './modules/assignments/assignments.module';
 import { PricesModule } from './modules/prices/prices.module';
 import { ListasModule } from './modules/listas/listas.module';
@@ -40,7 +39,6 @@ import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
     ProductsModule,
     CategoriesModule,
     BrandsModule,
-    CatalogsModule,
     AssignmentsModule,
     PricesModule,
     ListasModule,

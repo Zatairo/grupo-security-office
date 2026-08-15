@@ -74,18 +74,13 @@ export class BatchExecutorService {
     };
 
     // Pre-cargar categorías y marcas existentes + Lista destino
-    const [existingCategories, existingBrands, existingPriceLists, defaultCatalog, targetLista] = await Promise.all([
+    const [existingCategories, existingBrands, existingPriceLists, targetLista] = await Promise.all([
       this.prisma.category.findMany({ select: { id: true, name: true, slug: true } }),
       this.prisma.brand.findMany({ select: { id: true, name: true, slug: true } }),
       this.prisma.priceList.findMany({ select: { id: true, code: true, name: true } }),
-      this.prisma.catalog.findUnique({ where: { code: 'CAT-DEFAULT' }, select: { id: true } }),
       this.resolveLista(ctx),
     ]);
 
-    if (!defaultCatalog) {
-      throw new Error('Catálogo por defecto (CAT-DEFAULT) no encontrado');
-    }
-    const defaultCatalogId = defaultCatalog.id;
     const targetListaId = targetLista.id;
     const defaultVisibility = targetLista.defaultVisibility;
 
@@ -111,7 +106,6 @@ export class BatchExecutorService {
           categoryMap,
           brandMap,
           priceListMap,
-          defaultCatalogId,
           targetListaId,
           defaultVisibility,
           ctx,
@@ -167,7 +161,6 @@ export class BatchExecutorService {
     categoryMap: Map<string, { id: string; name: string; slug: string }>,
     brandMap: Map<string, { id: string; name: string; slug: string }>,
     priceListMap: Map<string, { id: string; code: string; name: string }>,
-    defaultCatalogId: string,
     listaId: string,
     defaultVisibility: boolean,
     ctx: ImportContext,
@@ -251,7 +244,6 @@ export class BatchExecutorService {
                 description: row.description ?? undefined,
                 categoryId: categoryResult.id,
                 brandId: brandResult.id,
-                catalogId: defaultCatalogId,
                 listaId,
                 technicalSpecs: (row.technicalSpecs as Prisma.InputJsonValue) ?? Prisma.JsonNull,
                 extraAttributes: (row.extraAttributes as Prisma.InputJsonValue) ?? Prisma.JsonNull,

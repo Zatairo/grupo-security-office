@@ -146,7 +146,7 @@ export class AssignmentsService {
   /**
    * Autoriza mutaciones sobre una asignación según su tipo de recurso.
    * - LISTA → Super Admin, o Admin Comercial con `manage` sobre la Lista.
-   * - Tipos legacy (CATALOG/PRICE_LIST/CATEGORY) → Super Admin exclusivamente.
+   * - Tipos legacy (PRICE_LIST/CATEGORY) → Super Admin exclusivamente.
    * - ctx ausente (legacy/tests) → permitir (la capa de RolesGuard controla acceso).
    */
   private async authorizeAssignmentMutation(
@@ -179,12 +179,7 @@ export class AssignmentsService {
 
     let resource: { id: string } | null = null;
 
-    if (resourceType === 'CATALOG') {
-      resource = await this.prisma.catalog.findUnique({
-        where: { id: resourceId },
-        select: { id: true },
-      });
-    } else if (resourceType === 'PRICE_LIST') {
+    if (resourceType === 'PRICE_LIST') {
       resource = await this.prisma.priceList.findUnique({
         where: { id: resourceId },
         select: { id: true },

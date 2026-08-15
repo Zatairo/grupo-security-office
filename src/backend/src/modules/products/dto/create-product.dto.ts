@@ -27,11 +27,6 @@ export class CreateProductDto {
   @IsString()
   brandId: string;
 
-  @ApiPropertyOptional({ example: 'catalog-uuid-here', description: 'Si no se envía, se asigna el catálogo por defecto (CAT-DEFAULT)' })
-  @IsString()
-  @IsOptional()
-  catalogId?: string;
-
   @ApiPropertyOptional({ example: 'lista-uuid-here', description: 'Lista comercial a la que pertenece el producto. Si no se envía, se asigna LISTA-GENERAL (regla de fallback).' })
   @IsString()
   @IsUUID()

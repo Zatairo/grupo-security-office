@@ -32,11 +32,6 @@ export class ProductQueryDto {
   @IsString()
   brandId?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'ID de catálogo para filtrar' })
-  @IsOptional()
-  @IsString()
-  catalogId?: string;
-
   @ApiPropertyOptional({ type: Boolean, description: 'Filtrar por visibilidad' })
   @IsOptional()
   @Transform(({ value }) => {

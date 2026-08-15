@@ -60,7 +60,6 @@ describe('BatchExecutorService — Lista destino (listaId)', () => {
     mockPrisma.category.findMany.mockResolvedValue([]);
     mockPrisma.brand.findMany.mockResolvedValue([]);
     mockPrisma.priceList.findMany.mockResolvedValue([]);
-    mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'cat-def' });
     mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
     mockPrisma.product.findMany.mockResolvedValue([]);
     mockPrisma.category.create.mockResolvedValue({ id: 'cat-1', name: 'CCTV', slug: 'cctv' });
@@ -86,9 +85,10 @@ describe('BatchExecutorService — Lista destino (listaId)', () => {
     });
     expect(mockPrisma.product.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ listaId: 'lista-x', catalogId: 'cat-def' }),
+        data: expect.objectContaining({ listaId: 'lista-x' }),
       }),
     );
+    expect(mockPrisma.product.create.mock.calls[0][0].data).not.toHaveProperty('catalogId');
   });
 
   it('lanza NotFoundException si el listaId del contexto no existe', async () => {
@@ -126,5 +126,13 @@ describe('BatchExecutorService — Lista destino (listaId)', () => {
         data: expect.objectContaining({ listaId: 'lista-v', isVisible: true }),
       }),
     );
+  });
+
+  it('no asigna catalogId al producto creado (catálogo eliminado)', async () => {
+    mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-x', defaultVisibility: false });
+
+    await service.execute([normalizedRow], makeCtx({ listaId: 'lista-x' }));
+
+    expect(mockPrisma.product.create.mock.calls[0][0].data).not.toHaveProperty('catalogId');
   });
 });
