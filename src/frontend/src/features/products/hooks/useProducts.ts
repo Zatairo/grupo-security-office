@@ -6,7 +6,6 @@ export interface ProductFilters {
   search?: string
   categoryId?: string
   brandId?: string
-  catalogId?: string
   isVisible?: boolean
   isActive?: boolean
 }
@@ -29,7 +28,6 @@ export function useProducts({ filters, page, pageSize }: UseProductsOptions) {
       if (filters.search) params.set('search', filters.search)
       if (filters.categoryId) params.set('categoryId', filters.categoryId)
       if (filters.brandId) params.set('brandId', filters.brandId)
-      if (filters.catalogId) params.set('catalogId', filters.catalogId)
       if (filters.isVisible !== undefined) params.set('isVisible', String(filters.isVisible))
       if (filters.isActive !== undefined) params.set('isActive', String(filters.isActive))
       const res = await api.get(`/products?${params}`)

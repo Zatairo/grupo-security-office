@@ -64,6 +64,7 @@ export interface ImportWizardState {
   executionResult: ImportExecutionResult | null;
   columnMappings: Array<{ sourceColumn: string; targetField: SystemField }>;
   ivaMode: 'with_iva' | 'without_iva' | 'mixed';
+  listaId: string | null;
   isLoading: boolean;
   error: string | null;
 }

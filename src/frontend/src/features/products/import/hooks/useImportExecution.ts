@@ -7,16 +7,18 @@ interface ExecuteParams {
   columnMappings: Array<{ sourceColumn: string; targetField: string }>;
   ivaMode?: string;
   presetName?: string;
+  listaId?: string;
 }
 
 export function useImportExecution() {
   return useMutation<ImportExecutionResult, Error, ExecuteParams>({
-    mutationFn: async ({ importId, columnMappings, ivaMode, presetName }) => {
+    mutationFn: async ({ importId, columnMappings, ivaMode, presetName, listaId }) => {
       const { data } = await api.post('/products/import/execute', {
         importId,
         columnMappings,
         ivaMode,
         presetName,
+        ...(listaId ? { listaId } : {}),
       });
       return data;
     },

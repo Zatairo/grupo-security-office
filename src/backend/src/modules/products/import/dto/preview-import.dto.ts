@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, Min, Max, IsArray, ValidateNested, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsNumber, Min, Max, IsArray, ValidateNested, IsEnum, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -47,6 +47,13 @@ export class PreviewImportDto {
   @IsOptional()
   @IsString()
   presetId?: string;
+
+  @ApiPropertyOptional({
+    description: 'ID de la Lista destino. Si no se envía, se asigna LISTA-GENERAL (regla de fallback).',
+  })
+  @IsOptional()
+  @IsUUID()
+  listaId?: string;
 }
 
 /**
@@ -94,4 +101,11 @@ export class ExecuteImportDto {
   @IsOptional()
   @IsString()
   presetName?: string;
+
+  @ApiPropertyOptional({
+    description: 'ID de la Lista destino. Si no se envía, se conserva la del preview (o LISTA-GENERAL).',
+  })
+  @IsOptional()
+  @IsUUID()
+  listaId?: string;
 }

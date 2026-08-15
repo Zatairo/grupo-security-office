@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useImportStore } from '../store/import.store';
 import ImportStepper from './ImportStepper';
 import ImportStepUpload from './ImportStepUpload';
@@ -21,15 +22,21 @@ const STEP_LABELS: Record<string, string> = {
 interface ImportWizardProps {
   onClose: () => void;
   onComplete: () => void;
+  listaId?: string;
 }
 
-export default function ImportWizard({ onClose, onComplete }: ImportWizardProps) {
+export default function ImportWizard({ onClose, onComplete, listaId }: ImportWizardProps) {
   const currentStep = useImportStore((s) => s.currentStep);
   const error = useImportStore((s) => s.error);
   const reset = useImportStore((s) => s.reset);
   const isRestored = useImportStore((s) => s.isRestored);
   const dismissRestored = useImportStore((s) => s.dismissRestored);
   const fileName = useImportStore((s) => s.fileName);
+  const setListaId = useImportStore((s) => s.setListaId);
+
+  useEffect(() => {
+    setListaId(listaId ?? null);
+  }, [listaId, setListaId]);
 
   const handleClose = () => {
     reset();

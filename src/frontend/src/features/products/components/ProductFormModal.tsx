@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../../services/api'
-import type { Product, Category, Brand } from '../types/product.types'
+import type { Product, Category, Brand, ProductPayload } from '../types/product.types'
 import { usePriceLists } from '../hooks/usePriceLists'
 
 interface ProductFormModalProps {
   product: Product | null
   categories: Category[]
   brands: Brand[]
+  listaId?: string
   onClose: () => void
   onSaved: () => void
 }
@@ -61,6 +62,7 @@ export default function ProductFormModal({
   product,
   categories,
   brands,
+  listaId,
   onClose,
   onSaved,
 }: ProductFormModalProps) {
@@ -129,7 +131,7 @@ export default function ProductFormModal({
   })
 
   const mutation = useMutation({
-    mutationFn: async (data: Record<string, unknown>) => {
+    mutationFn: async (data: ProductPayload) => {
       if (product) {
         return api.put(`/products/${product.id}`, data)
       }
@@ -141,7 +143,7 @@ export default function ProductFormModal({
     },
   })
 
-  const buildPricesPayload = () =>
+  const buildPricesPayload = (): ProductPayload['prices'] =>
     priceLists
       .filter((list) => {
         const value = prices[list.id]?.value
@@ -170,7 +172,7 @@ export default function ProductFormModal({
       setTab('specs')
       return
     }
-    mutation.mutate({
+    const payload: ProductPayload = {
       sku: form.sku,
       name: form.name,
       description: form.description,
@@ -181,7 +183,11 @@ export default function ProductFormModal({
       technicalSpecs: tech.value ?? undefined,
       extraAttributes: extra.value ?? undefined,
       prices: buildPricesPayload(),
-    })
+    }
+    if (!product) {
+      payload.listaId = listaId
+    }
+    mutation.mutate(payload)
   }
 
   const setPriceRow = (listId: string, patch: Partial<PriceRow>) => {

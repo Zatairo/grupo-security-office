@@ -75,6 +75,7 @@ export class ImportController {
         ? JSON.parse(body.columnMappings)
         : undefined,
       presetId: body.presetId,
+      listaId: body.listaId,
     };
 
     return this.importService.preview(
@@ -106,6 +107,7 @@ export class ImportController {
         ivaMode: dto.ivaMode,
         headerRowIndex: dto.headerRowIndex,
         presetName: dto.presetName,
+        listaId: dto.listaId,
       },
       req.user.id,
     );

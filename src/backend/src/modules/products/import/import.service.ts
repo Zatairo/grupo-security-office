@@ -69,6 +69,7 @@ export class ImportService {
       headerRowIndex?: number;
       columnMappings?: ColumnMappingDto[];
       presetId?: string;
+      listaId?: string;
     },
   ): Promise<ImportPreviewResult> {
     const importId = randomUUID();
@@ -139,6 +140,7 @@ export class ImportService {
       headers: parseResult.headers,
       columnMapping,
       ivaMode: (dto?.columnMappings ? 'mixed' : 'with_iva') as IvaMode,
+      listaId: dto?.listaId,
       validatedRows,
       normalizedRows: [],
       pipelineErrors: [],
@@ -204,6 +206,7 @@ export class ImportService {
       ivaMode?: IvaMode;
       headerRowIndex?: number;
       presetName?: string;
+      listaId?: string;
     },
     userId: string,
   ): Promise<ImportExecutionResult> {
@@ -217,6 +220,12 @@ export class ImportService {
     // Actualizar IVA mode si se especificó
     if (dto.ivaMode) {
       ctx.ivaMode = dto.ivaMode;
+    }
+
+    // Lista destino: si se envía en execute, reemplaza la del preview;
+    // si no se envía, se conserva la del preview (o cae a LISTA-GENERAL en batch).
+    if (dto.listaId !== undefined) {
+      ctx.listaId = dto.listaId;
     }
 
     // Actualizar mapping si se proporcionó uno nuevo

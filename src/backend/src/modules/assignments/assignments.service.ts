@@ -1,16 +1,67 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AclService, AccessContext } from '../../common/acl/acl.service';
 import { CreateAssignmentDto, ASSIGNMENT_RESOURCE_TYPES } from './dto/create-assignment.dto';
 import { UpdateAssignmentDto } from './dto/update-assignment.dto';
 
 @Injectable()
 export class AssignmentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private acl: AclService,
+  ) {}
 
-  async findAll(filters: { userId?: string; resourceType?: string } = {}) {
-    const where: { userId?: string; resourceType?: string } = {};
+  /**
+   * Lista asignaciones.
+   * - Super Admin (o ctx ausente: legacy/test) → todas.
+   * - Admin Comercial → solo LISTA sobre las que administra (level manage),
+   *   más las de tipos legacy que administre (ninguna, por política).
+   * - Resto → deny (lista vacía).
+   */
+  async findAll(
+    filters: { userId?: string; resourceType?: string } = {},
+    ctx?: AccessContext,
+  ) {
+    if (!ctx || !ctx.userId || this.acl.isSuperAdmin(ctx.roles)) {
+      const where: { userId?: string; resourceType?: string } = {};
+      if (filters.userId) where.userId = filters.userId;
+      if (filters.resourceType) where.resourceType = filters.resourceType;
+      const assignments = await this.prisma.assignment.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+      });
+      return { data: assignments };
+    }
+
+    // Non-Super Admin: scope a LISTA bajo su administración (manage).
+    const manageLevel = this.acl.levelsAtLeast('manage');
+    const allowed = await this.prisma.assignment.findMany({
+      where: {
+        userId: ctx.userId,
+        resourceType: 'LISTA',
+        isActive: true,
+        level: { in: manageLevel },
+      },
+      select: { resourceId: true },
+    });
+
+    // Si no administra ninguna Lista → deny (lista vacía).
+    if (allowed.length === 0) {
+      return { data: [] };
+    }
+
+    const where: {
+      userId?: string;
+      resourceType?: string;
+      resourceId: { in: string[] };
+    } = { resourceId: { in: allowed.map((a) => a.resourceId) } };
     if (filters.userId) where.userId = filters.userId;
-    if (filters.resourceType) where.resourceType = filters.resourceType;
+    if (filters.resourceType === 'LISTA') where.resourceType = filters.resourceType;
 
     const assignments = await this.prisma.assignment.findMany({
       where,
@@ -20,7 +71,7 @@ export class AssignmentsService {
     return { data: assignments };
   }
 
-  async create(dto: CreateAssignmentDto) {
+  async create(dto: CreateAssignmentDto, ctx?: AccessContext) {
     const level = dto.level ?? 'view';
 
     const user = await this.prisma.user.findUnique({
@@ -32,6 +83,7 @@ export class AssignmentsService {
     }
 
     await this.validateResource(dto.resourceType, dto.resourceId);
+    await this.authorizeAssignmentMutation(dto.resourceType, dto.resourceId, ctx);
 
     const existing = await this.prisma.assignment.findUnique({
       where: {
@@ -48,7 +100,6 @@ export class AssignmentsService {
     }
 
     if (existing) {
-      // Soft-delete previo: reactivar el mismo par sin colisión de unique.
       return this.prisma.assignment.update({
         where: { id: existing.id },
         data: { isActive: true, level },
@@ -65,9 +116,11 @@ export class AssignmentsService {
     });
   }
 
-  async update(id: string, dto: UpdateAssignmentDto) {
+  async update(id: string, dto: UpdateAssignmentDto, ctx?: AccessContext) {
     const existing = await this.prisma.assignment.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Asignación no encontrada');
+
+    await this.authorizeAssignmentMutation(existing.resourceType, existing.resourceId, ctx);
 
     const data: { level?: string; isActive?: boolean } = {};
     if (dto.level !== undefined) data.level = dto.level;
@@ -76,9 +129,11 @@ export class AssignmentsService {
     return this.prisma.assignment.update({ where: { id }, data });
   }
 
-  async remove(id: string) {
+  async remove(id: string, ctx?: AccessContext) {
     const existing = await this.prisma.assignment.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Asignación no encontrada');
+
+    await this.authorizeAssignmentMutation(existing.resourceType, existing.resourceId, ctx);
 
     if (existing.isActive) {
       await this.prisma.assignment.update({
@@ -86,6 +141,35 @@ export class AssignmentsService {
         data: { isActive: false },
       });
     }
+  }
+
+  /**
+   * Autoriza mutaciones sobre una asignación según su tipo de recurso.
+   * - LISTA → Super Admin, o Admin Comercial con `manage` sobre la Lista.
+   * - Tipos legacy (CATALOG/PRICE_LIST/CATEGORY) → Super Admin exclusivamente.
+   * - ctx ausente (legacy/tests) → permitir (la capa de RolesGuard controla acceso).
+   */
+  private async authorizeAssignmentMutation(
+    resourceType: string,
+    resourceId: string,
+    ctx?: AccessContext,
+  ): Promise<void> {
+    if (!ctx || !ctx.userId || this.acl.isSuperAdmin(ctx.roles)) return;
+
+    if (resourceType === 'LISTA') {
+      if (!ctx.roles.includes('Admin Comercial')) {
+        throw new ForbiddenException('No tienes permisos para administrar asignaciones');
+      }
+      if (!(await this.acl.can(resourceId, ctx, 'manage'))) {
+        throw new ForbiddenException('No tienes permisos de administración sobre esta Lista');
+      }
+      return;
+    }
+
+    // Tipos legacy: solo Super Admin (ya retornado arriba).
+    throw new ForbiddenException(
+      'Solo Super Admin puede administrar asignaciones de este tipo de recurso',
+    );
   }
 
   private async validateResource(resourceType: string, resourceId: string) {
@@ -107,6 +191,11 @@ export class AssignmentsService {
       });
     } else if (resourceType === 'CATEGORY') {
       resource = await this.prisma.category.findUnique({
+        where: { id: resourceId },
+        select: { id: true },
+      });
+    } else if (resourceType === 'LISTA') {
+      resource = await this.prisma.lista.findUnique({
         where: { id: resourceId },
         select: { id: true },
       });

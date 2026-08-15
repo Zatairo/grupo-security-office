@@ -18,6 +18,34 @@
 
 ## Historial de Cambios
 
+### Riesgo operativo: subagentes devuelven reportes vacíos (2026-08-05)
+
+#### Propósito
+Registrar un fallo intermitente del entorno de subagentes detectado durante la Fase 3c, para que las fases siguientes traten los reportes vacíos como NO VERIFICADO y nunca como trabajo completado.
+
+#### Hallazgo
+Durante la Fase 3c (Asignaciones/ACL), **3 tasks delegados consecutivos retornaron vacíos sin evidencia alguna**:
+1. `3c-FIX` (fix de ACL en `GET /api/catalogs/:id` y delete de usuarios con assignments).
+2. `3c-D2` (re-validación QA de los fixes).
+3. Re-intento de QA (validación de UI de Asignaciones).
+
+Los reportes vacíos no implicaban que el trabajo estuviera hecho ni pendiente: eran silencios del entorno de subagentes.
+
+#### Mitigación aplicada (verificación manual directa)
+Ante el silencio, el orquestador verificó con evidencia directa del repo y del entorno:
+- **Fix**: `git status --short` + `git diff --stat` + lectura de las líneas clave (`catalogs.service.ts` findOne con ACL, `catalogs.controller.ts` con `@CurrentUser`, `users.service.ts` con `assignment.deleteMany`).
+- **Tests**: `npm test` en `src/backend` → 235/235.
+- **E2E real**: scripts `.cjs` temporales con `fetch` contra `http://localhost:3000` (login, crear catálogos/usuario/asignación, verificar 200/404/403, delete de usuario con assignment) — scripts borrados tras ejecución.
+- **BD**: conteos reales vía PrismaClient (assignments=0, catálogos legítimos, usuarios legítimos, 197 productos, 1379 precios).
+
+#### Regla operativa para fases siguientes
+- Un task delegado que devuelve **reporte vacío** se marca como **NO VERIFICADO** y no cierra la orden.
+- Antes de cerrar: confirmar con evidencia (git diff, tests, E2E, estado BD) o relanzar la tarea con exigencia explícita de reporte en texto.
+- El único `.cjs` legítimo del repo es `src/frontend/chrome-analyze.cjs` (QA visual, tracked); cualquier otro `.cjs` temporal debe borrarse tras su uso.
+
+#### Nota de trazabilidad (cierre Fase 3c)
+Las órdenes **3c-C2** (devops: builds/migraciones/health) y **3c-D3** (QA: contrato `manage` + flujo asignaciones) se ejecutaron **antes** de la instrucción explícita del usuario de pausarlas. El usuario aceptó el desfase y las dio por válidas (resultados limpios: 5 migraciones sin drift, builds 0 errores, health 200; `manage`→201, `admin`→400, 409/403, BD limpia). No se re-ejecutaron para evitar duplicar trabajo.
+
 ### Migración de roles RBAC a los 5 roles finales (2026-08-03)
 
 #### Propósito

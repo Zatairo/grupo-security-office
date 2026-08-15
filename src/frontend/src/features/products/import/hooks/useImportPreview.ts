@@ -8,11 +8,12 @@ interface PreviewParams {
   headerRowIndex?: number;
   columnMappings?: Array<{ sourceColumn: string; targetField: string }>;
   presetId?: string;
+  listaId?: string;
 }
 
 export function useImportPreview() {
   return useMutation<ImportPreviewResult, Error, PreviewParams>({
-    mutationFn: async ({ fileBuffer, fileName, headerRowIndex, columnMappings, presetId }) => {
+    mutationFn: async ({ fileBuffer, fileName, headerRowIndex, columnMappings, presetId, listaId }) => {
       const formData = new FormData();
       const blob = new Blob([fileBuffer], {
         type: fileName.endsWith('.csv') ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -27,6 +28,9 @@ export function useImportPreview() {
       }
       if (presetId) {
         formData.append('presetId', presetId);
+      }
+      if (listaId) {
+        formData.append('listaId', listaId);
       }
 
       const { data } = await api.post('/products/import/preview', formData, {

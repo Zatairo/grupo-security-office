@@ -1,7 +1,7 @@
 ---
 description: Ingeniero de infraestructura y DevOps para Grupo Security.
 mode: primary
-model: openrouter/mistralai/mistral-small-2603
+model: nvidia/nemotron-3-super-120b-a12b:free
 permission:
   edit: allow
   read: allow

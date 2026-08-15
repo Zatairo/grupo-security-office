@@ -77,6 +77,7 @@ export default function ImportStepUpload() {
       {
         fileBuffer: store.fileBuffer!,
         fileName: store.fileName,
+        listaId: store.listaId ?? undefined,
       },
       {
         onSuccess: (result) => {

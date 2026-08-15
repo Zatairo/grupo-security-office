@@ -4,10 +4,7 @@ import { ROLES } from '../../lib/roles'
 
 const COMMERCIAL_TABS = [
   { to: '/commercial/products', label: 'Productos', end: true },
-  { to: '/commercial/categories', label: 'Categorías', end: false },
-  { to: '/commercial/brands', label: 'Marcas', end: false },
-  { to: '/commercial/price-lists', label: 'Listas de precios', end: false },
-  { to: '/commercial/catalogs', label: 'Catálogos', end: false },
+  { to: '/commercial/lists', label: 'Listas', end: false },
   { to: '/commercial/assignments', label: 'Asignaciones', end: false, superAdminOnly: true },
   { to: '/commercial/settings', label: 'Configuración', end: false },
 ]
@@ -19,7 +16,7 @@ const VISIBLE_TABS = COMMERCIAL_TABS.filter((tab) => !tab.superAdminOnly || isSu
 export default function CommercialLayout() {
   return (
     <div className="min-h-screen bg-[var(--color-bg-primary)]">
-      <div className="max-w-7xl mx-auto px-4">
+      <div className="w-full px-4">
         <div className="border-b border-[var(--color-border)]">
           <div className="flex items-center overflow-x-auto scrollbar-thin">
             {VISIBLE_TABS.map((tab) => (

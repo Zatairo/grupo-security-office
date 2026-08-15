@@ -10,6 +10,7 @@ export default function ImportStepExecution({ onComplete }: ImportStepExecutionP
   const preview = useImportStore((s) => s.preview);
   const columnMappings = useImportStore((s) => s.columnMappings);
   const ivaMode = useImportStore((s) => s.ivaMode);
+  const listaId = useImportStore((s) => s.listaId);
   const setExecutionResult = useImportStore((s) => s.setExecutionResult);
   const setStep = useImportStore((s) => s.setStep);
   const nextStep = useImportStore((s) => s.nextStep);
@@ -28,6 +29,7 @@ export default function ImportStepExecution({ onComplete }: ImportStepExecutionP
           targetField: m.targetField,
         })),
         ivaMode,
+        listaId: listaId ?? undefined,
       },
       {
         onSuccess: (result) => {

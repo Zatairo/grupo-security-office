@@ -1,6 +1,6 @@
 import api from './api'
 
-export const ASSIGNMENT_RESOURCE_TYPES = ['CATALOG', 'PRICE_LIST', 'CATEGORY'] as const
+export const ASSIGNMENT_RESOURCE_TYPES = ['CATALOG', 'PRICE_LIST', 'CATEGORY', 'LISTA'] as const
 export type AssignmentResourceType = (typeof ASSIGNMENT_RESOURCE_TYPES)[number]
 
 export const ASSIGNMENT_LEVELS = ['view', 'edit', 'manage'] as const

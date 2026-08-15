@@ -2,6 +2,20 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { ImportWizardState, ImportStep, ImportPreviewResult, ImportExecutionResult, SystemField } from '../types/import.types';
 
+export const IMPORT_WIZARD_STORAGE_KEY = 'gs-import-wizard';
+
+export function hasPersistedImportState(): boolean {
+  try {
+    const raw = sessionStorage.getItem(IMPORT_WIZARD_STORAGE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    const step = parsed?.state?.currentStep;
+    return typeof step === 'string' && step !== 'upload' && step !== 'execution' && step !== 'result';
+  } catch {
+    return false;
+  }
+}
+
 interface ImportStore extends ImportWizardState {
   setStep: (step: ImportStep) => void;
   nextStep: () => void;
@@ -13,6 +27,7 @@ interface ImportStore extends ImportWizardState {
   setColumnMappings: (mappings: Array<{ sourceColumn: string; targetField: SystemField }>) => void;
   updateMapping: (sourceColumn: string, targetField: SystemField) => void;
   setIvaMode: (mode: 'with_iva' | 'without_iva' | 'mixed') => void;
+  setListaId: (listaId: string | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;
@@ -31,6 +46,7 @@ const initialState: ImportWizardState = {
   executionResult: null,
   columnMappings: [],
   ivaMode: 'with_iva',
+  listaId: null,
   isLoading: false,
   error: null,
 };
@@ -72,6 +88,7 @@ export const useImportStore = create<ImportStore>()(
         }
       },
       setIvaMode: (mode) => set({ ivaMode: mode }),
+      setListaId: (listaId) => set({ listaId }),
 
       setLoading: (loading) => set({ isLoading: loading }),
       setError: (error) => set({ error }),
@@ -104,5 +121,3 @@ export const useImportStore = create<ImportStore>()(
     },
   ),
 );
-
-export const IMPORT_WIZARD_STORAGE_KEY = 'gs-import-wizard';

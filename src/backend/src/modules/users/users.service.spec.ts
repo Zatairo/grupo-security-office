@@ -7,7 +7,6 @@ jest.mock('bcrypt', () => ({
 import { createPrismaMock } from '../../__test__/mocks/prisma.mock';
 
 const mockPrisma = createPrismaMock();
-mockPrisma.userRole.deleteMany = jest.fn();
 
 jest.mock('../../prisma/prisma.service', () => ({
   PrismaService: jest.fn().mockImplementation(() => mockPrisma),

@@ -11,7 +11,7 @@ import {
   type AssignmentResourceType,
   type CreateAssignmentPayload,
 } from '../services/assignments.service'
-import { fetchCatalogs } from '../services/catalogs.service'
+import { fetchListas } from '../services/listas.service'
 import { fetchUsers, type UserListItem } from '../services/users.service'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatDate } from '../lib/format'
@@ -23,6 +23,7 @@ const RESOURCE_TYPE_LABELS: Record<AssignmentResourceType, string> = {
   CATALOG: 'Catálogo',
   PRICE_LIST: 'Lista de precios',
   CATEGORY: 'Categoría',
+  LISTA: 'Lista',
 }
 
 const LEVEL_LABELS: Record<AssignmentLevel, string> = {
@@ -47,9 +48,9 @@ function assignmentErrorFallback(error: unknown, fallback: string): string {
 
 const shortId = (id: string) => `${id.slice(0, 8)}…`
 
-function resourceName(a: Assignment, catalogNames: Map<string, string>): string {
-  if (a.resourceType === 'CATALOG') {
-    return catalogNames.get(a.resourceId) ?? shortId(a.resourceId)
+function resourceName(a: Assignment, listaNames: Map<string, string>): string {
+  if (a.resourceType === 'LISTA') {
+    return listaNames.get(a.resourceId) ?? shortId(a.resourceId)
   }
   return shortId(a.resourceId)
 }
@@ -78,9 +79,9 @@ export default function AssignmentsPage() {
     queryFn: fetchAssignments,
   })
 
-  const { data: catalogs } = useQuery({
-    queryKey: ['catalogs'],
-    queryFn: fetchCatalogs,
+  const { data: listas } = useQuery({
+    queryKey: ['listas'],
+    queryFn: fetchListas,
   })
 
   const { data: users } = useQuery({
@@ -88,11 +89,11 @@ export default function AssignmentsPage() {
     queryFn: () => fetchUsers('', 500),
   })
 
-  const catalogNames = useMemo(() => {
+  const listaNames = useMemo(() => {
     const map = new Map<string, string>()
-    catalogs?.forEach((c) => map.set(c.id, c.name))
+    listas?.forEach((l) => map.set(l.id, l.name))
     return map
-  }, [catalogs])
+  }, [listas])
 
   const userMap = useMemo(() => {
     const map = new Map<string, UserListItem>()
@@ -119,7 +120,7 @@ export default function AssignmentsPage() {
 
   const handleDelete = (a: Assignment) => {
     const user = userMap.get(a.userId)
-    const target = resourceName(a, catalogNames)
+    const target = resourceName(a, listaNames)
     if (!window.confirm(`¿Eliminar la asignación de ${user?.email ?? a.userId} a ${target}?`)) return
     setActionError(null)
     deleteMutation.mutate(a.id)
@@ -268,7 +269,7 @@ export default function AssignmentsPage() {
                         <p className="text-xs text-neutral-400">{user?.email ?? 'Usuario no encontrado'}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-sm text-neutral-700">{resourceName(a, catalogNames)}</span>
+                        <span className="text-sm text-neutral-700">{resourceName(a, listaNames)}</span>
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-neutral-100 text-neutral-600">
@@ -355,7 +356,7 @@ function AssignmentFormModal({
 }) {
   const [form, setForm] = useState({
     userId: '',
-    resourceType: 'CATALOG' as AssignmentResourceType,
+    resourceType: 'LISTA' as AssignmentResourceType,
     resourceId: '',
     level: 'view' as AssignmentLevel,
   })
@@ -373,12 +374,12 @@ function AssignmentFormModal({
     queryFn: () => fetchUsers(debouncedSearch),
   })
 
-  const { data: catalogs } = useQuery({
-    queryKey: ['catalogs'],
-    queryFn: fetchCatalogs,
+  const { data: listas } = useQuery({
+    queryKey: ['listas'],
+    queryFn: fetchListas,
   })
 
-  const activeCatalogs = useMemo(() => (catalogs ?? []).filter((c) => c.isActive), [catalogs])
+  const activeListas = useMemo(() => (listas ?? []).filter((l) => l.isActive && !l.archivedAt), [listas])
 
   const mutation = useMutation({
     mutationFn: (payload: CreateAssignmentPayload) => createAssignment(payload),
@@ -398,7 +399,7 @@ function AssignmentFormModal({
       return
     }
     if (!form.resourceId) {
-      setFormError('Selecciona un catálogo')
+      setFormError('Selecciona una Lista')
       return
     }
     mutation.mutate({
@@ -493,30 +494,30 @@ function AssignmentFormModal({
               disabled
               aria-describedby="assignment-resource-type-hint"
             >
-              <option value="CATALOG">Catálogo</option>
+              <option value="LISTA">Lista</option>
             </select>
             <p id="assignment-resource-type-hint" className="text-xs text-neutral-400 mt-1">
-              Actualmente solo se asignan catálogos desde esta vista.
+              Actualmente solo se asignan Listas desde esta vista.
             </p>
           </div>
 
           <div>
-            <label htmlFor="assignment-catalog" className="block text-sm font-medium text-neutral-800 mb-1.5">
-              Catálogo
+            <label htmlFor="assignment-lista" className="block text-sm font-medium text-neutral-800 mb-1.5">
+              Lista
             </label>
             <select
-              id="assignment-catalog"
+              id="assignment-lista"
               value={form.resourceId}
               onChange={(e) => setForm({ ...form, resourceId: e.target.value })}
               className={fieldClass}
               required
             >
               <option value="" disabled>
-                {activeCatalogs.length === 0 ? 'No hay catálogos activos' : 'Selecciona un catálogo'}
+                {activeListas.length === 0 ? 'No hay Listas activas' : 'Selecciona una Lista'}
               </option>
-              {activeCatalogs.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.code})
+              {activeListas.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name} ({l.code})
                 </option>
               ))}
             </select>

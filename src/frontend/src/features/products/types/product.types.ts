@@ -32,6 +32,9 @@ export interface Product {
   description: string | null
   categoryId: string
   brandId: string
+  catalogId: string
+  catalog?: { id: string; name: string; code: string }
+  listaId?: string | null
   technicalSpecs: Record<string, unknown> | null
   extraAttributes?: Record<string, unknown> | null
   isActive: boolean
@@ -42,6 +45,29 @@ export interface Product {
   prices: ProductPrice[]
   createdAt: string
   updatedAt: string
+}
+
+export interface ProductPriceInput {
+  priceListId: string
+  value: number
+  currency: string
+  validFrom?: string
+  validUntil?: string
+}
+
+export interface ProductPayload {
+  sku: string
+  name: string
+  description?: string | null
+  categoryId: string
+  brandId: string
+  catalogId?: string
+  listaId?: string
+  technicalSpecs?: Record<string, unknown> | null
+  extraAttributes?: Record<string, unknown> | null
+  isActive?: boolean
+  isVisible?: boolean
+  prices?: ProductPriceInput[]
 }
 
 export interface ProductListResponse {

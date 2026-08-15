@@ -10,6 +10,18 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { AssignmentsService } from './assignments.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AclService } from '../../common/acl/acl.service';
+
+const mockAcl = {
+  isSuperAdmin: jest.fn().mockReturnValue(false),
+  levelsAtLeast: jest.fn().mockReturnValue([]),
+  getAllowedListaIds: jest.fn().mockResolvedValue([]),
+  getUserLevel: jest.fn().mockResolvedValue(null),
+  assertListaAccess: jest.fn().mockResolvedValue(undefined),
+  assertProductAccess: jest.fn().mockResolvedValue(undefined),
+  assertPriceAccess: jest.fn().mockResolvedValue(undefined),
+  can: jest.fn().mockResolvedValue(false),
+};
 
 const mockAssignment = {
   id: 'assign-1',
@@ -32,6 +44,7 @@ describe('AssignmentsService', () => {
       providers: [
         AssignmentsService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: AclService, useValue: mockAcl },
       ],
     }).compile();
 

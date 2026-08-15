@@ -146,6 +146,9 @@ export class CatalogsService {
     const catalog = await this.prisma.catalog.findUnique({ where: { id } });
     if (!catalog) throw new NotFoundException('Catálogo no encontrado');
 
+    const isActiveChanged =
+      dto.isActive !== undefined && dto.isActive !== catalog.isActive;
+
     const updated = await this.prisma.catalog.update({
       where: { id },
       data: {
@@ -154,6 +157,13 @@ export class CatalogsService {
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
     });
+
+    if (isActiveChanged) {
+      await this.prisma.product.updateMany({
+        where: { catalogId: id },
+        data: { isActive: dto.isActive! },
+      });
+    }
 
     return updated;
   }

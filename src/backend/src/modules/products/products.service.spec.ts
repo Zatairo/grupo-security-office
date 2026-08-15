@@ -15,9 +15,21 @@ jest.mock('../../prisma/prisma.service', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AclService } from '../../common/acl/acl.service';
+
+const mockAcl = {
+  isSuperAdmin: jest.fn().mockReturnValue(false),
+  levelsAtLeast: jest.fn().mockReturnValue(['manage']),
+  getAllowedListaIds: jest.fn().mockResolvedValue([]),
+  getUserLevel: jest.fn().mockResolvedValue(null),
+  assertListaAccess: jest.fn().mockResolvedValue(undefined),
+  assertProductAccess: jest.fn().mockResolvedValue(undefined),
+  assertPriceAccess: jest.fn().mockResolvedValue(undefined),
+  can: jest.fn().mockResolvedValue(false),
+};
 
 const mockProduct = {
   id: 'prod-1',
@@ -49,10 +61,14 @@ describe('ProductsService', () => {
   beforeEach(async () => {
     jest.resetAllMocks();
 
+    // Fallback LISTA-GENERAL para crear/update sin listaId explícito.
+    mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', code: 'LISTA-GENERAL', defaultVisibility: false });
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProductsService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: AclService, useValue: mockAcl },
       ],
     }).compile();
 
@@ -136,7 +152,7 @@ describe('ProductsService', () => {
       expect(result.sku).toBe('CAM-001');
       expect(mockPrisma.product.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ catalogId: 'cat-def' }),
+          data: expect.objectContaining({ catalogId: 'cat-def', listaId: 'lista-1' }),
         }),
       );
     });
@@ -265,6 +281,106 @@ describe('ProductsService', () => {
       };
 
       await expect(service.create(dto as any)).rejects.toThrow(NotFoundException);
+    });
+
+    it('debe asociar el listaId enviado al crear un producto', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null); // sku libre
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'cat-def', code: 'CAT-DEFAULT' });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-x', code: 'LISTA-X', defaultVisibility: false });
+      mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
+
+      const dto = {
+        sku: 'CAM-010',
+        name: 'Cámara',
+        categoryId: 'cat-1',
+        brandId: 'brand-1',
+        catalogId: 'cat-def',
+        listaId: 'lista-x',
+      };
+
+      await service.create(dto as any);
+
+      expect(mockPrisma.lista.findUnique).toHaveBeenCalledWith({ where: { id: 'lista-x' }, select: { id: true, defaultVisibility: true } });
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ catalogId: 'cat-def', listaId: 'lista-x' }) }),
+      );
+    });
+
+    it('debe rechazar crear producto con listaId inexistente', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null); // sku libre
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'cat-def', code: 'CAT-DEFAULT' });
+      mockPrisma.lista.findUnique.mockResolvedValue(null); // lista no existe
+
+      const dto = {
+        sku: 'CAM-011',
+        name: 'Cámara',
+        categoryId: 'cat-1',
+        brandId: 'brand-1',
+        catalogId: 'cat-def',
+        listaId: 'lista-inexistente',
+      };
+
+      await expect(service.create(dto as any)).rejects.toThrow('Lista no encontrada');
+    });
+
+    it('debe usar LISTA-GENERAL como fallback cuando no se envía listaId', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null); // sku libre
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'cat-def', code: 'CAT-DEFAULT' });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', code: 'LISTA-GENERAL', defaultVisibility: false });
+      mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
+
+      const dto = { sku: 'CAM-012', name: 'Cámara', categoryId: 'cat-1', brandId: 'brand-1' };
+
+      await service.create(dto as any);
+
+      expect(mockPrisma.lista.findUnique).toHaveBeenCalledWith({ where: { code: 'LISTA-GENERAL' }, select: { id: true, defaultVisibility: true } });
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ listaId: 'lista-1' }) }),
+      );
+    });
+
+    it('debe usar defaultVisibility de la Lista como isVisible cuando no se envía isVisible explícito', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null); // sku libre
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'cat-def', code: 'CAT-DEFAULT' });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-v', code: 'LISTA-VISIBLE', defaultVisibility: true });
+      mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
+
+      const dto = { sku: 'CAM-013', name: 'Cámara', categoryId: 'cat-1', brandId: 'brand-1', listaId: 'lista-v' };
+
+      await service.create(dto as any);
+
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ listaId: 'lista-v', isVisible: true }),
+        }),
+      );
+    });
+
+    it('debe respetar isVisible explícito aunque la Lista tenga defaultVisibility opuesto', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null); // sku libre
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'cat-def', code: 'CAT-DEFAULT' });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-v', code: 'LISTA-VISIBLE', defaultVisibility: true });
+      mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
+
+      const dto = { sku: 'CAM-014', name: 'Cámara', categoryId: 'cat-1', brandId: 'brand-1', listaId: 'lista-v', isVisible: false };
+
+      await service.create(dto as any);
+
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ listaId: 'lista-v', isVisible: false }),
+        }),
+      );
     });
   });
 
@@ -398,6 +514,93 @@ describe('ProductsService', () => {
       mockPrisma.product.findUnique.mockResolvedValue(null);
 
       await expect(service.remove('no-existe')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // --- ACL deny-by-default (AclService real, sin stub) ---
+  describe('ACL deny-by-default', () => {
+    const LISTA_ID = 'list-1';
+    const ADMIN = { userId: 'admin-1', roles: ['Super Admin'] };
+    const VIEWER = { userId: 'pepito-1', roles: ['Operador'] }; // view sobre LISTA-ID
+    const NOAUTH = { userId: 'none-1', roles: ['Operador'] }; // sin assignments
+
+    const listaAssignments: Record<string, { resourceId: string; level: string; isActive: boolean }[]> = {
+      [VIEWER.userId]: [{ resourceId: LISTA_ID, level: 'view', isActive: true }],
+      [ADMIN.userId]: [],
+      [NOAUTH.userId]: [],
+    };
+    let acl: AclService;
+    let svc: ProductsService;
+
+    beforeEach(() => {
+      acl = new AclService(mockPrisma as any);
+      svc = new ProductsService(mockPrisma as any, acl);
+      mockPrisma.assignment.findMany.mockImplementation(async (args: any) => {
+        const u = args?.where?.userId;
+        const rt = args?.where?.resourceType;
+        const rid = args?.where?.resourceId;
+        const active = args?.where?.isActive;
+        const levels = args?.where?.level?.in;
+        let out = (listaAssignments[u] ?? []).filter((_a) => rt === undefined || rt === 'LISTA') as any[];
+        if (rid) out = out.filter((a) => a.resourceId === rid);
+        if (active === true) out = out.filter((a) => a.isActive);
+        if (levels) out = out.filter((a) => levels.includes(a.level));
+        return out;
+      });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: LISTA_ID, code: 'LISTA-GENERAL', isActive: true, archivedAt: null });
+    });
+
+    it('findAll scopia a LISTA-GENERAL para view y deniega (lista vacía) a usuario sin assignment', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([mockProduct]);
+      mockPrisma.product.count.mockResolvedValue(1);
+
+      const authed = await svc.findAll({ skip: 0, take: 50 }, VIEWER);
+      expect(authed.data).toHaveLength(1);
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ listaId: { in: [LISTA_ID] } }) }),
+      );
+
+      mockPrisma.product.findMany.mockResolvedValue([]);
+      mockPrisma.product.count.mockResolvedValue(0);
+      const denied = await svc.findAll({ skip: 0, take: 50 }, NOAUTH);
+      expect(denied.data).toHaveLength(0);
+    });
+
+    it('findAll: Super Admin ve todo (sin filtro de listaId)', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([mockProduct]);
+      mockPrisma.product.count.mockResolvedValue(1);
+
+      const res = await svc.findAll({ skip: 0, take: 50 }, ADMIN);
+      expect(res.data).toHaveLength(1);
+      const call = mockPrisma.product.findMany.mock.calls[0][0];
+      expect(call.where).not.toHaveProperty('listaId');
+    });
+
+    it('findOne: usuario sin assignment recibe 404 (no revela existencia)', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ ...mockProduct, listaId: LISTA_ID });
+      await expect(svc.findOne('prod-1', NOAUTH)).rejects.toThrow(NotFoundException);
+    });
+
+    it('findOne: view ve producto de su Lista', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ ...mockProductWithRelations, listaId: LISTA_ID });
+      const res = await svc.findOne('prod-1', VIEWER);
+      expect(res.id).toBe('prod-1');
+    });
+
+    it('view no edita (toggleVisibility exige manage → 403)', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ ...mockProduct, listaId: LISTA_ID });
+      await expect(svc.toggleVisibility('prod-1', VIEWER)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('create: usuario view sobre la Lista no puede crear producto (403, falta edit)', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.catalog.findUnique.mockResolvedValue({ id: 'cat-def', code: 'CAT-DEFAULT' });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: LISTA_ID, code: 'LISTA-GENERAL', isActive: true, archivedAt: null });
+
+      const dto = { sku: 'NEW-1', name: 'X', categoryId: 'cat-1', brandId: 'brand-1', listaId: LISTA_ID };
+      await expect(svc.create(dto as any, VIEWER)).rejects.toThrow(ForbiddenException);
     });
   });
 });

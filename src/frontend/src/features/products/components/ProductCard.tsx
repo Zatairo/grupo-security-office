@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import type { Product } from '../types/product.types'
 import { ProductStatusBadge } from './ProductStatusBadge'
 import { hasPermission } from '../../../lib/rbac'
@@ -11,8 +12,18 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onEdit, onToggleActive, onDelete }: ProductCardProps) {
+  const navigate = useNavigate()
+
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return
+    navigate(`/commercial/products/${product.id}`)
+  }
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow group">
+    <div
+      className="rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow group cursor-pointer"
+      onClick={handleCardClick}
+    >
       <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center relative">
         {product.images[0]?.url ? (
           <img

@@ -1,4 +1,4 @@
-import { IsString, MinLength, IsOptional, IsBoolean, IsObject, IsArray, ValidateNested } from 'class-validator';
+import { IsString, MinLength, IsOptional, IsBoolean, IsObject, IsArray, ValidateNested, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PriceInputDto } from './price-input.dto';
@@ -35,6 +35,12 @@ export class UpdateProductDto {
   @IsString()
   @IsOptional()
   catalogId?: string;
+
+  @ApiPropertyOptional({ example: 'lista-uuid-here', description: 'Lista comercial a la que se reasigna el producto.' })
+  @IsString()
+  @IsUUID()
+  @IsOptional()
+  listaId?: string;
 
   @ApiPropertyOptional()
   @IsObject()

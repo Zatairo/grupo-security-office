@@ -6,6 +6,8 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { AccessContext } from '../../common/acl/acl.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Public } from '../../common/decorators/public.decorator';
@@ -16,6 +18,10 @@ import { Public } from '../../common/decorators/public.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
+
+  private ctx(user: any): AccessContext {
+    return { userId: user?.sub ?? user?.id, roles: user?.roles ?? [] };
+  }
 
   @Get('trending')
   @Public()
@@ -41,6 +47,7 @@ export class ProductsController {
   @ApiQuery({ name: 'isActive', required: false, type: Boolean })
   findAll(
     @Query() query: ProductQueryDto,
+    @CurrentUser() user: any,
   ) {
     return this.productsService.findAll({
       skip: query.skip ?? 0,
@@ -51,43 +58,43 @@ export class ProductsController {
       catalogId: query.catalogId,
       isVisible: query.isVisible,
       isActive: query.isActive,
-    });
+    }, this.ctx(user));
   }
 
   @Get(':id')
   @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
   @ApiOperation({ summary: 'Obtener producto por ID' })
-  findOne(@Param('id') id: string) {
-    return this.productsService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.productsService.findOne(id, this.ctx(user));
   }
 
   @Post()
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Crear producto' })
   @ApiResponse({ status: 201, description: 'Producto creado' })
-  create(@Body() dto: CreateProductDto) {
-    return this.productsService.create(dto);
+  create(@Body() dto: CreateProductDto, @CurrentUser() user: any) {
+    return this.productsService.create(dto, this.ctx(user));
   }
 
   @Put(':id')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Actualizar producto' })
-  update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
-    return this.productsService.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateProductDto, @CurrentUser() user: any) {
+    return this.productsService.update(id, dto, this.ctx(user));
   }
 
   @Patch(':id/toggle-visibility')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Alternar visibilidad del producto' })
-  toggleVisibility(@Param('id') id: string) {
-    return this.productsService.toggleVisibility(id);
+  toggleVisibility(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.productsService.toggleVisibility(id, this.ctx(user));
   }
 
   @Patch(':id/toggle-active')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Alternar estado activo del producto' })
-  toggleActive(@Param('id') id: string) {
-    return this.productsService.toggleActive(id);
+  toggleActive(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.productsService.toggleActive(id, this.ctx(user));
   }
 
   @Delete(':id')

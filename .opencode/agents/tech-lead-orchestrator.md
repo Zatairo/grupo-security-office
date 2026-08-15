@@ -1,7 +1,7 @@
 ---
 name: tech-lead-orchestrator
 description: Agente coordinador y gobernador técnico de Grupo Security Office. Coordina ejecución real por fases, delega órdenes atómicas y destraba agentes sin reauditar innecesariamente.
-model: mistral-small-4
+model: nvidia/nemotron-3-super-120b-a12b:free
 color: accent
 tools:
   read: true

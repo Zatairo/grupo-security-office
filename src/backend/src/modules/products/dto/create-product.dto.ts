@@ -1,4 +1,4 @@
-import { IsString, MinLength, IsOptional, IsBoolean, IsObject, IsArray, ValidateNested } from 'class-validator';
+import { IsString, MinLength, IsOptional, IsBoolean, IsObject, IsArray, ValidateNested, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PriceInputDto } from './price-input.dto';
@@ -31,6 +31,12 @@ export class CreateProductDto {
   @IsString()
   @IsOptional()
   catalogId?: string;
+
+  @ApiPropertyOptional({ example: 'lista-uuid-here', description: 'Lista comercial a la que pertenece el producto. Si no se envía, se asigna LISTA-GENERAL (regla de fallback).' })
+  @IsString()
+  @IsUUID()
+  @IsOptional()
+  listaId?: string;
 
   @ApiPropertyOptional({ example: { resolution: '4MP', lens: '2.8mm', nightVision: '30m' } })
   @IsObject()

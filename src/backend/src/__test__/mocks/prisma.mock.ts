@@ -15,6 +15,7 @@ export const createPrismaMock = () => ({
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    deleteMany: jest.fn(),
     count: jest.fn(),
   },
   role: {
@@ -30,6 +31,7 @@ export const createPrismaMock = () => ({
     findMany: jest.fn(),
     create: jest.fn(),
     delete: jest.fn(),
+    deleteMany: jest.fn(),
   },
   rolePermission: {
     findMany: jest.fn(),
@@ -41,6 +43,7 @@ export const createPrismaMock = () => ({
     findMany: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
   },
@@ -99,6 +102,15 @@ export const createPrismaMock = () => ({
     findUnique: jest.fn(),
     findMany: jest.fn(),
     create: jest.fn(),
+    count: jest.fn(),
+  },
+  lista: {
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
     count: jest.fn(),
   },
   productImage: {

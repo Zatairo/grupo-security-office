@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
 import { AuditService } from '../../../audit/audit.service';
@@ -73,18 +73,21 @@ export class BatchExecutorService {
       defaultsByMissingInference: { category: 0, brand: 0 },
     };
 
-    // Pre-cargar categorías y marcas existentes
-    const [existingCategories, existingBrands, existingPriceLists, defaultCatalog] = await Promise.all([
+    // Pre-cargar categorías y marcas existentes + Lista destino
+    const [existingCategories, existingBrands, existingPriceLists, defaultCatalog, targetLista] = await Promise.all([
       this.prisma.category.findMany({ select: { id: true, name: true, slug: true } }),
       this.prisma.brand.findMany({ select: { id: true, name: true, slug: true } }),
       this.prisma.priceList.findMany({ select: { id: true, code: true, name: true } }),
       this.prisma.catalog.findUnique({ where: { code: 'CAT-DEFAULT' }, select: { id: true } }),
+      this.resolveLista(ctx),
     ]);
 
     if (!defaultCatalog) {
       throw new Error('Catálogo por defecto (CAT-DEFAULT) no encontrado');
     }
     const defaultCatalogId = defaultCatalog.id;
+    const targetListaId = targetLista.id;
+    const defaultVisibility = targetLista.defaultVisibility;
 
     const categoryMap = new Map<string, { id: string; name: string; slug: string }>(
       existingCategories.map((c) => [c.name.toLowerCase(), c]),
@@ -109,6 +112,8 @@ export class BatchExecutorService {
           brandMap,
           priceListMap,
           defaultCatalogId,
+          targetListaId,
+          defaultVisibility,
           ctx,
         );
 
@@ -163,6 +168,8 @@ export class BatchExecutorService {
     brandMap: Map<string, { id: string; name: string; slug: string }>,
     priceListMap: Map<string, { id: string; code: string; name: string }>,
     defaultCatalogId: string,
+    listaId: string,
+    defaultVisibility: boolean,
     ctx: ImportContext,
   ): Promise<{
     created: number;
@@ -245,10 +252,11 @@ export class BatchExecutorService {
                 categoryId: categoryResult.id,
                 brandId: brandResult.id,
                 catalogId: defaultCatalogId,
+                listaId,
                 technicalSpecs: (row.technicalSpecs as Prisma.InputJsonValue) ?? Prisma.JsonNull,
                 extraAttributes: (row.extraAttributes as Prisma.InputJsonValue) ?? Prisma.JsonNull,
                 isActive: true,
-                isVisible: false,
+                isVisible: defaultVisibility,
               },
             });
 
@@ -272,6 +280,36 @@ export class BatchExecutorService {
 
       return batchResult;
     });
+  }
+
+  /**
+   * Resuelve la Lista destino de la importación.
+   * Si viene ctx.listaId, valida su existencia (404 si no existe);
+   * si no viene, usa la Lista LISTA-GENERAL (fallback documentado).
+   * También expone defaultVisibility para propagarla al producto creado.
+   */
+  private async resolveLista(
+    ctx: ImportContext,
+  ): Promise<{ id: string; defaultVisibility: boolean }> {
+    if (ctx.listaId) {
+      const lista = await this.prisma.lista.findUnique({
+        where: { id: ctx.listaId },
+        select: { id: true, defaultVisibility: true },
+      });
+      if (!lista) {
+        throw new NotFoundException('Lista no encontrada');
+      }
+      return lista;
+    }
+
+    const defaultLista = await this.prisma.lista.findUnique({
+      where: { code: 'LISTA-GENERAL' },
+      select: { id: true, defaultVisibility: true },
+    });
+    if (!defaultLista) {
+      throw new NotFoundException('Lista por defecto (LISTA-GENERAL) no encontrada');
+    }
+    return defaultLista;
   }
 
   /**

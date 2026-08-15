@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AclService, AccessContext } from '../../common/acl/acl.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PriceInputDto } from './dto/price-input.dto';
@@ -20,7 +21,7 @@ const MAX_IMAGE_SIZE = 8 * 1024 * 1024; // 8 MB
 
 @Injectable()
 export class ProductsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private acl: AclService) {}
 
   private trendingCache: { data: any; timestamp: number } | null = null;
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutos de expiración de caché
@@ -100,19 +101,30 @@ export class ProductsService {
     };
   }
 
-  async findAll(params?: {
-    skip?: number;
-    take?: number;
-    search?: string;
-    categoryId?: string;
-    brandId?: string;
-    catalogId?: string;
-    isVisible?: boolean;
-    isActive?: boolean;
-  }) {
+  async findAll(
+    params?: {
+      skip?: number;
+      take?: number;
+      search?: string;
+      categoryId?: string;
+      brandId?: string;
+      catalogId?: string;
+      isVisible?: boolean;
+      isActive?: boolean;
+    },
+    ctx?: AccessContext,
+  ) {
     const { skip = 0, take = 50, search, categoryId, brandId, catalogId, isVisible, isActive } = params || {};
 
+    // ACL por Lista (deny-by-default) cuando se provee contexto de usuario.
+    // ctx opcional: los llamadores legacy/tests sin ctx conservan el comportamiento abierto.
+    let allowedListaIds: string[] | null = null;
+    if (ctx) {
+      allowedListaIds = await this.acl.getAllowedListaIds(ctx.userId, ctx.roles, 'view');
+    }
+
     const where: Prisma.ProductWhereInput = {
+      ...(allowedListaIds !== null && { listaId: { in: allowedListaIds.length ? allowedListaIds : [] } }),
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
@@ -151,12 +163,13 @@ export class ProductsService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, ctx?: AccessContext) {
     const product = await this.prisma.product.findUnique({
       where: { id },
       include: {
         category: true,
         brand: true,
+        catalog: { select: { id: true, name: true, code: true } },
         images: { orderBy: { sortOrder: 'asc' } },
         prices: {
           include: { priceList: true },
@@ -165,10 +178,17 @@ export class ProductsService {
     });
 
     if (!product) throw new NotFoundException('Producto no encontrado');
+
+    // Deny-by-default: si hay contexto, exige acceso a la Lista del producto.
+    if (ctx) {
+      if (!product.listaId) throw new NotFoundException('Producto no encontrado');
+      await this.acl.assertListaAccess(product.listaId, ctx, 'view');
+    }
+
     return product;
   }
 
-  async create(dto: CreateProductDto) {
+  async create(dto: CreateProductDto, ctx?: AccessContext) {
     const existingSku = await this.prisma.product.findUnique({ where: { sku: dto.sku } });
     if (existingSku) throw new ConflictException('Ya existe un producto con ese SKU');
 
@@ -182,6 +202,16 @@ export class ProductsService {
 
     await this.validatePriceLists(dto.prices);
 
+    // Compatibilidad: toda creación de producto debe quedar asociada a una Lista.
+    // Si se envía listaId se valida su existencia; si falta, se asigna LISTA-GENERAL
+    // (fallback explícito y documentado para registros legados).  [decisiones 8/14]
+    // La Lista también expone defaultVisibility: si no viene dto.isVisible explícito,
+    // el producto nuevo hereda la visibilidad por defecto de su Lista.
+    const lista = await this.resolveLista(dto.listaId);
+
+    // ACL: crear producto exige `edit` sobre la Lista destino.
+    if (ctx) await this.acl.assertListaAccess(lista.id, ctx, 'edit');
+
     const product = await this.prisma.product.create({
       data: {
         sku: dto.sku,
@@ -190,10 +220,11 @@ export class ProductsService {
         categoryId: dto.categoryId,
         brandId: dto.brandId,
         catalogId,
+        listaId: lista.id,
         technicalSpecs: dto.technicalSpecs,
         extraAttributes: dto.extraAttributes,
         isActive: dto.isActive ?? false,
-        isVisible: dto.isVisible ?? false,
+        isVisible: dto.isVisible ?? lista.defaultVisibility,
       },
       include: {
         category: { select: { id: true, name: true } },
@@ -202,15 +233,25 @@ export class ProductsService {
     });
 
     if (dto.prices && dto.prices.length > 0) {
-      await this.upsertPrices(product.id, dto.prices);
+      await this.upsertPrices(product.id, lista.id, dto.prices);
     }
 
     return product;
   }
 
-  async update(id: string, dto: UpdateProductDto) {
+  async update(id: string, dto: UpdateProductDto, ctx?: AccessContext) {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
+
+    // ACL: editar producto exige `edit` sobre la Lista del producto.
+    // Si se reasigna listaId, se autoriza sobre la nueva Lista.
+    let listaId: string | null = product.listaId ?? null;
+    if (dto.listaId !== undefined) {
+      listaId = (await this.resolveLista(dto.listaId)).id;
+    }
+    if (ctx && listaId) {
+      await this.acl.assertListaAccess(listaId, ctx, 'edit');
+    }
 
     if (dto.sku && dto.sku !== product.sku) {
       const existing = await this.prisma.product.findUnique({ where: { sku: dto.sku } });
@@ -243,6 +284,7 @@ export class ProductsService {
         ...(dto.categoryId && { categoryId: dto.categoryId }),
         ...(dto.brandId && { brandId: dto.brandId }),
         ...(dto.catalogId && { catalogId: dto.catalogId }),
+        ...(dto.listaId !== undefined && { listaId }),
         ...(dto.technicalSpecs !== undefined && { technicalSpecs: dto.technicalSpecs }),
         ...(dto.extraAttributes !== undefined && { extraAttributes: dto.extraAttributes }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
@@ -255,15 +297,18 @@ export class ProductsService {
     });
 
     if (dto.prices && dto.prices.length > 0) {
-      await this.upsertPrices(id, dto.prices);
+      await this.upsertPrices(id, listaId, dto.prices);
     }
 
     return updated;
   }
 
-  async toggleVisibility(id: string) {
+  async toggleVisibility(id: string, ctx?: AccessContext) {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
+
+    // Publicar/ocultar exige `manage` sobre la Lista del producto.
+    if (ctx && product.listaId) await this.acl.assertListaAccess(product.listaId, ctx, 'manage');
 
     return this.prisma.product.update({
       where: { id },
@@ -271,9 +316,12 @@ export class ProductsService {
     });
   }
 
-  async toggleActive(id: string) {
+  async toggleActive(id: string, ctx?: AccessContext) {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
+
+    // Activar/desactivar exige `edit` sobre la Lista del producto.
+    if (ctx && product.listaId) await this.acl.assertListaAccess(product.listaId, ctx, 'edit');
 
     return this.prisma.product.update({
       where: { id },
@@ -396,6 +444,30 @@ export class ProductsService {
   }
 
   /**
+   * Resuelve la Lista a la que pertenece un producto.
+   * Si se envía listaId, valida su existencia; si falta, asigna LISTA-GENERAL (fallback documentado).
+   * Retorna también defaultVisibility para propagarla al crear productos sin isVisible explícito.
+   * [decisiones 8/14]
+   */
+  private async resolveLista(listaId?: string): Promise<{ id: string; defaultVisibility: boolean }> {
+    if (listaId) {
+      const lista = await this.prisma.lista.findUnique({
+        where: { id: listaId },
+        select: { id: true, defaultVisibility: true },
+      });
+      if (!lista) throw new NotFoundException('Lista no encontrada');
+      return lista;
+    }
+
+    const defaultLista = await this.prisma.lista.findUnique({
+      where: { code: 'LISTA-GENERAL' },
+      select: { id: true, defaultVisibility: true },
+    });
+    if (!defaultLista) throw new NotFoundException('Lista por defecto (LISTA-GENERAL) no encontrada');
+    return defaultLista;
+  }
+
+  /**
    * Valida que todos los priceListId existan en BD.
    */
   private async validatePriceLists(prices?: PriceInputDto[]): Promise<void> {
@@ -419,8 +491,13 @@ export class ProductsService {
   /**
    * Upsert individual por (productId, priceListId) dentro de una transacción.
    * No borra precios no enviados para no perder datos.
+   * Asocia el precio a la misma Lista del producto (invariante Price.listaId == Product.listaId).
    */
-  private async upsertPrices(productId: string, prices: PriceInputDto[]): Promise<void> {
+  private async upsertPrices(
+    productId: string,
+    listaId: string | null | undefined,
+    prices: PriceInputDto[],
+  ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       for (const price of prices) {
         const validFrom = price.validFrom ? new Date(price.validFrom) : undefined;
@@ -431,12 +508,14 @@ export class ProductsService {
           update: {
             value: price.value,
             ...(price.currency && { currency: price.currency }),
-            ...(price.validFrom !== undefined && { validFrom: validFrom ?? null }),
-            ...(price.validUntil !== undefined && { validUntil: validUntil ?? null }),
+            ...(validFrom && { validFrom }),
+            ...(validUntil && { validUntil }),
+            ...(listaId ? { listaId } : {}),
           },
           create: {
             productId,
             priceListId: price.priceListId,
+            ...(listaId ? { listaId } : {}),
             value: price.value,
             currency: price.currency ?? 'COP',
             ...(validFrom && { validFrom }),
@@ -480,6 +559,13 @@ export class ProductsService {
     if (!defaultCatalogId) {
       throw new NotFoundException('Catálogo por defecto no encontrado');
     }
+
+    // Fallback explícito documentado: LISTA-GENERAL (lista semilla) para productos importados.
+    const defaultLista = await this.prisma.lista.findUnique({
+      where: { code: 'LISTA-GENERAL' },
+      select: { id: true },
+    });
+    const defaultListaId = defaultLista?.id ?? null;
 
     const categoryMap = new Map(categories.map(c => [c.name.toLowerCase(), c.id]));
     const brandMap = new Map(brands.map(b => [b.name.toLowerCase(), b.id]));
@@ -558,19 +644,19 @@ export class ProductsService {
           continue;
         }
 
-        // Create product
-        await this.prisma.product.create({
-          data: {
-            sku,
-            name,
-            description: description || null,
-            categoryId,
-            brandId,
-            catalogId: defaultCatalogId,
-            isActive: true,
-            isVisible: false,
-          },
-        });
+         await this.prisma.product.create({
+           data: {
+             sku,
+             name,
+             description: description || null,
+             categoryId,
+             brandId,
+             catalogId: defaultCatalogId,
+             listaId: defaultListaId,
+             isActive: true,
+             isVisible: false,
+           },
+         });
 
         results.created++;
       } catch (error) {

@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsDateString } from 'class-validator';
+import { IsString, IsNumber, Min, IsOptional, IsUUID, IsDateString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreatePriceDto {
@@ -12,7 +12,14 @@ export class CreatePriceDto {
 
   @ApiProperty({ example: 1500000 })
   @IsNumber()
+  @Min(0)
   value: number;
+
+  @ApiPropertyOptional({ example: 'lista-uuid-here', description: 'Lista a la que pertenece el precio (debe coincidir con la Lista del producto).' })
+  @IsString()
+  @IsUUID()
+  @IsOptional()
+  listaId?: string;
 
   @ApiPropertyOptional({ example: 'COP' })
   @IsString()

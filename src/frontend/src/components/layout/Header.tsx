@@ -7,9 +7,9 @@ import { ROLES } from '../../lib/roles'
 
 const COMMERCIAL_ITEMS = [
   { to: '/commercial/products', label: 'Productos' },
-  { to: '/commercial/brands', label: 'Marcas' },
-  { to: '/commercial/categories', label: 'Categorías' },
-  { to: '/commercial/price-lists', label: 'Precios' },
+  { to: '/commercial/lists', label: 'Listas' },
+  { to: '/commercial/assignments', label: 'Asignaciones' },
+  { to: '/commercial/settings', label: 'Configuración' },
 ]
 
 export default function Header() {

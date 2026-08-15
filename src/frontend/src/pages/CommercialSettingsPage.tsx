@@ -4,10 +4,6 @@ const SETTINGS_CARDS = [
     description: 'Listas de precios, moneda y formato de visualización de valores comerciales.',
   },
   {
-    title: 'Catálogos',
-    description: 'Configuración de catálogos comerciales. Se habilitará en una fase futura.',
-  },
-  {
     title: 'Asignaciones',
     description: 'Reglas de asignación de productos a listas de precios. Se habilitará en una fase futura.',
   },

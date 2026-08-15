@@ -45,6 +45,9 @@ export interface ImportContext {
   /** Modo de IVA para precios */
   ivaMode: IvaMode;
 
+  /** ID de la Lista destino (opcional). Si falta, se resuelve LISTA-GENERAL en batch execution */
+  listaId?: string;
+
   /** Resultados de validación por fila */
   validatedRows: ValidatedRow[];
 
