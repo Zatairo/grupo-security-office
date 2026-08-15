@@ -10,6 +10,7 @@ import { AclService, AccessContext } from '../../common/acl/acl.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateListaDto } from './dto/create-lista.dto';
 import { UpdateListaDto } from './dto/update-lista.dto';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class ListasService {
@@ -20,15 +21,28 @@ export class ListasService {
   ) {}
 
   /** Lista de Listas autorizadas (deny-by-default). */
-  async findAll(ctx: AccessContext, params?: { isActive?: boolean }) {
+  async findAll(ctx: AccessContext, params?: { isActive?: boolean; includeExpired?: boolean }) {
     const allowed = await this.acl.getAllowedListaIds(ctx.userId, ctx.roles, 'view');
 
-    const where: { isActive?: boolean; id?: { in: string[] } } = {
+    const where: {
+      isActive?: boolean;
+      id?: { in: string[] };
+      OR?: Array<{ validUntil: null } | { validUntil: { gte: Date } }>;
+    } = {
       ...(params?.isActive === true && { isActive: true }),
       // deny-by-default: usuario no-admin sin assignments → id: { in: [] } (0 resultados).
       // Super Admin: allowed === null → sin filtro de id (ve todo).
       ...(allowed !== null && { id: { in: allowed.length ? allowed : [] } }),
     };
+
+    // Decisión documentada (OLA 6): el frontend actual NO espera filtrado por vencimiento
+    // en el listado, por lo que POR DEFECTO se devuelven TODAS las Listas (incluidas las
+    // vencidas) para no romper el consumo existente. El filtrado de vencidas se deja como
+    // opción explícita (includeExpired: false) y NO se activa por defecto. Se conservan las
+    // Listas sin validUntil (no tienen vigencia → no están vencidas).
+    if (params?.includeExpired === false) {
+      where.OR = [{ validUntil: null }, { validUntil: { gte: new Date() } }];
+    }
 
     const listas = await this.prisma.lista.findMany({
       where,
@@ -40,6 +54,7 @@ export class ListasService {
       data: listas.map((l) => ({
         ...l,
         productCount: l._count.products,
+        ...this.computeExpiry(l.validUntil),
       })),
     };
   }
@@ -52,7 +67,11 @@ export class ListasService {
       include: { _count: { select: { products: true } } },
     });
     if (!lista) throw new NotFoundException('Lista no encontrada');
-    return { ...lista, productCount: lista._count.products };
+    return {
+      ...lista,
+      productCount: lista._count.products,
+      ...this.computeExpiry(lista.validUntil),
+    };
   }
 
   /** Productos de una Lista (scoped + deny-by-default). */
@@ -105,6 +124,61 @@ export class ListasService {
     });
 
     return { data: prices };
+  }
+
+  /**
+   * Precios de una Lista próximos a vencer (scoped + deny-by-default).
+   * Solo precios con validUntil dentro de [now, now + days]; devuelve cada uno
+   * con `daysRemaining` (ceil). El interceptor global envuelve la respuesta en `{ data }`.
+   */
+  async findExpiringPrices(listaId: string, ctx: AccessContext, days = 30) {
+    await this.acl.assertListaAccess(listaId, ctx, 'view');
+
+    const lista = await this.prisma.lista.findUnique({
+      where: { id: listaId },
+      select: { id: true },
+    });
+    if (!lista) throw new NotFoundException('Lista no encontrada');
+
+    const now = Date.now();
+    const prices = await this.prisma.price.findMany({
+      where: {
+        listaId,
+        validUntil: { not: null, lte: new Date(now + days * 86400000), gte: new Date(now) },
+      },
+      include: {
+        product: { select: { id: true, sku: true, name: true } },
+        priceList: { select: { id: true, name: true, code: true } },
+      },
+      orderBy: { validUntil: 'asc' },
+    });
+
+    return {
+      data: prices.map((p) => ({
+        ...p,
+        daysRemaining: Math.ceil((new Date(p.validUntil!).getTime() - now) / 86400000),
+      })),
+      count: prices.length,
+      days,
+    };
+  }
+
+  /**
+   * Campos calculados de vigencia (OLA 6) — solo en la respuesta, no en schema.
+   * - isExpired: validUntil ya pasó.
+   * - isExpiringSoon: no vencida y vence en <= 30 días.
+   * - daysUntilExpiry: ceil de días restantes (negativo si venció); null sin validUntil.
+   */
+  private computeExpiry(validUntil: Date | null) {
+    if (!validUntil) {
+      return { isExpired: false, isExpiringSoon: false, daysUntilExpiry: null };
+    }
+    const diffMs = new Date(validUntil).getTime() - Date.now();
+    return {
+      isExpired: diffMs < 0,
+      isExpiringSoon: diffMs >= 0 && diffMs <= 30 * 86400000,
+      daysUntilExpiry: Math.ceil(diffMs / 86400000),
+    };
   }
 
   /** Accesos (assignments LISTA) de una Lista — requiere manage. */
@@ -180,6 +254,83 @@ export class ListasService {
     });
 
     return created;
+  }
+
+  // Límites prudenciales (schema sin maxLength en code/name; Postgres text sin tope).
+  private readonly LISTA_NAME_MAX = 120;
+  private readonly LISTA_CODE_MAX = 60;
+  private readonly COPIA_SUFFIX = '-COPIA-';
+
+  /**
+   * Duplicar una Lista — requiere edit+ sobre la Lista origen (mismo patrón de
+   * escritura del módulo). Crea una copia de CONFIGURACIÓN:
+   * - Mismo name + " (copia)", code único nuevo (`code + "-COPIA-XXXX"`).
+   * - Mismos currency/description/type/defaultVisibility/validFrom/validUntil/responsibleId.
+   * - isActive: false — decisión documentada (OLA 6): la copia nace INACTIVA, es un molde
+   *   que el operador debe revisar y activar explícitamente antes de publicar precios.
+   * - NO copia productos, precios ni assignments: es un molde de configuración que se
+   *   puebla después a conveniencia (evita duplicar datos transaccionales por error).
+   */
+  async duplicateLista(id: string, ctx: AccessContext) {
+    const source = await this.prisma.lista.findUnique({ where: { id } });
+    if (!source) throw new NotFoundException('Lista no encontrada');
+    await this.acl.assertListaAccess(id, ctx, 'edit');
+
+    const nameSuffix = ' (copia)';
+    const name = `${source.name.slice(0, this.LISTA_NAME_MAX - nameSuffix.length)}${nameSuffix}`;
+    const code = await this.generateUniqueCode(source.code);
+
+    const created = await this.prisma.lista.create({
+      data: {
+        code,
+        name,
+        description: source.description,
+        currency: source.currency,
+        type: source.type,
+        defaultVisibility: source.defaultVisibility,
+        validFrom: source.validFrom,
+        validUntil: source.validUntil,
+        responsibleId: source.responsibleId,
+        isActive: false,
+        createdById: ctx.userId ?? null,
+        updatedById: ctx.userId ?? null,
+      },
+    });
+
+    await this.audit.log({
+      userId: ctx.userId,
+      action: 'duplicate',
+      entity: 'LISTA',
+      entityId: created.id,
+      oldValues: { sourceId: id },
+      newValues: { code, name, isActive: created.isActive, currency: created.currency },
+    });
+
+    return { ...created, productCount: 0, ...this.computeExpiry(created.validUntil) };
+  }
+
+  /** Genera un code único `base-COPIA-XXXX` (4 chars alfanuméricos sin ambiguos). */
+  private async generateUniqueCode(sourceCode: string): Promise<string> {
+    const base = sourceCode.slice(0, this.LISTA_CODE_MAX - this.COPIA_SUFFIX.length - 4);
+    let candidate = `${base}${this.COPIA_SUFFIX}${this.randomSuffix()}`;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const exists = await this.prisma.lista.findUnique({
+        where: { code: candidate },
+        select: { id: true },
+      });
+      if (!exists) return candidate;
+      candidate = `${base}${this.COPIA_SUFFIX}${this.randomSuffix()}`;
+    }
+    // Último recurso (colisión improbable): sufijo timestamp para garantizar unicidad.
+    return `${base}${this.COPIA_SUFFIX}${Date.now().toString(36).toUpperCase()}`;
+  }
+
+  private randomSuffix(): string {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin I,O,0,1 (evita ambigüedad visual)
+    const bytes = randomBytes(4);
+    let out = '';
+    for (let i = 0; i < 4; i++) out += alphabet[bytes[i] % alphabet.length];
+    return out;
   }
 
   /** Editar Lista (campos) — requiere edit+. Archivar (archivedAt) — requiere manage. */

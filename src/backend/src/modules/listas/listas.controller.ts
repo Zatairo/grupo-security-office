@@ -70,6 +70,24 @@ export class ListasController {
     return this.listasService.findPrices(id, this.ctx(user));
   }
 
+  @Get(':id/prices/expiring')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
+  @ApiOperation({ summary: 'Precios próximos a vencer de una Lista (scope ACL)' })
+  @ApiQuery({ name: 'days', required: false, description: 'Ventana en días (default 30)' })
+  @ApiResponse({ status: 404, description: 'Lista no encontrada' })
+  findExpiringPrices(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Query('days') days?: string,
+  ) {
+    const parsed = days ? parseInt(days, 10) : 30;
+    return this.listasService.findExpiringPrices(
+      id,
+      this.ctx(user),
+      Number.isFinite(parsed) && parsed > 0 ? parsed : 30,
+    );
+  }
+
   @Get(':id/assignments')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Accesos (assignments LISTA) de una Lista' })
@@ -93,6 +111,17 @@ export class ListasController {
   @ApiResponse({ status: 409, description: 'Código duplicado' })
   create(@Body() dto: CreateListaDto, @CurrentUser() user: any) {
     return this.listasService.create(dto, this.ctx(user));
+  }
+
+  @Post(':id/duplicate')
+  @Roles('Super Admin', 'Admin Comercial')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Duplicar Lista (copia de configuración; nace inactiva)' })
+  @ApiResponse({ status: 201, description: 'Lista duplicada (isActive false)' })
+  @ApiResponse({ status: 404, description: 'Lista no encontrada' })
+  @ApiResponse({ status: 403, description: 'Sin acceso edit+ sobre la Lista' })
+  duplicate(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.listasService.duplicateLista(id, this.ctx(user));
   }
 
   @Patch(':id')

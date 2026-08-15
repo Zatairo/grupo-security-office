@@ -422,4 +422,230 @@ describe('ListasService — ACL (T1–T20)', () => {
       ).rejects.toThrow(ForbiddenException);
     });
   });
+
+  describe('vigencias calculadas (OLA 6)', () => {
+    it('findOne añade isExpired/isExpiringSoon/daysUntilExpiry (vence en 10 días)', async () => {
+      const validUntil = new Date(Date.now() + 10 * 86400000);
+      mockPrisma.lista.findUnique.mockResolvedValueOnce({ ...mockLista, validUntil });
+      const res = await service.findOne(LISTA_ID, ADMIN);
+      expect(res.isExpired).toBe(false);
+      expect(res.isExpiringSoon).toBe(true);
+      expect(res.daysUntilExpiry).toBe(10);
+    });
+
+    it('findOne marca vencida una Lista con validUntil en el pasado', async () => {
+      const validUntil = new Date(Date.now() - 2 * 86400000);
+      mockPrisma.lista.findUnique.mockResolvedValueOnce({ ...mockLista, validUntil });
+      const res = await service.findOne(LISTA_ID, ADMIN);
+      expect(res.isExpired).toBe(true);
+      expect(res.isExpiringSoon).toBe(false);
+      expect(res.daysUntilExpiry).toBeLessThan(0);
+    });
+
+    it('findOne sin validUntil → no vencida y daysUntilExpiry null', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      const res = await service.findOne(LISTA_ID, ADMIN);
+      expect(res.isExpired).toBe(false);
+      expect(res.isExpiringSoon).toBe(false);
+      expect(res.daysUntilExpiry).toBeNull();
+    });
+
+    it('findAll mapea los campos calculados en cada Lista', async () => {
+      const validUntil = new Date(Date.now() + 40 * 86400000);
+      mockPrisma.lista.findMany.mockResolvedValue([{ ...mockLista, validUntil }]);
+      const res = await service.findAll(ADMIN);
+      expect(res.data[0].productCount).toBe(3);
+      expect(res.data[0].isExpired).toBe(false);
+      expect(res.data[0].isExpiringSoon).toBe(false);
+      expect(res.data[0].daysUntilExpiry).toBe(40);
+    });
+  });
+
+  describe('findExpiringPrices (OLA 6)', () => {
+    it('devuelve precios próximos a vencer con daysRemaining y respeta ventana', async () => {
+      const validUntil = new Date(Date.now() + 10 * 86400000);
+      mockPrisma.price.findMany.mockResolvedValueOnce([
+        {
+          id: 'price-1',
+          productId: 'prod-1',
+          priceListId: 'pl-1',
+          listaId: LISTA_ID,
+          value: 1000,
+          currency: 'COP',
+          validFrom: null,
+          validUntil,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          product: { id: 'prod-1', sku: 'SKU1', name: 'Camara' },
+          priceList: { id: 'pl-1', name: 'Lista General', code: 'LG' },
+        },
+      ]);
+
+      const res = await service.findExpiringPrices(LISTA_ID, VIEWER, 30);
+
+      expect(mockPrisma.price.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            listaId: LISTA_ID,
+            validUntil: { not: null, lte: expect.any(Date), gte: expect.any(Date) },
+          },
+        }),
+      );
+      expect(res.count).toBe(1);
+      expect(res.days).toBe(30);
+      expect(res.data[0].daysRemaining).toBe(10);
+      expect(res.data[0].product.name).toBe('Camara');
+    });
+
+    it('no devuelve precios ya vencidos (validUntil >= now en la query)', async () => {
+      mockPrisma.price.findMany.mockResolvedValueOnce([]);
+
+      const res = await service.findExpiringPrices(LISTA_ID, VIEWER, 30);
+
+      const where = mockPrisma.price.findMany.mock.calls[0][0].where;
+      const gte = (where.validUntil.gte as Date).getTime();
+      expect(gte).toBeLessThanOrEqual(Date.now() + 1000);
+      expect(where.validUntil.not).toBeNull();
+      expect(res.data).toHaveLength(0);
+      expect(res.count).toBe(0);
+    });
+
+    it('sin precios → data vacía, count 0', async () => {
+      mockPrisma.price.findMany.mockResolvedValueOnce([]);
+      const res = await service.findExpiringPrices(LISTA_ID, VIEWER);
+      expect(res.data).toEqual([]);
+      expect(res.count).toBe(0);
+      expect(res.days).toBe(30);
+    });
+
+    it('lista inexistente → 404', async () => {
+      await expect(service.findExpiringPrices('no-existe', VIEWER)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('lista no autorizada → 404', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(null);
+      await expect(service.findExpiringPrices(OTHER_LISTA_ID, VIEWER)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('duplicateLista (OLA 6 complemento)', () => {
+    // Fuente rica con todos los campos de configuración a copiar.
+    const fullSource = {
+      ...mockLista,
+      type: 'COMERCIAL',
+      defaultVisibility: true,
+      responsibleId: 'user-responsible',
+      validFrom: new Date('2026-01-01T00:00:00Z'),
+      validUntil: new Date('2026-12-31T23:59:59Z'),
+    };
+
+    it('duplica con code único nuevo e isActive false, productCount 0', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(fullSource);
+      const res = await service.duplicateLista(LISTA_ID, ADMIN);
+
+      expect(res.isActive).toBe(false);
+      expect(res.productCount).toBe(0);
+      expect(res.name).toBe('Lista General (copia)');
+      expect(res.code).toMatch(/^LISTA-GENERAL-COPIA-[A-Z0-9]{4}$/);
+      const data = (mockPrisma.lista.create.mock.calls[0][0] as any).data;
+      expect(data.code).toBe(res.code);
+      expect(data.isActive).toBe(false);
+      // Unicidad: verifica que no reutiliza el code del origen.
+      expect(data.code).not.toBe('LISTA-GENERAL');
+    });
+
+    it('copia la configuración (type/defaultVisibility/vigencias/responsable/currency) y el actor', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(fullSource);
+      await service.duplicateLista(LISTA_ID, ADMIN);
+
+      expect(mockPrisma.lista.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: 'COMERCIAL',
+            defaultVisibility: true,
+            validFrom: fullSource.validFrom,
+            validUntil: fullSource.validUntil,
+            responsibleId: 'user-responsible',
+            currency: 'COP',
+            description: 'Raíz',
+            createdById: ADMIN.userId,
+            updatedById: ADMIN.userId,
+          }),
+        }),
+      );
+    });
+
+    it('NO copia productos, precios ni assignments (molde de configuración)', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(fullSource);
+      await service.duplicateLista(LISTA_ID, ADMIN);
+
+      expect(mockPrisma.price.create).not.toHaveBeenCalled();
+      expect(mockPrisma.price.upsert).not.toHaveBeenCalled();
+      expect(mockPrisma.product.create).not.toHaveBeenCalled();
+      expect(mockPrisma.assignment.create).not.toHaveBeenCalled();
+    });
+
+    it('audita la acción duplicate', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(fullSource);
+      await service.duplicateLista(LISTA_ID, ADMIN);
+
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'duplicate',
+          entity: 'LISTA',
+          oldValues: { sourceId: LISTA_ID },
+        }),
+      );
+    });
+
+    it('404 si la Lista origen no existe', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(null);
+      await expect(service.duplicateLista('no-existe', ADMIN)).rejects.toThrow(NotFoundException);
+    });
+
+    it('403 si el usuario solo tiene view (exige edit+)', async () => {
+      await expect(service.duplicateLista(LISTA_ID, VIEWER)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('404 si el usuario no tiene assignment sobre la Lista (deny-by-default)', async () => {
+      await expect(service.duplicateLista(LISTA_ID, NOAUTH)).rejects.toThrow(NotFoundException);
+    });
+
+    it('regenera el code si el candidato inicial ya existe (colisión)', async () => {
+      const codeCheck = jest.fn();
+      mockPrisma.lista.findUnique.mockImplementation(async (args: any) => {
+        if (args?.where?.id === LISTA_ID) return fullSource;
+        codeCheck();
+        // primera comprobación de code → colisión; siguientes → libres
+        return codeCheck.mock.calls.length === 1 ? { id: 'dup' } : null;
+      });
+
+      const res = await service.duplicateLista(LISTA_ID, ADMIN);
+
+      expect(codeCheck.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(res.code).toMatch(/^LISTA-GENERAL-COPIA-[A-Z0-9]{4}$/);
+      const data = (mockPrisma.lista.create.mock.calls[0][0] as any).data;
+      expect(data.code).toBe(res.code);
+    });
+
+    it('trunca name y code a límites razonables en fuentes largas', async () => {
+      const longSource = {
+        ...fullSource,
+        name: 'X'.repeat(300),
+        code: 'L'.repeat(80),
+      };
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(longSource);
+
+      const res = await service.duplicateLista(LISTA_ID, ADMIN);
+
+      expect(res.name.length).toBeLessThanOrEqual(121);
+      expect(res.name.endsWith('(copia)')).toBe(true);
+      expect(res.code.length).toBeLessThanOrEqual(60);
+      expect(res.code).toMatch(/^L+-COPIA-[A-Z0-9]{4}$/);
+    });
+  });
 });

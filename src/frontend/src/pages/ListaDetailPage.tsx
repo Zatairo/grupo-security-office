@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import api from '../services/api'
-import { fetchListaById, fetchListaProducts, fetchListaPrices, fetchListaAssignments, fetchListaAudit } from '../services/listas.service'
+import { fetchListaById, fetchListaProducts, fetchListaPrices, fetchListaAssignments, fetchListaAudit, downloadListaTemplateCsv } from '../services/listas.service'
 import { fetchPriceLists, createPrice, updatePrice, deletePrice } from '../services/prices.service'
 import type { Price, PricePayload, UpdatePricePayload } from '../services/prices.service'
 import { canManageListas, hasPermission, hasRole } from '../lib/rbac'
@@ -125,17 +125,30 @@ export default function ListaDetailPage() {
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
           {(canManageListas() || hasPermission('products:write')) && (
-            <Button
-              variant="secondary"
-              icon={
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-              }
-              onClick={() => setShowImportModal(true)}
-            >
-              Importar desde Excel
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                icon={
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                }
+                onClick={() => downloadListaTemplateCsv(`plantilla-lista-${lista.code}-${lista.id.slice(0, 8)}.csv`)}
+              >
+                Descargar plantilla
+              </Button>
+              <Button
+                variant="secondary"
+                icon={
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                }
+                onClick={() => setShowImportModal(true)}
+              >
+                Importar desde Excel
+              </Button>
+            </>
           )}
           <StatusBadge isActive={lista.isActive} />
           <span className="text-xs text-neutral-500">{formatDate(lista.updatedAt)}</span>
@@ -236,6 +249,7 @@ function ProductosTab({
                 <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Categoría</th>
                 <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Marca</th>
                 <th className="px-4 py-3 text-right text-xs font-condensed font-semibold text-neutral-500 uppercase">Precio base</th>
+                <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Estado</th>
                 <th className="px-4 py-3 text-right text-xs font-condensed font-semibold text-neutral-500 uppercase">Acciones</th>
               </tr>
             </thead>
@@ -250,6 +264,9 @@ function ProductosTab({
                     {Array.isArray(p.prices) && p.prices.length > 0
                       ? `${p.prices[0].currency} ${Number(p.prices[0].value).toLocaleString('es-CO')}`
                       : '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <PriceIndicator prices={p.prices} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
@@ -291,6 +308,31 @@ function ProductosTab({
         />
       )}
     </>
+  )
+}
+
+function PriceIndicator({ prices }: { prices: any[] }) {
+  const arr = Array.isArray(prices) ? prices : []
+  const hasAny = arr.length > 0
+  const hasActive = arr.some((pr: any) => !pr.validUntil || new Date(pr.validUntil).getTime() >= Date.now())
+  if (!hasAny) {
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+        Sin precio
+      </span>
+    )
+  }
+  if (hasActive) {
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">
+        Con precio
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+      Precio vencido
+    </span>
   )
 }
 

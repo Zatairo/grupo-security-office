@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import api from '../services/api'
 import {
   fetchListas,
   createLista,
@@ -9,6 +10,7 @@ import {
   archiveLista,
   restoreLista,
   productCountOf,
+  downloadListaTemplateCsv,
   type Lista,
   type ListaPayload,
 } from '../services/listas.service'
@@ -50,6 +52,9 @@ export default function ListasPage() {
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState<boolean | 'all'>('all')
   const [showImportModal, setShowImportModal] = useState(hasPersistedImportState)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [expiryFilter, setExpiryFilter] = useState<'all' | 'active' | 'expiring' | 'expired'>('all')
+  const selectAllRef = useRef<HTMLInputElement>(null)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['listas'] })
 
@@ -68,9 +73,14 @@ export default function ListasPage() {
         l.code.toLowerCase().includes(search.toLowerCase())
       const matchesState =
         activeFilter === 'all' || l.isActive === activeFilter
-      return matchesSearch && matchesState
+      const matchesExpiry =
+        expiryFilter === 'all' ||
+        (expiryFilter === 'active' && !l.isExpired && !l.isExpiringSoon) ||
+        (expiryFilter === 'expiring' && l.isExpiringSoon && !l.isExpired) ||
+        (expiryFilter === 'expired' && l.isExpired)
+      return matchesSearch && matchesState && matchesExpiry
     })
-  }, [listas, search, activeFilter])
+  }, [listas, search, activeFilter, expiryFilter])
 
   const toggleMutation = useMutation({
     mutationFn: (lista: Lista) => toggleListaActive(lista.id, !lista.isActive),
@@ -99,6 +109,76 @@ export default function ListasPage() {
     onError: (err) => setActionError(getApiErrorMessage(err, 'No se pudo restaurar la Lista')),
   })
 
+  const batchMutation = useMutation({
+    mutationFn: async ({ action, ids }: { action: 'activate' | 'deactivate' | 'archive' | 'restore'; ids: string[] }) => {
+      const tasks = ids.map((id) => {
+        if (action === 'activate') return updateLista(id, { isActive: true })
+        if (action === 'deactivate') return updateLista(id, { isActive: false })
+        if (action === 'archive') return archiveLista(id)
+        return restoreLista(id)
+      })
+      await Promise.all(tasks)
+    },
+    onSuccess: () => {
+      invalidate()
+      setSelectedIds([])
+      setActionError(null)
+    },
+    onError: (err) => setActionError(getApiErrorMessage(err, 'No se pudo completar la acción masiva')),
+  })
+
+  const duplicateMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/listas/${id}/duplicate`),
+    onSuccess: () => {
+      invalidate()
+      setActionError(null)
+    },
+    onError: (err) => {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 404 || status === 405 || status === 501 || status === 400) {
+        setActionError('La duplicación de Listas estará disponible próximamente.')
+      } else {
+        setActionError(getApiErrorMessage(err, 'No se pudo duplicar la Lista'))
+      }
+    },
+  })
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((l) => selectedIds.includes(l.id))
+  const someSelected = selectedIds.length > 0 && !allFilteredSelected
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !filtered.some((l) => l.id === id)))
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...filtered.map((l) => l.id)])))
+    }
+  }
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someSelected
+    }
+  }, [someSelected])
+
+  const runBatch = (action: 'activate' | 'deactivate' | 'archive' | 'restore', label: string) => {
+    const ids = selectedIds.filter((id) => {
+      const l = listas?.find((item) => item.id === id)
+      if (!l) return false
+      if (action === 'archive') return !l.archivedAt
+      if (action === 'restore') return !!l.archivedAt
+      return true
+    })
+    if (ids.length === 0) {
+      setActionError(`No hay Listas seleccionadas que apliquen para ${label.toLowerCase()}.`)
+      return
+    }
+    if (!window.confirm(`¿${label} ${ids.length} lista(s) seleccionada(s)?`)) return
+    batchMutation.mutate({ action, ids })
+  }
+
   const listError = error ? getApiErrorMessage(error, 'No se pudieron cargar las Listas') : null
 
   return (
@@ -111,6 +191,19 @@ export default function ListasPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          {hasPermission('products:write') && (
+            <Button
+              variant="secondary"
+              icon={
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              }
+              onClick={() => downloadListaTemplateCsv('plantilla-lista-generica.csv')}
+            >
+              Descargar plantilla
+            </Button>
+          )}
           {hasPermission('products:write') && (
             <Button
               variant="secondary"
@@ -144,7 +237,7 @@ export default function ListasPage() {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col xl:flex-row gap-3">
         <div className="relative flex-1">
           <input
             type="text"
@@ -162,25 +255,43 @@ export default function ListasPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
-        <div className="flex gap-1.5 bg-neutral-100 rounded-lg p-1 text-xs font-medium text-neutral-600">
-          <button
-            onClick={() => setActiveFilter('all')}
-            className={`px-3 py-1.5 rounded ${activeFilter === 'all' ? 'bg-white shadow text-neutral-800' : ''}`}
-          >
-            Todas
-          </button>
-          <button
-            onClick={() => setActiveFilter(true)}
-            className={`px-3 py-1.5 rounded ${activeFilter === true ? 'bg-white shadow text-neutral-800' : ''}`}
-          >
-            Activas
-          </button>
-          <button
-            onClick={() => setActiveFilter(false)}
-            className={`px-3 py-1.5 rounded ${activeFilter === false ? 'bg-white shadow text-neutral-800' : ''}`}
-          >
-            Inactivas
-          </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex gap-1.5 bg-neutral-100 rounded-lg p-1 text-xs font-medium text-neutral-600">
+            <button
+              onClick={() => setActiveFilter('all')}
+              className={`px-3 py-1.5 rounded ${activeFilter === 'all' ? 'bg-white shadow text-neutral-800' : ''}`}
+            >
+              Todas
+            </button>
+            <button
+              onClick={() => setActiveFilter(true)}
+              className={`px-3 py-1.5 rounded ${activeFilter === true ? 'bg-white shadow text-neutral-800' : ''}`}
+            >
+              Activas
+            </button>
+            <button
+              onClick={() => setActiveFilter(false)}
+              className={`px-3 py-1.5 rounded ${activeFilter === false ? 'bg-white shadow text-neutral-800' : ''}`}
+            >
+              Inactivas
+            </button>
+          </div>
+          <div className="flex gap-1.5 bg-neutral-100 rounded-lg p-1 text-xs font-medium text-neutral-600">
+            {([
+              { key: 'all', label: 'Vigencia: todas' },
+              { key: 'active', label: 'Vigentes' },
+              { key: 'expiring', label: 'Por vencer (30d)' },
+              { key: 'expired', label: 'Vencidas' },
+            ] as const).map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setExpiryFilter(f.key)}
+                className={`px-3 py-1.5 rounded ${expiryFilter === f.key ? 'bg-white shadow text-neutral-800' : ''}`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -194,6 +305,47 @@ export default function ListasPage() {
       {listError && (
         <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
           <span className="flex-1">{listError}</span>
+        </div>
+      )}
+
+      {canManageListas() && filtered.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-white rounded-xl border border-neutral-200">
+          <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+            <input
+              ref={selectAllRef}
+              type="checkbox"
+              checked={allFilteredSelected}
+              onChange={toggleSelectAll}
+              className="h-4 w-4 accent-[var(--color-primary)] cursor-pointer"
+              aria-label="Seleccionar todas las Listas filtradas"
+            />
+            Seleccionar todas las filtradas
+          </label>
+          {selectedIds.length > 0 && (
+            <>
+              <span className="text-sm font-medium text-neutral-600">{selectedIds.length} seleccionada(s)</span>
+              <button
+                onClick={() => setSelectedIds([])}
+                className="text-sm text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+              >
+                Limpiar selección
+              </button>
+              <div className="flex flex-wrap gap-2 ml-auto">
+                <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('activate', 'Activar')}>
+                  Activar
+                </Button>
+                <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('deactivate', 'Desactivar')}>
+                  Desactivar
+                </Button>
+                <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('archive', 'Archivar')}>
+                  Archivar
+                </Button>
+                <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('restore', 'Restaurar')}>
+                  Restaurar
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -230,6 +382,15 @@ export default function ListasPage() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 min-w-0">
+                    {canManageListas() && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(lista.id)}
+                        onChange={() => toggleSelect(lista.id)}
+                        className="mt-3 h-4 w-4 accent-[var(--color-primary)] cursor-pointer"
+                        aria-label={`Seleccionar ${lista.name}`}
+                      />
+                    )}
                     <div className="w-12 h-12 bg-[var(--color-primary-bg-subtle)] rounded-xl flex items-center justify-center text-[var(--color-primary)] flex-shrink-0">
                       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -243,6 +404,13 @@ export default function ListasPage() {
                         {lista.name}
                       </Link>
                       <p className="text-xs text-neutral-400 font-mono">{lista.code} · {lista.currency}</p>
+                      {(lista.isExpiringSoon || lista.isExpired) && typeof lista.daysUntilExpiry === 'number' && (
+                        <p className={`text-xs font-medium mt-0.5 ${lista.isExpired ? 'text-red-600' : 'text-amber-600'}`}>
+                          {lista.isExpired
+                            ? `Vencida hace ${Math.abs(lista.daysUntilExpiry)} día(s)`
+                            : `Vence en ${lista.daysUntilExpiry} día(s)`}
+                        </p>
+                      )}
                       {lista.description && (
                         <p className="text-sm text-neutral-500 mt-1 line-clamp-2">{lista.description}</p>
                       )}
@@ -250,6 +418,16 @@ export default function ListasPage() {
                   </div>
                   <div className="flex flex-col items-end gap-2 flex-shrink-0">
                     <StatusBadge isActive={lista.isActive} archived={lista.archivedAt !== null} />
+                    {lista.isExpiringSoon && (
+                      <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                        Por vencer
+                      </span>
+                    )}
+                    {lista.isExpired && (
+                      <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                        Vencida
+                      </span>
+                    )}
                     <span className="text-xs text-neutral-500 whitespace-nowrap">
                       {productCountOf(lista)} producto(s)
                     </span>
@@ -261,6 +439,19 @@ export default function ListasPage() {
                   <div className="flex items-center gap-1">
                     {canManageListas() && !lista.archivedAt && (
                       <>
+                        <button
+                          onClick={() => {
+                            setActionError(null)
+                            duplicateMutation.mutate(lista.id)
+                          }}
+                          className="p-2 text-neutral-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                          title="Duplicar Lista"
+                          aria-label="Duplicar Lista"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        </button>
                         <button
                           onClick={() => {
                             setActionError(null)

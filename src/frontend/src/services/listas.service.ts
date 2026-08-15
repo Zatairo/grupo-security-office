@@ -8,6 +8,9 @@ export interface Lista {
   currency: string
   isActive: boolean
   archivedAt: string | null
+  isExpired?: boolean
+  isExpiringSoon?: boolean
+  daysUntilExpiry?: number | null
   type?: string | null
   defaultVisibility?: boolean
   responsibleId?: string | null
@@ -95,4 +98,65 @@ export const fetchListaAudit = async (id: string): Promise<any[]> => {
 export function productCountOf(lista: Lista | undefined | null): number {
   if (!lista) return 0
   return lista.productCount ?? 0
+}
+
+/** Headers estándar del import de productos (coinciden con los sinónimos de header-detection). */
+export const LISTA_TEMPLATE_HEADERS = [
+  'SKU',
+  'Nombre',
+  'Descripción',
+  'Categoría',
+  'Marca',
+  'Especificaciones Técnicas',
+  'Precio Instalador (IVA)',
+  'Precio Tienda (IVA)',
+  'Precio DPP Oro (IVA)',
+  'Precio DPP Platino (IVA)',
+  'Precio Cliente Final (IVA)',
+  'Oro sin IVA',
+  'Installer sin IVA',
+] as const
+
+const LISTA_TEMPLATE_EXAMPLE_ROW = [
+  'SKU-EJEMPLO',
+  'Producto de ejemplo',
+  '',
+  'Categoría ejemplo',
+  'Marca ejemplo',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+]
+
+function csvCell(value: string): string {
+  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`
+  return value
+}
+
+function sanitizeFileName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '-')
+}
+
+export function buildListaTemplateCsv(): string {
+  return [LISTA_TEMPLATE_HEADERS, LISTA_TEMPLATE_EXAMPLE_ROW]
+    .map((row) => row.map(csvCell).join(','))
+    .join('\n')
+}
+
+/** Genera y descarga la plantilla estándar de productos como CSV (con BOM para Excel). */
+export function downloadListaTemplateCsv(fileName: string): void {
+  const blob = new Blob(['\uFEFF' + buildListaTemplateCsv()], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = sanitizeFileName(fileName)
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
 }
