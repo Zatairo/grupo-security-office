@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -150,5 +151,18 @@ export class ListasController {
   @ApiOperation({ summary: 'Restaurar Lista archivada (manage)' })
   restore(@Param('id') id: string, @CurrentUser() user: any) {
     return this.listasService.restore(id, this.ctx(user));
+  }
+
+  @Delete(':id')
+  @Roles('Super Admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Eliminar Lista físicamente (bloqueada si tiene productos, precios, accesos o historial)',
+  })
+  @ApiResponse({ status: 200, description: 'Lista eliminada (sin datos asociados)' })
+  @ApiResponse({ status: 404, description: 'Lista no encontrada' })
+  @ApiResponse({ status: 409, description: 'La Lista tiene datos asociados' })
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.listasService.removeLista(id, this.ctx(user));
   }
 }

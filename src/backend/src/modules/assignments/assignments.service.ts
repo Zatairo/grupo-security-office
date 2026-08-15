@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService, AccessContext } from '../../common/acl/acl.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateAssignmentDto, ASSIGNMENT_RESOURCE_TYPES } from './dto/create-assignment.dto';
 import { UpdateAssignmentDto } from './dto/update-assignment.dto';
 
@@ -14,6 +15,7 @@ export class AssignmentsService {
   constructor(
     private prisma: PrismaService,
     private acl: AclService,
+    private audit: AuditService,
   ) {}
 
   /**
@@ -100,13 +102,24 @@ export class AssignmentsService {
     }
 
     if (existing) {
-      return this.prisma.assignment.update({
+      const reactivated = await this.prisma.assignment.update({
         where: { id: existing.id },
         data: { isActive: true, level },
       });
+
+      await this.audit.log({
+        userId: ctx?.userId,
+        action: 'update',
+        entity: 'Assignment',
+        entityId: existing.id,
+        oldValues: { level: existing.level, isActive: existing.isActive },
+        newValues: { level, isActive: true },
+      });
+
+      return reactivated;
     }
 
-    return this.prisma.assignment.create({
+    const created = await this.prisma.assignment.create({
       data: {
         userId: dto.userId,
         resourceType: dto.resourceType,
@@ -114,6 +127,21 @@ export class AssignmentsService {
         level,
       },
     });
+
+    await this.audit.log({
+      userId: ctx?.userId,
+      action: 'create',
+      entity: 'Assignment',
+      entityId: created.id,
+      newValues: {
+        userId: created.userId,
+        resourceType: created.resourceType,
+        resourceId: created.resourceId,
+        level: created.level,
+      },
+    });
+
+    return created;
   }
 
   async update(id: string, dto: UpdateAssignmentDto, ctx?: AccessContext) {
@@ -126,7 +154,18 @@ export class AssignmentsService {
     if (dto.level !== undefined) data.level = dto.level;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
 
-    return this.prisma.assignment.update({ where: { id }, data });
+    const updated = await this.prisma.assignment.update({ where: { id }, data });
+
+    await this.audit.log({
+      userId: ctx?.userId,
+      action: 'update',
+      entity: 'Assignment',
+      entityId: id,
+      oldValues: { level: existing.level, isActive: existing.isActive },
+      newValues: data,
+    });
+
+    return updated;
   }
 
   async remove(id: string, ctx?: AccessContext) {
@@ -139,6 +178,15 @@ export class AssignmentsService {
       await this.prisma.assignment.update({
         where: { id },
         data: { isActive: false },
+      });
+
+      await this.audit.log({
+        userId: ctx?.userId,
+        action: 'delete',
+        entity: 'Assignment',
+        entityId: id,
+        oldValues: { level: existing.level, isActive: existing.isActive },
+        newValues: { isActive: false },
       });
     }
   }

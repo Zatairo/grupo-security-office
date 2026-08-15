@@ -9,6 +9,7 @@ import ProductDetailPage from './pages/ProductDetailPage'
 import ListasPage from './pages/ListasPage'
 import ListaDetailPage from './pages/ListaDetailPage'
 import AssignmentsPage from './pages/AssignmentsPage'
+import SuppliersPage from './pages/SuppliersPage'
 import CommercialSettingsPage from './pages/CommercialSettingsPage'
 import UsersPage from './pages/UsersPage'
 import AuditPage from './pages/AuditPage'
@@ -43,6 +44,7 @@ function App() {
           <Route path="lists" element={<ListasPage />} />
           <Route path="lists/:id" element={<ListaDetailPage />} />
           <Route path="assignments" element={<AssignmentsPage />} />
+          <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="settings" element={<CommercialSettingsPage />} />
         </Route>
         <Route path="products" element={<Navigate to="/commercial/products" replace />} />

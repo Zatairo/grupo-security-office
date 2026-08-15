@@ -4,6 +4,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -44,21 +45,25 @@ export class UsersController {
   @ApiOperation({ summary: 'Crear usuario' })
   @ApiResponse({ status: 201, description: 'Usuario creado' })
   @ApiResponse({ status: 409, description: 'Email ya registrado' })
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  create(@Body() createUserDto: CreateUserDto, @CurrentUser() user: any) {
+    return this.usersService.create(createUserDto, user?.sub ?? user?.id);
   }
 
   @Put(':id')
   @Roles('Super Admin')
   @ApiOperation({ summary: 'Actualizar usuario' })
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(id, updateUserDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.update(id, updateUserDto, user?.sub ?? user?.id);
   }
 
   @Delete(':id')
   @Roles('Super Admin')
   @ApiOperation({ summary: 'Eliminar usuario' })
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.usersService.remove(id, user?.sub ?? user?.id);
   }
 }

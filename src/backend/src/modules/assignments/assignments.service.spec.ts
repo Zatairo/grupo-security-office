@@ -11,6 +11,9 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { AssignmentsService } from './assignments.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService } from '../../common/acl/acl.service';
+import { AuditService } from '../audit/audit.service';
+
+const mockAudit = { log: jest.fn().mockResolvedValue(undefined) };
 
 const mockAcl = {
   isSuperAdmin: jest.fn().mockReturnValue(false),
@@ -45,6 +48,7 @@ describe('AssignmentsService', () => {
         AssignmentsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AclService, useValue: mockAcl },
+        { provide: AuditService, useValue: mockAudit },
       ],
     }).compile();
 

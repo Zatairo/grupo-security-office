@@ -464,6 +464,59 @@ export class ListasService {
     return updated;
   }
 
+  /**
+   * Eliminación física de una Lista — exclusivo Super Admin.
+   *
+   * Bloqueada (409) si la Lista tiene datos asociados: productos, precios,
+   * accesos (assignments) o historial de auditoría. El conteo de historial
+   * EXCLUYE el evento `create` (decisión OLA 7A): toda Lista creada por API
+   * genera un audit de creación, y permitir borrar una Lista vacía recién
+   * creada exige que ese evento no bloquee; el historial significativo
+   * (update/archive/restore/duplicate/toggle) sí bloquea. Se audita la
+   * eliminación ANTES de borrar para capturar id/nombre en el log.
+   */
+  async removeLista(id: string, ctx: AccessContext) {
+    if (!this.acl.isSuperAdmin(ctx.roles)) {
+      throw new ForbiddenException('Solo Super Admin puede eliminar Listas');
+    }
+
+    const lista = await this.prisma.lista.findUnique({
+      where: { id },
+      select: { id: true, name: true, code: true },
+    });
+    if (!lista) throw new NotFoundException('Lista no encontrada');
+
+    const [products, prices, assignments, auditLogs] = await Promise.all([
+      this.prisma.product.count({ where: { listaId: id } }),
+      this.prisma.price.count({ where: { listaId: id } }),
+      this.prisma.assignment.count({ where: { resourceType: 'LISTA', resourceId: id } }),
+      this.prisma.auditLog.count({ where: { entity: 'LISTA', entityId: id, action: { not: 'create' } } }),
+    ]);
+
+    const impact: string[] = [];
+    if (products > 0) impact.push(`${products} producto${products === 1 ? '' : 's'}`);
+    if (prices > 0) impact.push(`${prices} precio${prices === 1 ? '' : 's'}`);
+    if (assignments > 0) impact.push(`${assignments} accesos`);
+    if (auditLogs > 0) impact.push(`${auditLogs} registros de historial`);
+
+    if (impact.length > 0) {
+      throw new ConflictException(
+        `La Lista tiene ${impact.join(' y ')}. Archívela o elimine los datos asociados primero.`,
+      );
+    }
+
+    await this.audit.log({
+      userId: ctx.userId,
+      action: 'delete',
+      entity: 'LISTA',
+      entityId: lista.id,
+      newValues: { code: lista.code, name: lista.name },
+    });
+
+    await this.prisma.lista.delete({ where: { id } });
+    return { message: 'Lista eliminada exitosamente' };
+  }
+
   /** Alias interno: require manage (incluye deny-by-default por inactiva/archivada). */
   private async assertManage(id: string, ctx: AccessContext): Promise<void> {
     await this.acl.assertListaAccess(id, ctx, 'manage');

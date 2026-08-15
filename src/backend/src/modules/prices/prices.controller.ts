@@ -39,30 +39,34 @@ export class PricesController {
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Crear lista de precios (tarifa)' })
   @ApiResponse({ status: 201, description: 'Lista creada' })
-  createPriceList(@Body() dto: CreatePriceListDto) {
-    return this.pricesService.createPriceList(dto);
+  createPriceList(@Body() dto: CreatePriceListDto, @CurrentUser() user: any) {
+    return this.pricesService.createPriceList(dto, user?.sub ?? user?.id);
   }
 
   @Put('lists/:id')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Actualizar lista de precios (tarifa)' })
-  updatePriceList(@Param('id') id: string, @Body() dto: Partial<CreatePriceListDto>) {
-    return this.pricesService.updatePriceList(id, dto);
+  updatePriceList(
+    @Param('id') id: string,
+    @Body() dto: Partial<CreatePriceListDto>,
+    @CurrentUser() user: any,
+  ) {
+    return this.pricesService.updatePriceList(id, dto, user?.sub ?? user?.id);
   }
 
   @Patch('lists/:id/toggle-active')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Alternar estado activo de la lista de precios' })
   @ApiResponse({ status: 200, description: 'Lista actualizada' })
-  togglePriceListActive(@Param('id') id: string) {
-    return this.pricesService.togglePriceListActive(id);
+  togglePriceListActive(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.pricesService.togglePriceListActive(id, user?.sub ?? user?.id);
   }
 
   @Delete('lists/:id')
   @Roles('Super Admin')
   @ApiOperation({ summary: 'Eliminar lista de precios (tarifa)' })
-  removePriceList(@Param('id') id: string) {
-    return this.pricesService.removePriceList(id);
+  removePriceList(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.pricesService.removePriceList(id, user?.sub ?? user?.id);
   }
 
   @Get('product/:productId')
@@ -97,7 +101,7 @@ export class PricesController {
   @Delete(':id')
   @Roles('Super Admin')
   @ApiOperation({ summary: 'Eliminar precio' })
-  removePrice(@Param('id') id: string) {
-    return this.pricesService.removePrice(id);
+  removePrice(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.pricesService.removePrice(id, this.ctx(user));
   }
 }

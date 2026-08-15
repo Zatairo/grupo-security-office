@@ -6,6 +6,7 @@ const COMMERCIAL_TABS = [
   { to: '/commercial/products', label: 'Productos', end: true },
   { to: '/commercial/lists', label: 'Listas', end: false },
   { to: '/commercial/assignments', label: 'Asignaciones', end: false, superAdminOnly: true },
+  { to: '/commercial/suppliers', label: 'Proveedores', end: false },
   { to: '/commercial/settings', label: 'Configuración', end: false },
 ]
 

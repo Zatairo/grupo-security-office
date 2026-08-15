@@ -14,6 +14,9 @@ interface ProductSpreadsheetTableProps {
   onToggleActive: (id: string) => void
   onToggleVisibility: (id: string) => void
   onDelete: (id: string) => void
+  selectedProductIds?: Set<string>
+  onToggleSelectProduct?: (id: string) => void
+  onToggleSelectAllProducts?: () => void
 }
 
 const COLUMN_WIDTHS = {
@@ -146,6 +149,9 @@ export function ProductSpreadsheetTable({
   onToggleActive,
   onToggleVisibility,
   onDelete,
+  selectedProductIds,
+  onToggleSelectProduct,
+  onToggleSelectAllProducts,
 }: ProductSpreadsheetTableProps) {
   const canWrite = hasPermission('products:write')
   const canDelete = hasPermission('products:delete')
@@ -153,8 +159,11 @@ export function ProductSpreadsheetTable({
   const [sortKey, setSortKey] = useState<SortKey | null>('product')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [internalSelectedIds, setInternalSelectedIds] = useState<Set<string>>(() => new Set())
   const headerCheckboxRef = useRef<HTMLInputElement>(null)
+
+  const controlled = typeof onToggleSelectProduct === 'function'
+  const selectedIds = controlled ? (selectedProductIds ?? new Set<string>()) : internalSelectedIds
 
   const allSelected = products.length > 0 && products.every((p) => selectedIds.has(p.id))
   const someSelected = selectedIds.size > 0 && !allSelected
@@ -212,25 +221,33 @@ export function ProductSpreadsheetTable({
   const headerButtonClass =
     'flex items-center gap-1.5 font-semibold uppercase tracking-wide hover:text-security-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-security-500/40 focus-visible:rounded'
 
-  const toggleRow = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  const handleToggleRow = (id: string) => {
+    if (onToggleSelectProduct) {
+      onToggleSelectProduct(id)
+    } else {
+      setInternalSelectedIds((prev) => {
+        const next = new Set(prev)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+      })
+    }
   }
 
-  const toggleAll = () => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (allSelected) {
-        products.forEach((p) => next.delete(p.id))
-      } else {
-        products.forEach((p) => next.add(p.id))
-      }
-      return next
-    })
+  const handleToggleAll = () => {
+    if (onToggleSelectAllProducts) {
+      onToggleSelectAllProducts()
+    } else {
+      setInternalSelectedIds((prev) => {
+        const next = new Set(prev)
+        if (allSelected) {
+          products.forEach((p) => next.delete(p.id))
+        } else {
+          products.forEach((p) => next.add(p.id))
+        }
+        return next
+      })
+    }
   }
 
   const visiblePriceColumns = getVisiblePriceColumns(products)
@@ -252,7 +269,7 @@ export function ProductSpreadsheetTable({
                 ref={headerCheckboxRef}
                 type="checkbox"
                 checked={allSelected}
-                onChange={toggleAll}
+                onChange={handleToggleAll}
                 aria-label="Seleccionar todos los productos de la página"
                 className="h-4 w-4 accent-security-500 cursor-pointer"
               />
@@ -378,7 +395,7 @@ export function ProductSpreadsheetTable({
                     <input
                       type="checkbox"
                       checked={selected}
-                      onChange={() => toggleRow(product.id)}
+                      onChange={() => handleToggleRow(product.id)}
                       aria-label={`Seleccionar ${product.name}`}
                       className="h-4 w-4 accent-security-500 cursor-pointer"
                     />

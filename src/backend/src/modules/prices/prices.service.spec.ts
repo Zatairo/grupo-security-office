@@ -11,6 +11,9 @@ import { ConflictException, NotFoundException, BadRequestException, ForbiddenExc
 import { PricesService } from './prices.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService } from '../../common/acl/acl.service';
+import { AuditService } from '../audit/audit.service';
+
+const mockAudit = { log: jest.fn().mockResolvedValue(undefined) };
 
 const mockAcl = {
   isSuperAdmin: jest.fn().mockReturnValue(false),
@@ -85,6 +88,7 @@ describe('PricesService', () => {
         PricesService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AclService, useValue: mockAcl },
+        { provide: AuditService, useValue: mockAudit },
       ],
     }).compile();
 
@@ -408,7 +412,7 @@ describe('PricesService', () => {
 
     beforeEach(() => {
       acl = new AclService(mockPrisma as any);
-      svc = new PricesService(mockPrisma as any, acl);
+      svc = new PricesService(mockPrisma as any, acl, mockAudit as any);
       mockPrisma.assignment.findMany.mockImplementation(async (args: any) => {
         const u = args?.where?.userId;
         const rt = args?.where?.resourceType;

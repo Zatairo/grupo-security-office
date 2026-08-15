@@ -1,5 +1,6 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -7,7 +8,7 @@ import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private audit: AuditService) {}
 
   async findAll(params?: { skip?: number; take?: number; search?: string }) {
     const { skip = 0, take = 50, search } = params || {};
@@ -65,7 +66,7 @@ export class UsersService {
     };
   }
 
-  async create(dto: CreateUserDto) {
+  async create(dto: CreateUserDto, actorId?: string) {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
@@ -93,6 +94,19 @@ export class UsersService {
       },
     });
 
+    await this.audit.log({
+      userId: actorId,
+      action: 'create',
+      entity: 'User',
+      entityId: user.id,
+      newValues: {
+        email: user.email,
+        name: user.name,
+        isActive: user.isActive,
+        roles: user.roles.map((ur) => ur.role.name),
+      },
+    });
+
     return {
       ...user,
       password: undefined,
@@ -100,7 +114,7 @@ export class UsersService {
     };
   }
 
-  async update(id: string, dto: UpdateUserDto) {
+  async update(id: string, dto: UpdateUserDto, actorId?: string) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('Usuario no encontrado');
 
@@ -136,6 +150,24 @@ export class UsersService {
       },
     });
 
+    await this.audit.log({
+      userId: actorId,
+      action: 'update',
+      entity: 'User',
+      entityId: id,
+      oldValues: {
+        email: user.email,
+        name: user.name,
+        isActive: user.isActive,
+      },
+      newValues: {
+        ...(dto.name && { name: dto.name }),
+        ...(dto.email && { email: dto.email.toLowerCase() }),
+        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+        roles: updated.roles.map((ur) => ur.role.name),
+      },
+    });
+
     return {
       ...updated,
       password: undefined,
@@ -143,9 +175,17 @@ export class UsersService {
     };
   }
 
-  async remove(id: string) {
+  async remove(id: string, actorId?: string) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('Usuario no encontrado');
+
+    await this.audit.log({
+      userId: actorId,
+      action: 'delete',
+      entity: 'User',
+      entityId: user.id,
+      newValues: { email: user.email, name: user.name },
+    });
 
     await this.prisma.assignment.deleteMany({ where: { userId: id } });
     await this.prisma.userRole.deleteMany({ where: { userId: id } });

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService, AccessContext } from '../../common/acl/acl.service';
+import { AuditService } from '../audit/audit.service';
 import { CreatePriceDto } from './dto/create-price.dto';
 import { UpdatePriceDto } from './dto/update-price.dto';
 import { CreatePriceListDto } from './dto/create-price-list.dto';
@@ -10,7 +11,11 @@ const ALLOWED_CURRENCIES = ['COP', 'USD', 'EUR'] as const;
 
 @Injectable()
 export class PricesService {
-  constructor(private prisma: PrismaService, private acl: AclService) {}
+  constructor(
+    private prisma: PrismaService,
+    private acl: AclService,
+    private audit: AuditService,
+  ) {}
 
   /** Valida que la moneda (si se envía) esté en la whitelist. */
   private validateCurrency(currency?: string): void {
@@ -109,14 +114,14 @@ export class PricesService {
     return list;
   }
 
-  async createPriceList(dto: CreatePriceListDto) {
+  async createPriceList(dto: CreatePriceListDto, actorId?: string) {
     const existing = await this.prisma.priceList.findUnique({ where: { code: dto.code } });
     if (existing) throw new ConflictException('Ya existe una lista con ese código');
 
     this.validateCurrency(dto.currency);
     this.validatePriceListDates(dto.validFrom ?? null, dto.validUntil ?? null);
 
-    return this.prisma.priceList.create({
+    const created = await this.prisma.priceList.create({
       data: {
         name: dto.name,
         code: dto.code,
@@ -126,9 +131,26 @@ export class PricesService {
         validUntil: dto.validUntil,
       },
     });
+
+    await this.audit.log({
+      userId: actorId,
+      action: 'create',
+      entity: 'PriceList',
+      entityId: created.id,
+      newValues: {
+        name: created.name,
+        code: created.code,
+        currency: created.currency,
+        isActive: created.isActive,
+        validFrom: created.validFrom,
+        validUntil: created.validUntil,
+      },
+    });
+
+    return created;
   }
 
-  async updatePriceList(id: string, dto: Partial<CreatePriceListDto>) {
+  async updatePriceList(id: string, dto: Partial<CreatePriceListDto>, actorId?: string) {
     const list = await this.prisma.priceList.findUnique({ where: { id } });
     if (!list) throw new NotFoundException('Lista de precios no encontrada');
 
@@ -143,30 +165,61 @@ export class PricesService {
     const validUntil = dto.validUntil !== undefined ? dto.validUntil : list.validUntil;
     this.validatePriceListDates(validFrom ?? null, validUntil ?? null);
 
-    return this.prisma.priceList.update({
+    const data = {
+      ...(dto.name && { name: dto.name }),
+      ...(dto.code && { code: dto.code }),
+      ...(dto.currency && { currency: dto.currency }),
+      ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+      ...(dto.validFrom !== undefined && { validFrom: dto.validFrom }),
+      ...(dto.validUntil !== undefined && { validUntil: dto.validUntil }),
+    };
+
+    const updated = await this.prisma.priceList.update({
       where: { id },
-      data: {
-        ...(dto.name && { name: dto.name }),
-        ...(dto.code && { code: dto.code }),
-        ...(dto.currency && { currency: dto.currency }),
-        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
-        ...(dto.validFrom !== undefined && { validFrom: dto.validFrom }),
-        ...(dto.validUntil !== undefined && { validUntil: dto.validUntil }),
-      },
+      data,
     });
+
+    await this.audit.log({
+      userId: actorId,
+      action: 'update',
+      entity: 'PriceList',
+      entityId: id,
+      oldValues: {
+        name: list.name,
+        code: list.code,
+        currency: list.currency,
+        isActive: list.isActive,
+        validFrom: list.validFrom,
+        validUntil: list.validUntil,
+      },
+      newValues: data,
+    });
+
+    return updated;
   }
 
-  async togglePriceListActive(id: string) {
+  async togglePriceListActive(id: string, actorId?: string) {
     const list = await this.prisma.priceList.findUnique({ where: { id } });
     if (!list) throw new NotFoundException('Lista de precios no encontrada');
 
-    return this.prisma.priceList.update({
+    const updated = await this.prisma.priceList.update({
       where: { id },
       data: { isActive: !list.isActive },
     });
+
+    await this.audit.log({
+      userId: actorId,
+      action: 'update',
+      entity: 'PriceList',
+      entityId: id,
+      oldValues: { isActive: list.isActive },
+      newValues: { isActive: updated.isActive },
+    });
+
+    return updated;
   }
 
-  async removePriceList(id: string) {
+  async removePriceList(id: string, actorId?: string) {
     const list = await this.prisma.priceList.findUnique({
       where: { id },
       include: { _count: { select: { prices: true } } },
@@ -176,6 +229,14 @@ export class PricesService {
     if (list._count.prices > 0) {
       throw new ConflictException('No se puede eliminar una lista con precios asociados');
     }
+
+    await this.audit.log({
+      userId: actorId,
+      action: 'delete',
+      entity: 'PriceList',
+      entityId: list.id,
+      newValues: { name: list.name, code: list.code },
+    });
 
     await this.prisma.priceList.delete({ where: { id } });
     return { message: 'Lista de precios eliminada exitosamente' };
@@ -245,10 +306,10 @@ export class PricesService {
       throw new ConflictException('El listaId del precio no coincide con la Lista del producto');
     }
 
-    this.validateCurrency(dto.currency);
+this.validateCurrency(dto.currency);
     this.validatePrice(dto.value, dto.validFrom, dto.validUntil);
 
-    return this.prisma.price.create({
+    const created = await this.prisma.price.create({
       data: {
         productId: dto.productId,
         priceListId: dto.priceListId,
@@ -263,6 +324,25 @@ export class PricesService {
         priceList: true,
       },
     });
+
+    await this.audit.log({
+      userId: ctx?.userId,
+      action: 'create',
+      entity: 'Price',
+      entityId: created.id,
+      newValues: {
+        productId: created.productId,
+        productSku: created.product?.sku,
+        priceListId: created.priceListId,
+        priceListName: created.priceList?.name,
+        value: created.value,
+        currency: created.currency,
+        validFrom: created.validFrom,
+        validUntil: created.validUntil,
+      },
+    });
+
+    return created;
   }
 
   async updatePrice(id: string, dto: UpdatePriceDto, ctx?: AccessContext) {
@@ -296,25 +376,57 @@ export class PricesService {
       price.validUntil,
     );
 
-    return this.prisma.price.update({
+    const data = {
+      ...(dto.value !== undefined && { value: dto.value }),
+      ...(dto.listaId !== undefined && { listaId: dto.listaId }),
+      ...(dto.currency && { currency: dto.currency }),
+      ...(dto.validFrom !== undefined && { validFrom: dto.validFrom ?? null }),
+      ...(dto.validUntil !== undefined && { validUntil: dto.validUntil ?? null }),
+    };
+
+    const updated = await this.prisma.price.update({
       where: { id },
-      data: {
-        ...(dto.value !== undefined && { value: dto.value }),
-        ...(dto.listaId !== undefined && { listaId: dto.listaId }),
-        ...(dto.currency && { currency: dto.currency }),
-        ...(dto.validFrom !== undefined && { validFrom: dto.validFrom ?? null }),
-        ...(dto.validUntil !== undefined && { validUntil: dto.validUntil ?? null }),
-      },
+      data,
       include: {
         product: { select: { id: true, sku: true, name: true } },
         priceList: true,
       },
     });
+
+    await this.audit.log({
+      userId: ctx?.userId,
+      action: 'update',
+      entity: 'Price',
+      entityId: id,
+      oldValues: {
+        value: price.value,
+        currency: price.currency,
+        listaId: price.listaId,
+        validFrom: price.validFrom,
+        validUntil: price.validUntil,
+      },
+      newValues: data,
+    });
+
+    return updated;
   }
 
-  async removePrice(id: string) {
+  async removePrice(id: string, ctx?: AccessContext) {
     const price = await this.prisma.price.findUnique({ where: { id } });
     if (!price) throw new NotFoundException('Precio no encontrado');
+
+    await this.audit.log({
+      userId: ctx?.userId,
+      action: 'delete',
+      entity: 'Price',
+      entityId: price.id,
+      newValues: {
+        productId: price.productId,
+        priceListId: price.priceListId,
+        value: price.value,
+        currency: price.currency,
+      },
+    });
 
     await this.prisma.price.delete({ where: { id } });
     return { message: 'Precio eliminado exitosamente' };

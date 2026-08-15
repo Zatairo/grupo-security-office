@@ -44,14 +44,22 @@ export interface UpdatePricePayload {
   validUntil?: string | null
 }
 
+function asList(res: unknown): any[] {
+  if (Array.isArray(res)) return res
+  if (res && typeof res === 'object' && Array.isArray((res as { data?: unknown }).data)) {
+    return (res as { data: any[] }).data
+  }
+  return []
+}
+
 export const fetchPriceLists = async (): Promise<PriceList[]> => {
   const res = await api.get('/prices/lists')
-  return (res.data as PriceList[]) ?? []
+  return asList(res.data) as PriceList[]
 }
 
 export const fetchPricesByProduct = async (productId: string): Promise<Price[]> => {
   const res = await api.get(`/prices/product/${productId}`)
-  return (res.data as Price[]) ?? []
+  return asList(res.data) as Price[]
 }
 
 export const createPrice = async (payload: PricePayload): Promise<Price> => {
@@ -66,4 +74,32 @@ export const updatePrice = async (id: string, payload: UpdatePricePayload): Prom
 
 export const deletePrice = async (id: string): Promise<void> => {
   await api.delete(`/prices/${id}`)
+}
+
+export interface PriceListPayload {
+  name: string
+  code: string
+  currency?: string
+  isActive?: boolean
+  validFrom?: string | null
+  validUntil?: string | null
+}
+
+export const createPriceList = async (payload: PriceListPayload): Promise<PriceList> => {
+  const res = await api.post('/prices/lists', payload)
+  return res.data as PriceList
+}
+
+export const updatePriceList = async (id: string, payload: Partial<PriceListPayload>): Promise<PriceList> => {
+  const res = await api.put(`/prices/lists/${id}`, payload)
+  return res.data as PriceList
+}
+
+export const togglePriceListActive = async (id: string): Promise<PriceList> => {
+  const res = await api.patch(`/prices/lists/${id}/toggle-active`)
+  return res.data as PriceList
+}
+
+export const deletePriceList = async (id: string): Promise<void> => {
+  await api.delete(`/prices/lists/${id}`)
 }

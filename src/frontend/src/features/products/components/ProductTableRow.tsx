@@ -9,6 +9,8 @@ interface ProductTableRowProps {
   onToggleActive: (id: string) => void
   onToggleVisibility: (id: string) => void
   onDelete: (id: string) => void
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
 }
 
 export function ProductTableRow({
@@ -17,9 +19,22 @@ export function ProductTableRow({
   onToggleActive,
   onToggleVisibility,
   onDelete,
+  selected = false,
+  onToggleSelect,
 }: ProductTableRowProps) {
   return (
     <tr className="hover:bg-gray-50 transition-colors">
+      {onToggleSelect && (
+        <td className="px-6 py-4">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(product.id)}
+            aria-label={`Seleccionar ${product.name}`}
+            className="h-4 w-4 accent-security-500 cursor-pointer"
+          />
+        </td>
+      )}
       <td className="px-6 py-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">

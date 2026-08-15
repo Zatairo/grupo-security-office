@@ -28,6 +28,7 @@ export default function ProductsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
   const [createListaId, setCreateListaId] = useState('')
   const [showListaSelector, setShowListaSelector] = useState(false)
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(() => new Set())
 
   const listasQuery = useQuery({
     queryKey: ['listas'],
@@ -51,8 +52,43 @@ export default function ProductsPage() {
   })
   const { toggleVisibility, toggleActive, deleteProduct } = useProductMutations()
 
+  const canBulkDelete = hasPermission('products:delete')
+  const currentProducts = products ?? []
+  const allPageSelected = currentProducts.length > 0 && currentProducts.every((p) => selectedProductIds.has(p.id))
+
+  const toggleSelectProduct = (id: string) => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAllPage = () => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev)
+      if (allPageSelected) {
+        currentProducts.forEach((p) => next.delete(p.id))
+      } else {
+        currentProducts.forEach((p) => next.add(p.id))
+      }
+      return next
+    })
+  }
+
+  const bulkDeleteProducts = () => {
+    const count = selectedProductIds.size
+    if (count === 0) return
+    if (!window.confirm(`¿Eliminar ${count} producto(s) seleccionado(s)? Esta acción no se puede deshacer.`)) return
+    void Promise.allSettled(Array.from(selectedProductIds).map((id) => deleteProduct.mutateAsync(id))).then(() => {
+      setSelectedProductIds(new Set())
+    })
+  }
+
   useEffect(() => {
     setPage(1)
+    setSelectedProductIds(new Set())
   }, [search, categoryId, brandId, status])
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -211,6 +247,23 @@ export default function ProductsPage() {
         />
       </div>
 
+      {canBulkDelete && selectedProductIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-white rounded-xl border border-neutral-200">
+          <span className="text-sm font-medium text-neutral-600">{selectedProductIds.size} seleccionado(s)</span>
+          <button
+            onClick={() => setSelectedProductIds(new Set())}
+            className="text-sm text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+          >
+            Limpiar selección
+          </button>
+          <div className="ml-auto">
+            <Button variant="danger" onClick={bulkDeleteProducts}>
+              Eliminar seleccionados
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Products grid/list */}
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -250,6 +303,17 @@ export default function ProductsPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                {canBulkDelete && (
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={toggleSelectAllPage}
+                      aria-label="Seleccionar todos los productos de la página"
+                      className="h-4 w-4 accent-security-500 cursor-pointer"
+                    />
+                  </th>
+                )}
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Producto</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Categoría</th>
@@ -261,11 +325,11 @@ export default function ProductsPage() {
             <tbody className="divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400">Cargando...</td>
+                  <td colSpan={canBulkDelete ? 7 : 6} className="px-6 py-12 text-center text-gray-400">Cargando...</td>
                 </tr>
               ) : products?.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400">No hay productos</td>
+                  <td colSpan={canBulkDelete ? 7 : 6} className="px-6 py-12 text-center text-gray-400">No hay productos</td>
                 </tr>
               ) : (
                 products?.map((product) => (
@@ -276,6 +340,8 @@ export default function ProductsPage() {
                     onToggleActive={toggleActive.mutate}
                     onToggleVisibility={toggleVisibility.mutate}
                     onDelete={deleteProduct.mutate}
+                    selected={selectedProductIds.has(product.id)}
+                    onToggleSelect={canBulkDelete ? toggleSelectProduct : undefined}
                   />
                 ))
               )}
@@ -290,6 +356,9 @@ export default function ProductsPage() {
           onToggleActive={toggleActive.mutate}
           onToggleVisibility={toggleVisibility.mutate}
           onDelete={deleteProduct.mutate}
+          selectedProductIds={canBulkDelete ? selectedProductIds : undefined}
+          onToggleSelectProduct={canBulkDelete ? toggleSelectProduct : undefined}
+          onToggleSelectAllProducts={canBulkDelete ? toggleSelectAllPage : undefined}
         />
       )}
 

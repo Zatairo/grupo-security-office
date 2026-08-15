@@ -24,6 +24,7 @@ export default function UsersPage() {
   const [search, setSearch] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(() => new Set())
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['users', search],
@@ -55,6 +56,24 @@ export default function UsersPage() {
     mutationFn: (id: string) => api.delete(`/users/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
   })
+
+  const toggleSelectUser = (id: string) => {
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const bulkDeleteUsers = () => {
+    const count = selectedUserIds.size
+    if (count === 0) return
+    if (!window.confirm(`¿Eliminar ${count} usuario(s) seleccionado(s)? Esta acción no se puede deshacer.`)) return
+    void Promise.allSettled(Array.from(selectedUserIds).map((id) => deleteUser.mutateAsync(id))).then(() => {
+      setSelectedUserIds(new Set())
+    })
+  }
 
   if (!hasRole(ROLES.SUPER_ADMIN) && !hasPermission('users:read')) {
     return (
@@ -102,6 +121,26 @@ export default function UsersPage() {
         </div>
       </div>
 
+      {hasRole(ROLES.SUPER_ADMIN) && selectedUserIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-white rounded-xl border border-gray-200">
+          <span className="text-sm font-medium text-neutral-600">{selectedUserIds.size} seleccionado(s)</span>
+          <button
+            onClick={() => setSelectedUserIds(new Set())}
+            className="text-sm text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+          >
+            Limpiar selección
+          </button>
+          <div className="ml-auto">
+            <button
+              onClick={bulkDeleteUsers}
+              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-semibold text-sm transition-colors"
+            >
+              Eliminar seleccionados
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {isLoading ? (
           Array.from({ length: 6 }).map((_, i) => (
@@ -126,6 +165,15 @@ export default function UsersPage() {
           users?.data?.map((user: User) => (
             <div key={user.id} className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg transition-shadow">
               <div className="flex items-center gap-3">
+                {hasRole(ROLES.SUPER_ADMIN) && (
+                  <input
+                    type="checkbox"
+                    checked={selectedUserIds.has(user.id)}
+                    onChange={() => toggleSelectUser(user.id)}
+                    aria-label={`Seleccionar ${user.name}`}
+                    className="h-4 w-4 accent-security-600 cursor-pointer"
+                  />
+                )}
                 <div className="w-12 h-12 bg-security-100 rounded-full flex items-center justify-center">
                   <span className="text-sm font-bold text-security-700">
                     {user.name?.charAt(0).toUpperCase() || 'U'}

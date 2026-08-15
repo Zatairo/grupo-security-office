@@ -648,4 +648,85 @@ describe('ListasService — ACL (T1–T20)', () => {
       expect(res.code).toMatch(/^L+-COPIA-[A-Z0-9]{4}$/);
     });
   });
+
+  describe('removeLista — eliminación física (OLA 7A)', () => {
+    it('delete exitoso (Lista vacía) → 200 y audita delete ANTES de borrar', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      mockPrisma.product.count.mockResolvedValueOnce(0);
+      mockPrisma.price.count.mockResolvedValueOnce(0);
+      mockPrisma.assignment.count.mockResolvedValueOnce(0);
+      mockPrisma.auditLog.count.mockResolvedValueOnce(0);
+
+      const res = await service.removeLista(LISTA_ID, ADMIN);
+
+      expect(res.message).toBe('Lista eliminada exitosamente');
+      expect(mockPrisma.lista.delete).toHaveBeenCalledWith({ where: { id: LISTA_ID } });
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'delete',
+          entity: 'LISTA',
+          entityId: LISTA_ID,
+          newValues: expect.objectContaining({ code: mockLista.code, name: mockLista.name }),
+        }),
+      );
+    });
+
+    it('409 cuando la Lista tiene productos', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      mockPrisma.product.count.mockResolvedValueOnce(3);
+      mockPrisma.price.count.mockResolvedValueOnce(0);
+      mockPrisma.assignment.count.mockResolvedValueOnce(0);
+      mockPrisma.auditLog.count.mockResolvedValueOnce(0);
+
+      const promise = service.removeLista(LISTA_ID, ADMIN);
+      await expect(promise).rejects.toThrow(ConflictException);
+      await expect(promise).rejects.toThrow(
+        'La Lista tiene 3 productos. Archívela o elimine los datos asociados primero.',
+      );
+      expect(mockPrisma.lista.delete).not.toHaveBeenCalled();
+    });
+
+    it('409 cuando la Lista tiene precios (mensaje combinado productos+precios)', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      mockPrisma.product.count.mockResolvedValueOnce(3);
+      mockPrisma.price.count.mockResolvedValueOnce(5);
+      mockPrisma.assignment.count.mockResolvedValueOnce(0);
+      mockPrisma.auditLog.count.mockResolvedValueOnce(0);
+
+      const promise = service.removeLista(LISTA_ID, ADMIN);
+      await expect(promise).rejects.toThrow(ConflictException);
+      await expect(promise).rejects.toThrow(
+        'La Lista tiene 3 productos y 5 precios. Archívela o elimine los datos asociados primero.',
+      );
+    });
+
+    it('409 cuando la Lista tiene accesos o historial', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      mockPrisma.product.count.mockResolvedValueOnce(0);
+      mockPrisma.price.count.mockResolvedValueOnce(0);
+      mockPrisma.assignment.count.mockResolvedValueOnce(2);
+      mockPrisma.auditLog.count.mockResolvedValueOnce(4);
+
+      const promise = service.removeLista(LISTA_ID, ADMIN);
+      await expect(promise).rejects.toThrow(ConflictException);
+      await expect(promise).rejects.toThrow(
+        'La Lista tiene 2 accesos y 4 registros de historial. Archívela o elimine los datos asociados primero.',
+      );
+    });
+
+    it('404 si la Lista no existe', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(null);
+      await expect(service.removeLista('no-existe', ADMIN)).rejects.toThrow(NotFoundException);
+    });
+
+    it('403 si el usuario no es Super Admin', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      mockPrisma.product.count.mockResolvedValueOnce(0);
+      mockPrisma.price.count.mockResolvedValueOnce(0);
+      mockPrisma.assignment.count.mockResolvedValueOnce(0);
+      mockPrisma.auditLog.count.mockResolvedValueOnce(0);
+      await expect(service.removeLista(LISTA_ID, MANAGER)).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.lista.delete).not.toHaveBeenCalled();
+    });
+  });
 });

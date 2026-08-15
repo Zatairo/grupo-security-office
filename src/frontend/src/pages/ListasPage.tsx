@@ -14,7 +14,8 @@ import {
   type Lista,
   type ListaPayload,
 } from '../services/listas.service'
-import { canCreateLista, canManageListas, hasPermission } from '../lib/rbac'
+import { canCreateLista, canManageListas, hasPermission, hasRole } from '../lib/rbac'
+import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatDate } from '../lib/format'
 import { Button } from '../components/ui'
@@ -54,6 +55,7 @@ export default function ListasPage() {
   const [showImportModal, setShowImportModal] = useState(hasPersistedImportState)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expiryFilter, setExpiryFilter] = useState<'all' | 'active' | 'expiring' | 'expired'>('all')
+  const [actionNotice, setActionNotice] = useState<string | null>(null)
   const selectAllRef = useRef<HTMLInputElement>(null)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['listas'] })
@@ -142,6 +144,47 @@ export default function ListasPage() {
       }
     },
   })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const results = await Promise.allSettled(ids.map((id) => api.delete(`/listas/${id}`)))
+      let deleted = 0
+      let blocked = 0
+      let pending = 0
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          deleted += 1
+          continue
+        }
+        const status = (r.reason as { response?: { status?: number } })?.response?.status
+        if (status === 409) blocked += 1
+        else if (status === 404 || status === 405 || status === 501) pending += 1
+      }
+      return { deleted, blocked, pending }
+    },
+    onSuccess: (result) => {
+      invalidate()
+      setSelectedIds([])
+      setActionError(null)
+      const parts: string[] = []
+      if (result.deleted > 0) parts.push(`${result.deleted} Lista(s) eliminada(s)`)
+      if (result.blocked > 0) parts.push(`${result.blocked} bloqueada(s) por tener productos, precios o asignaciones asociados`)
+      if (result.pending > 0) parts.push('la eliminación de algunas Listas estará disponible próximamente')
+      setActionNotice(parts.length > 0 ? parts.join('. ') : 'No se eliminó ninguna Lista')
+    },
+    onError: (err) => setActionError(getApiErrorMessage(err, 'No se pudo eliminar las Listas seleccionadas')),
+  })
+
+  const runBatchDelete = () => {
+    const ids = selectedIds.filter((id) => listas?.some((item) => item.id === id))
+    if (ids.length === 0) {
+      setActionError('No hay Listas seleccionadas para eliminar.')
+      return
+    }
+    if (!window.confirm(`¿Eliminar definitivamente ${ids.length} lista(s) seleccionada(s)? Esta acción no se puede deshacer.`)) return
+    setActionNotice(null)
+    deleteMutation.mutate(ids)
+  }
 
   const toggleSelect = (id: string) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -302,6 +345,13 @@ export default function ListasPage() {
         </div>
       )}
 
+      {actionNotice && (
+        <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-emerald-50 border-emerald-200 text-emerald-800" role="status">
+          <span className="flex-1">{actionNotice}</span>
+          <button onClick={() => setActionNotice(null)} className="p-0.5 rounded hover:bg-emerald-100/60" aria-label="Cerrar" />
+        </div>
+      )}
+
       {listError && (
         <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
           <span className="flex-1">{listError}</span>
@@ -343,6 +393,11 @@ export default function ListasPage() {
                 <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('restore', 'Restaurar')}>
                   Restaurar
                 </Button>
+                {hasRole(ROLES.SUPER_ADMIN) && (
+                  <Button variant="danger" disabled={deleteMutation.isPending} onClick={runBatchDelete}>
+                    Eliminar
+                  </Button>
+                )}
               </div>
             </>
           )}
