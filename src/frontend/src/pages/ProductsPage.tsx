@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Product } from '../features/products/types/product.types'
 import { useProducts } from '../features/products/hooks/useProducts'
 import { useProductMutations } from '../features/products/hooks/useProductMutations'
@@ -8,11 +8,15 @@ import { ProductCard } from '../features/products/components/ProductCard'
 import { ProductTableRow } from '../features/products/components/ProductTableRow'
 import { ProductSpreadsheetTable } from '../features/products/components/ProductSpreadsheetTable'
 import ProductFormModal from '../features/products/components/ProductFormModal'
+import { MoveCategoryModal, type MoveCategoryTarget } from '../features/products/components/MoveCategoryModal'
+import { BulkPriceUpdateModal } from '../features/products/components/BulkPriceUpdateModal'
+import { ProductAccessModal } from '../features/products/components/ProductAccessModal'
 import { ProductPagination } from '../components/ProductPagination'
 import { fetchListas, type Lista } from '../services/listas.service'
 import { publishProduct, unpublishProduct, schedulePublish } from '../services/product-detail.service'
 import api from '../services/api'
 import { hasPermission } from '../lib/rbac'
+import { getApiErrorMessage } from '../lib/apiError'
 import { Button } from '../components/ui'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
@@ -53,6 +57,9 @@ export default function ProductsPage() {
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [bulkPending, setBulkPending] = useState(false)
   const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [moveCategoryTarget, setMoveCategoryTarget] = useState<MoveCategoryTarget | null>(null)
+  const [accessProduct, setAccessProduct] = useState<Product | null>(null)
+  const [showBulkPrices, setShowBulkPrices] = useState(false)
 
   const listasQuery = useQuery({
     queryKey: ['listas'],
@@ -75,6 +82,16 @@ export default function ProductsPage() {
     pageSize,
   })
   const { toggleVisibility, toggleActive, deleteProduct } = useProductMutations()
+
+  const markReady = useMutation({
+    mutationFn: (id: string) => api.put(`/products/${id}`, { publishStatus: 'listo' }),
+    onSuccess: () => {
+      setBulkNotice('Producto marcado como listo para publicar.')
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+    },
+    onError: (err) =>
+      setBulkError(getApiErrorMessage(err, 'No se pudo marcar el producto como listo')),
+  })
 
   const canBulkDelete = hasPermission('products:delete')
   const canBulkManage = canBulkDelete || hasPermission('products:write')
@@ -422,6 +439,21 @@ export default function ProductsPage() {
                   <BulkButton label="Publicar" disabled={bulkPending} onClick={() => runBulkAction('publish')} />
                   <BulkButton label="Despublicar" disabled={bulkPending} onClick={() => runBulkAction('unpublish')} />
                   <BulkButton label="Programar" disabled={bulkPending} onClick={() => setShowScheduleModal(true)} />
+                  <BulkButton
+                    label="Mover categoría"
+                    disabled={bulkPending}
+                    onClick={() =>
+                      setMoveCategoryTarget({
+                        type: 'bulk',
+                        products: currentProducts.filter((p) => selectedProductIds.has(p.id)),
+                      })
+                    }
+                  />
+                  <BulkButton
+                    label="Actualizar precios"
+                    disabled={bulkPending}
+                    onClick={() => setShowBulkPrices(true)}
+                  />
                 </>
               )}
               {canBulkDelete && (
@@ -474,6 +506,11 @@ export default function ProductsPage() {
                 onEdit={setEditingProduct}
                 onToggleActive={toggleActive.mutate}
                 onDelete={deleteProduct.mutate}
+                onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
+                onAccess={setAccessProduct}
+                onMarkReady={(p) => {
+                  if (window.confirm(`¿Marcar "${p.name}" como listo para publicar?`)) markReady.mutate(p.id)
+                }}
               />
             ))
           )}
@@ -524,6 +561,11 @@ export default function ProductsPage() {
                     onToggleSelect={canBulkManage ? toggleSelectProduct : undefined}
                     accessRestrictedIds={accessRestrictedIds}
                     accessUnavailable={accessUnavailable}
+                    onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
+                    onAccess={setAccessProduct}
+                    onMarkReady={(p) => {
+                      if (window.confirm(`¿Marcar "${p.name}" como listo para publicar?`)) markReady.mutate(p.id)
+                    }}
                   />
                 ))
               )}
@@ -543,6 +585,11 @@ export default function ProductsPage() {
           onToggleSelectAllProducts={canBulkManage ? toggleSelectAllPage : undefined}
           accessRestrictedIds={accessRestrictedIds}
           accessUnavailable={accessUnavailable}
+          onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
+          onAccess={setAccessProduct}
+          onMarkReady={(p) => {
+            if (window.confirm(`¿Marcar "${p.name}" como listo para publicar?`)) markReady.mutate(p.id)
+          }}
         />
       )}
 
@@ -598,6 +645,42 @@ export default function ProductsPage() {
           count={selectedProductIds.size}
           onConfirm={runScheduledPublish}
           onClose={() => setShowScheduleModal(false)}
+        />
+      )}
+
+      {moveCategoryTarget && (
+        <MoveCategoryModal
+          target={moveCategoryTarget}
+          categories={categories || []}
+          onClose={() => setMoveCategoryTarget(null)}
+          onDone={(summary) => {
+            setBulkNotice(summary)
+            setBulkError(null)
+            setSelectedProductIds(new Set())
+            queryClient.invalidateQueries({ queryKey: ['products'] })
+          }}
+        />
+      )}
+
+      {accessProduct && (
+        <ProductAccessModal
+          productId={accessProduct.id}
+          productName={accessProduct.name}
+          onClose={() => setAccessProduct(null)}
+        />
+      )}
+
+      {showBulkPrices && (
+        <BulkPriceUpdateModal
+          productIds={Array.from(selectedProductIds)}
+          onClose={() => setShowBulkPrices(false)}
+          onDone={(summary) => {
+            setBulkNotice(summary)
+            setBulkError(null)
+            setSelectedProductIds(new Set())
+            queryClient.invalidateQueries({ queryKey: ['products'] })
+            setShowBulkPrices(false)
+          }}
         />
       )}
     </div>

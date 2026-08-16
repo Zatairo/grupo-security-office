@@ -27,6 +27,22 @@ export class PricesService {
   }
 
   /**
+   * Moneda coherente (checklist validaciones de precio): si el DTO trae currency
+   * y la tarifa (PriceList) destino tiene una moneda distinta → 400. Si el DTO no
+   * trae currency, se hereda la de la tarifa (no se valida).
+   */
+  private assertPriceCurrencyMatches(
+    currency: string | undefined,
+    priceListCurrency: string | undefined,
+  ): void {
+    if (currency !== undefined && priceListCurrency !== undefined && currency !== priceListCurrency) {
+      throw new BadRequestException(
+        `La moneda del precio (${currency}) no coincide con la moneda de la tarifa (${priceListCurrency})`,
+      );
+    }
+  }
+
+  /**
    * Valida que validUntil >= validFrom (si ambos están presentes).
    * Acepta Date (valor persistido) o string ISO (DTO).
    */
@@ -362,6 +378,9 @@ export class PricesService {
     const priceList = await this.prisma.priceList.findUnique({ where: { id: dto.priceListId } });
     if (!priceList) throw new NotFoundException('Lista de precios no encontrada');
 
+    // Moneda coherente: si el DTO trae currency debe coincidir con la de la tarifa.
+    this.assertPriceCurrencyMatches(dto.currency, priceList.currency);
+
     // ACL: crear precio exige `edit_prices` sobre la Lista del producto (checklist 29/30).
     if (ctx && product.listaId) await this.acl.assertListaAccess(product.listaId, ctx, 'edit_prices');
 
@@ -407,7 +426,7 @@ this.validateCurrency(dto.currency);
         priceListId: dto.priceListId,
         ...(productListaId ? { listaId: dto.listaId ?? productListaId } : {}),
         value: dto.value,
-        currency: dto.currency ?? 'COP',
+        currency: dto.currency ?? priceList.currency ?? 'COP',
         validFrom,
         validUntil,
       },
@@ -444,6 +463,16 @@ this.validateCurrency(dto.currency);
     // ACL: actualizar precio exige `edit_prices` sobre la Lista del producto dueño.
     if (ctx) {
       await this.acl.assertProductAccess(price.productId, ctx, 'edit_prices');
+    }
+
+    // Moneda coherente: si se cambia currency, debe coincidir con la de la tarifa destino.
+    if (dto.currency !== undefined) {
+      const priceList = await this.prisma.priceList.findUnique({
+        where: { id: price.priceListId },
+      });
+      if (priceList) {
+        this.assertPriceCurrencyMatches(dto.currency, priceList.currency);
+      }
     }
 
     // Invariante: si se cambia el listaId, debe coincidir con la Lista del producto.

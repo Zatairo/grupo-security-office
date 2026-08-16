@@ -33,8 +33,28 @@ interface AssignmentListResponse {
   data: Assignment[]
 }
 
-export const fetchAssignments = async (): Promise<Assignment[]> => {
-  const res = await api.get('/assignments')
+/**
+ * Niveles reales del backend (assignments DTO, OLA 7B): 'edit' es alias legacy
+ * de 'edit_products'. El service los normaliza.
+ */
+export const ASSIGNMENT_LEVELS_REAL = [
+  'view',
+  'edit_prices',
+  'edit_products',
+  'edit',
+  'manage',
+  'manage_access',
+] as const
+export type AssignmentLevelReal = (typeof ASSIGNMENT_LEVELS_REAL)[number]
+
+export const fetchAssignments = async (
+  filters?: { resourceType?: string; userId?: string }
+): Promise<Assignment[]> => {
+  const params = new URLSearchParams()
+  if (filters?.resourceType) params.set('resourceType', filters.resourceType)
+  if (filters?.userId) params.set('userId', filters.userId)
+  const qs = params.toString()
+  const res = await api.get(`/assignments${qs ? `?${qs}` : ''}`)
   const body = res.data as AssignmentListResponse
   return body.data ?? []
 }

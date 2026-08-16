@@ -218,6 +218,31 @@ describe('ProductsService', () => {
       );
     });
 
+    it('debe persistir documents al crear un producto', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
+
+      const dto = {
+        sku: 'CAM-DOC',
+        name: 'Cámara',
+        categoryId: 'cat-1',
+        brandId: 'brand-1',
+        documents: [
+          { name: 'ficha-tecnica.pdf', url: '/uploads/doc-1.pdf', type: 'application/pdf', size: 204800 },
+        ],
+      };
+
+      await service.create(dto as any);
+
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ documents: dto.documents }),
+        }),
+      );
+    });
+
     it('debe rechazar precios con lista de precios inexistente', async () => {
       mockPrisma.product.findUnique.mockResolvedValueOnce(null);
       mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
@@ -375,6 +400,23 @@ describe('ProductsService', () => {
       expect(mockPrisma.price.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { productId_priceListId: { productId: 'prod-1', priceListId: 'pl-1' } },
+        }),
+      );
+    });
+
+    it('debe persistir documents al actualizar un producto', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(mockProduct);
+      mockPrisma.product.update.mockResolvedValue({ ...mockProductWithRelations, documents: [] });
+
+      const dto = {
+        documents: [{ name: 'manual.pdf', url: '/uploads/doc-2.pdf', type: 'application/pdf', size: 51200 }],
+      };
+
+      await service.update('prod-1', dto as any);
+
+      expect(mockPrisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ documents: dto.documents }),
         }),
       );
     });
@@ -1005,6 +1047,69 @@ describe('ProductsService', () => {
 
       const res = await service.findOne('prod-1');
       expect(res.stockStatus).toBe('in_stock');
+    });
+  });
+
+  // --- PATCH de imágenes (Tanda 1C): alt y principal ---
+  describe('updateImage (PATCH imágenes)', () => {
+    const image = {
+      id: 'img-1',
+      productId: 'prod-1',
+      url: '/uploads/img-1.png',
+      alt: 'Cámara IP',
+      isPrimary: false,
+      sortOrder: 0,
+    };
+
+    it('actualiza el alt de la imagen y audita', async () => {
+      mockPrisma.productImage.findUnique.mockResolvedValue(image);
+      mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
+      mockPrisma.productImage.update.mockResolvedValue({ ...image, alt: 'Cámara IP frontal' });
+
+      const result = await service.updateImage('img-1', { alt: 'Cámara IP frontal' });
+
+      expect(result.alt).toBe('Cámara IP frontal');
+      expect(mockPrisma.productImage.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'img-1' },
+          data: { alt: 'Cámara IP frontal' },
+        }),
+      );
+      expect(mockPrisma.productImage.updateMany).not.toHaveBeenCalled();
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'update',
+          entity: 'ProductImage',
+          entityId: 'img-1',
+          oldValues: expect.objectContaining({ isPrimary: false }),
+          newValues: expect.objectContaining({ alt: 'Cámara IP frontal' }),
+        }),
+      );
+    });
+
+    it('marca como principal y desmarca las demás imágenes del producto', async () => {
+      mockPrisma.productImage.findUnique.mockResolvedValue(image);
+      mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
+      mockPrisma.productImage.update.mockResolvedValue({ ...image, isPrimary: true });
+
+      const result = await service.updateImage('img-1', { isPrimary: true });
+
+      expect(result.isPrimary).toBe(true);
+      expect(mockPrisma.productImage.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { productId: 'prod-1', isPrimary: true },
+          data: { isPrimary: false },
+        }),
+      );
+      expect(mockPrisma.productImage.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ isPrimary: true }) }),
+      );
+    });
+
+    it('lanza 404 si la imagen no existe', async () => {
+      mockPrisma.productImage.findUnique.mockResolvedValue(null);
+
+      await expect(service.updateImage('no-existe', { alt: 'x' })).rejects.toThrow(NotFoundException);
     });
   });
 });

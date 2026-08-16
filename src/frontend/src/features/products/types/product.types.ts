@@ -5,6 +5,13 @@ export interface ProductImage {
   alt?: string | null
 }
 
+export interface ProductDocument {
+  name: string
+  url: string
+  type?: string
+  size?: number
+}
+
 export interface ProductPrice {
   id: string
   value: number
@@ -49,6 +56,7 @@ export interface Product {
   category: { id: string; name: string; slug: string }
   brand: { id: string; name: string; slug: string }
   images: ProductImage[]
+  documents?: ProductDocument[]
   prices: ProductPrice[]
   createdAt: string
   updatedAt: string

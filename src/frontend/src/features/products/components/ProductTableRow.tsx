@@ -14,6 +14,9 @@ interface ProductTableRowProps {
   onToggleSelect?: (id: string) => void
   accessRestrictedIds?: Set<string>
   accessUnavailable?: boolean
+  onMoveCategory?: (product: Product) => void
+  onAccess?: (product: Product) => void
+  onMarkReady?: (product: Product) => void
 }
 
 export function ProductTableRow({
@@ -26,6 +29,9 @@ export function ProductTableRow({
   onToggleSelect,
   accessRestrictedIds,
   accessUnavailable,
+  onMoveCategory,
+  onAccess,
+  onMarkReady,
 }: ProductTableRowProps) {
   return (
     <tr className="hover:bg-gray-50 transition-colors">
@@ -95,6 +101,39 @@ export function ProductTableRow({
       </td>
       <td className="px-6 py-4">
         <div className="flex items-center gap-1">
+          {hasPermission('products:write') && onMarkReady && product.publishStatus && product.publishStatus !== 'publicado' && product.publishStatus !== 'listo' && (
+            <button
+              onClick={() => onMarkReady(product)}
+              className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+              title="Marcar listo para publicar"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+          )}
+          {hasPermission('products:write') && onMoveCategory && (
+            <button
+              onClick={() => onMoveCategory(product)}
+              className="p-2 text-gray-400 hover:text-security-600 hover:bg-security-50 rounded-lg transition-colors"
+              title="Mover de categoría"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+            </button>
+          )}
+          {(hasPermission('users:manage') || hasPermission('products:write')) && onAccess && (
+            <button
+              onClick={() => onAccess(product)}
+              className="p-2 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
+              title="Asignar accesos"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </button>
+          )}
           {hasPermission('products:write') && (
             <button
               onClick={() => onEdit(product)}

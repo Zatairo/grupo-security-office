@@ -4,6 +4,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsume
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { UpdateProductImageDto } from './dto/update-product-image.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { PublishProductDto } from './dto/publish-product.dto';
 import { UnpublishProductDto } from './dto/unpublish-product.dto';
@@ -110,7 +111,7 @@ export class ProductsController {
   }
 
   @Patch(':id/publish')
-  @Roles('Super Admin', 'Admin Comercial')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial')
   @ApiOperation({ summary: 'Publicar o programar publicación de un producto' })
   @ApiResponse({ status: 200, description: 'Producto publicado o programado' })
   @ApiResponse({ status: 400, description: 'Requisitos previos a publicación no cumplidos (detalle)' })
@@ -124,7 +125,7 @@ export class ProductsController {
   }
 
   @Patch(':id/unpublish')
-  @Roles('Super Admin', 'Admin Comercial')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial')
   @ApiOperation({ summary: 'Despublicar un producto (pasa a borrador con razón)' })
   @ApiResponse({ status: 200, description: 'Producto despublicado' })
   @ApiResponse({ status: 400, description: 'Motivo inválido' })
@@ -137,7 +138,7 @@ export class ProductsController {
   }
 
   @Delete(':id')
-  @Roles('Super Admin')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Eliminar producto' })
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.productsService.remove(id, this.ctx(user));
@@ -195,5 +196,18 @@ export class ProductsController {
   @ApiResponse({ status: 404, description: 'Imagen no encontrada' })
   removeImage(@Param('imageId') imageId: string, @CurrentUser() user: any) {
     return this.productsService.deleteImage(imageId, this.ctx(user));
+  }
+
+  @Patch('images/:imageId')
+  @Roles('Super Admin', 'Admin Comercial')
+  @ApiOperation({ summary: 'Actualizar imagen de producto (alt y/o principal)' })
+  @ApiResponse({ status: 200, description: 'Imagen actualizada' })
+  @ApiResponse({ status: 404, description: 'Imagen no encontrada' })
+  updateImage(
+    @Param('imageId') imageId: string,
+    @Body() dto: UpdateProductImageDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.productsService.updateImage(imageId, dto, this.ctx(user));
   }
 }

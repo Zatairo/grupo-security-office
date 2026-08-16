@@ -310,6 +310,7 @@ export class ProductsService {
         listaId: lista.id,
         technicalSpecs: dto.technicalSpecs,
         extraAttributes: dto.extraAttributes,
+        ...(dto.documents !== undefined && { documents: dto.documents }),
         isActive: dto.isActive ?? false,
         isVisible: dto.isVisible ?? lista.defaultVisibility,
         ...(dto.publishStatus !== undefined && { publishStatus: dto.publishStatus }),
@@ -376,6 +377,7 @@ export class ProductsService {
         ...(dto.listaId !== undefined && { listaId }),
         ...(dto.technicalSpecs !== undefined && { technicalSpecs: dto.technicalSpecs }),
         ...(dto.extraAttributes !== undefined && { extraAttributes: dto.extraAttributes }),
+        ...(dto.documents !== undefined && { documents: dto.documents }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
         ...(dto.isVisible !== undefined && { isVisible: dto.isVisible }),
         ...(dto.publishStatus !== undefined && { publishStatus: dto.publishStatus }),
@@ -808,6 +810,66 @@ export class ProductsService {
 
     await this.prisma.productImage.delete({ where: { id: imageId } });
     return { message: 'Imagen eliminada exitosamente' };
+  }
+
+  /**
+   * Actualiza metadatos de una imagen (alt y/o isPrimary).
+   * Si isPrimary: true, desmarca primero cualquier otra imagen principal del
+   * mismo producto (updateMany isPrimary=false) y marca esta (transacción).
+   * 404 si la imagen no existe. Audita con entity 'ProductImage', action 'update'.
+   */
+  async updateImage(
+    imageId: string,
+    dto: { alt?: string; isPrimary?: boolean },
+    ctx?: AccessContext,
+  ) {
+    const image = await this.prisma.productImage.findUnique({ where: { id: imageId } });
+    if (!image) throw new NotFoundException('Imagen no encontrada');
+
+    // Actualizar imagen exige `edit_products` sobre el producto dueño (checklist 29/30).
+    if (ctx) {
+      await this.acl.assertProductAccess(image.productId, ctx, 'edit_products');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      if (dto.isPrimary === true) {
+        await tx.productImage.updateMany({
+          where: { productId: image.productId, isPrimary: true },
+          data: { isPrimary: false },
+        });
+      }
+
+      return tx.productImage.update({
+        where: { id: imageId },
+        data: {
+          ...(dto.alt !== undefined && { alt: dto.alt }),
+          ...(dto.isPrimary !== undefined && { isPrimary: dto.isPrimary }),
+        },
+      });
+    });
+
+    await this.audit.log({
+      userId: ctx?.userId,
+      action: 'update',
+      entity: 'ProductImage',
+      entityId: imageId,
+      oldValues: {
+        productId: image.productId,
+        url: image.url,
+        alt: image.alt,
+        isPrimary: image.isPrimary,
+        sortOrder: image.sortOrder,
+      },
+      newValues: {
+        productId: image.productId,
+        url: result.url,
+        alt: result.alt,
+        isPrimary: result.isPrimary,
+        sortOrder: result.sortOrder,
+      },
+    });
+
+    return result;
   }
 
   /**

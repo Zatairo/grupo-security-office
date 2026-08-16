@@ -214,7 +214,55 @@ async function main() {
     },
   });
 
-  console.log('✅ Listas creadas (LISTA-GENERAL / Lista Comercial Q3 / Lista Auditoría Interna)');
+  // 4. Lista Hikvision Colombia — mayorista, responsable admin (checklist ejemplos iniciales).
+  await prisma.lista.upsert({
+    where: { code: 'LISTA-HIKVISION-CO' },
+    update: {},
+    create: {
+      code: 'LISTA-HIKVISION-CO',
+      name: 'Lista Hikvision Colombia',
+      description: 'Lista mayorista Hikvision Colombia',
+      type: 'mayorista',
+      currency: 'COP',
+      isActive: true,
+      defaultVisibility: false,
+      responsibleId: adminUser.id,
+    },
+  });
+
+  // 5. Lista Dahua Colombia — mayorista, responsable admin.
+  await prisma.lista.upsert({
+    where: { code: 'LISTA-DAHUA-CO' },
+    update: {},
+    create: {
+      code: 'LISTA-DAHUA-CO',
+      name: 'Lista Dahua Colombia',
+      description: 'Lista mayorista Dahua Colombia',
+      type: 'mayorista',
+      currency: 'COP',
+      isActive: true,
+      defaultVisibility: false,
+      responsibleId: adminUser.id,
+    },
+  });
+
+  // 6. Lista Hikvision Oro — segmento premium, responsable admin.
+  await prisma.lista.upsert({
+    where: { code: 'LISTA-HIKVISION-ORO' },
+    update: {},
+    create: {
+      code: 'LISTA-HIKVISION-ORO',
+      name: 'Lista Hikvision Oro',
+      description: 'Lista oro Hikvision (segmento premium)',
+      type: 'oro',
+      currency: 'COP',
+      isActive: true,
+      defaultVisibility: false,
+      responsibleId: adminUser.id,
+    },
+  });
+
+  console.log('✅ Listas creadas (LISTA-GENERAL / Comercial Q3 / Auditoría Interna / Hikvision Colombia / Dahua Colombia / Hikvision Oro)');
 
   // Create sample categories
   const cctv = await prisma.category.upsert({

@@ -76,7 +76,7 @@ export default function AssignmentsPage() {
 
   const { data: assignments, isLoading, error } = useQuery({
     queryKey: ['assignments'],
-    queryFn: fetchAssignments,
+    queryFn: () => fetchAssignments(),
   })
 
   const { data: listas } = useQuery({

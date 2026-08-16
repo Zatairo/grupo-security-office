@@ -112,3 +112,8 @@ export const markProductImagePrimary = async (imageId: string) => {
   const res = await api.patch(`/products/images/${imageId}`, { isPrimary: true })
   return res.data
 }
+
+export const updateProductImageAlt = async (imageId: string, alt: string) => {
+  const res = await api.patch(`/products/images/${imageId}`, { alt })
+  return res.data
+}

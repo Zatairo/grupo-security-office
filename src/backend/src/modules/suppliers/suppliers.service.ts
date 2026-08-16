@@ -602,6 +602,10 @@ export class SuppliersService {
     this.assertPoTransition(order.status, dto.status);
     this.assertPoStatusRole(dto.status, ctx.roles);
 
+    if (dto.status === 'aprobada') {
+      await this.assertPoAvailability(order);
+    }
+
     if (dto.status === 'recibida') {
       await this.applyPoStockIncrease(order, ctx);
     }
@@ -971,6 +975,47 @@ export class SuppliersService {
     const allowed = PO_STATUS_ROLES[to] ?? ['Super Admin'];
     if (!roles.some((r) => allowed.includes(r))) {
       throw new ForbiddenException(`El estado '${to}' requiere rol: ${allowed.join(' o ')}`);
+    }
+  }
+
+  /**
+   * Confirmación de disponibilidad como paso obligatorio antes de aprobar una PO
+   * (checklist pendiente). Regla sin migración:
+   * - Producto CON registro de stock y availableQty <= 0 → bloquea la aprobación (409)
+   *   con detalle por item.
+   * - Producto SIN registro de stock → no bloquea (sin datos = no confirmable; documentado).
+   */
+  private async assertPoAvailability(order: any): Promise<void> {
+    const items = this.parsePoItems(order.items).filter((i) => i.productId);
+    if (!items.length) return;
+
+    const productIds = [...new Set(items.map((i) => i.productId))];
+    const [stocks, products] = await Promise.all([
+      this.prisma.stock.findMany({ where: { productId: { in: productIds } } }),
+      this.prisma.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, name: true, sku: true },
+      }),
+    ]);
+    const stockByProduct = new Map(stocks.map((s) => [s.productId, s]));
+    const productMap = new Map(products.map((p) => [p.id, p]));
+
+    const blocked = items
+      .map((item) => {
+        const stock = stockByProduct.get(item.productId);
+        if (stock && stock.availableQty <= 0) {
+          const product = productMap.get(item.productId);
+          return `Producto ${product?.name ?? 'Desconocido'} (${product?.sku ?? item.productId}) sin stock disponible (availableQty=${stock.availableQty})`;
+        }
+        return null;
+      })
+      .filter((x): x is string => x !== null);
+
+    if (blocked.length) {
+      throw new ConflictException({
+        message: 'No se puede aprobar la orden de compra: hay productos sin stock disponible',
+        details: blocked,
+      });
     }
   }
 

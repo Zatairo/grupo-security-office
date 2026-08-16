@@ -348,6 +348,45 @@ describe('PricesService', () => {
       await expect(service.createPrice(dto as any)).rejects.toThrow(BadRequestException);
       await expect(service.createPrice(dto as any)).rejects.toThrow('no puede ser negativo');
     });
+
+    it('debe rechazar 400 si la moneda del precio difiere de la tarifa', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: 'lista-prod' });
+      mockPrisma.priceList.findUnique.mockResolvedValue({ id: 'pl-1', currency: 'COP' });
+      mockPrisma.price.findUnique.mockResolvedValue(null);
+
+      const dto = { productId: 'prod-1', priceListId: 'pl-1', value: 1500000, currency: 'USD' };
+
+      await expect(service.createPrice(dto as any)).rejects.toThrow(BadRequestException);
+      await expect(service.createPrice(dto as any)).rejects.toThrow(
+        'La moneda del precio (USD) no coincide con la moneda de la tarifa (COP)',
+      );
+      expect(mockPrisma.price.create).not.toHaveBeenCalled();
+    });
+
+    it('debe aceptar moneda igual a la de la tarifa', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: 'lista-prod' });
+      mockPrisma.priceList.findUnique.mockResolvedValue({ id: 'pl-1', currency: 'COP' });
+      mockPrisma.price.findUnique.mockResolvedValue(null);
+      mockPrisma.price.create.mockResolvedValue(mockPriceWithRelations);
+
+      const dto = { productId: 'prod-1', priceListId: 'pl-1', value: 1500000, currency: 'COP' };
+
+      const result = await service.createPrice(dto as any);
+      expect(result.value).toBe(1500000);
+    });
+
+    it('debe heredar la moneda de la tarifa cuando el DTO no trae currency', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: 'lista-prod' });
+      mockPrisma.priceList.findUnique.mockResolvedValue({ id: 'pl-1', currency: 'USD' });
+      mockPrisma.price.findUnique.mockResolvedValue(null);
+      mockPrisma.price.create.mockResolvedValue({ ...mockPriceWithRelations, currency: 'USD' });
+
+      await service.createPrice({ productId: 'prod-1', priceListId: 'pl-1', value: 1500000 } as any);
+
+      expect(mockPrisma.price.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ currency: 'USD' }) }),
+      );
+    });
   });
 
   describe('updatePrice', () => {
@@ -375,6 +414,20 @@ describe('PricesService', () => {
 
       await expect(service.updatePrice('price-1', dto)).rejects.toThrow(ConflictException);
       await expect(service.updatePrice('price-1', dto)).rejects.toThrow('no coincide con la Lista del producto');
+    });
+
+    it('debe rechazar 400 si se cambia a una moneda distinta de la tarifa', async () => {
+      mockPrisma.price.findUnique.mockResolvedValue(mockPrice);
+      mockPrisma.priceList.findUnique.mockResolvedValue({ id: 'pl-1', currency: 'COP' });
+      mockPrisma.price.findMany.mockResolvedValue([]);
+
+      const dto = { currency: 'USD' };
+
+      await expect(service.updatePrice('price-1', dto)).rejects.toThrow(BadRequestException);
+      await expect(service.updatePrice('price-1', dto)).rejects.toThrow(
+        'La moneda del precio (USD) no coincide con la moneda de la tarifa (COP)',
+      );
+      expect(mockPrisma.price.update).not.toHaveBeenCalled();
     });
   });
 

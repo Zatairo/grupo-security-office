@@ -11,6 +11,7 @@ import { getApiErrorMessage } from '../lib/apiError'
 import { formatDate } from '../lib/format'
 import { Button, Modal } from '../components/ui'
 import ProductFormModal from '../features/products/components/ProductFormModal'
+import { MoveCategoryModal, type MoveCategoryTarget } from '../features/products/components/MoveCategoryModal'
 import ImportWizard from '../features/products/import/components/ImportWizard'
 import { hasPersistedImportState } from '../features/products/import/store/import.store'
 import type { Category, Brand, Product } from '../features/products/types/product.types'
@@ -217,6 +218,7 @@ function ProductosTab({
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [moveTarget, setMoveTarget] = useState<MoveCategoryTarget | null>(null)
   const [view, setView] = useState<'table' | 'folder'>('table')
   const canEdit = canManage || hasPermission('products:write')
 
@@ -315,6 +317,14 @@ function ProductosTab({
                             Editar
                           </button>
                         )}
+                        {canEdit && categories && (
+                          <button
+                            onClick={() => setMoveTarget({ type: 'single', product: p as Product })}
+                            className="px-2.5 py-1 text-xs font-medium text-neutral-600 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                          >
+                            Mover
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -336,6 +346,17 @@ function ProductosTab({
             queryClient.invalidateQueries({ queryKey: ['lista-products', listaId] })
             queryClient.invalidateQueries({ queryKey: ['lista-prices', listaId] })
             setEditingProduct(null)
+          }}
+        />
+      )}
+
+      {moveTarget && (
+        <MoveCategoryModal
+          target={moveTarget}
+          categories={categories ?? []}
+          onClose={() => setMoveTarget(null)}
+          onDone={() => {
+            queryClient.invalidateQueries({ queryKey: ['lista-products', listaId] })
           }}
         />
       )}

@@ -596,6 +596,42 @@ describe('SuppliersService — Tanda 1C (stock avanzado, PO flujo completo, dash
     );
   });
 
+  it('409 al aprobar PO con item de producto sin stock disponible (confirmación de disponibilidad)', async () => {
+    const order = { ...mockOrder, items: { productId: 'prod-1', quantity: 5 } };
+    mockPrisma.purchaseOrder.findUnique.mockResolvedValueOnce(order);
+    mockPrisma.stock.findMany.mockResolvedValueOnce([
+      { id: 'stock-1', productId: 'prod-1', availableQty: 0 },
+    ]);
+    mockPrisma.product.findMany.mockResolvedValueOnce([
+      { id: 'prod-1', sku: 'CAM-001', name: 'Cámara IP' },
+    ]);
+
+    const promise = service.updatePurchaseOrderStatus('po-1', { status: 'aprobada' }, COMMERCIAL);
+    await expect(promise).rejects.toThrow(ConflictException);
+    await expect(promise).rejects.toThrow('No se puede aprobar la orden de compra');
+    await expect(promise).rejects.toMatchObject({
+      response: {
+        details: ['Producto Cámara IP (CAM-001) sin stock disponible (availableQty=0)'],
+      },
+    });
+    expect(mockPrisma.purchaseOrder.update).not.toHaveBeenCalled();
+  });
+
+  it('aprueba PO cuando el producto no tiene registro de stock (sin datos = no bloquea)', async () => {
+    const order = { ...mockOrder, items: { productId: 'prod-1', quantity: 5 } };
+    mockPrisma.purchaseOrder.findUnique.mockResolvedValueOnce(order);
+    mockPrisma.stock.findMany.mockResolvedValueOnce([]);
+    mockPrisma.product.findMany.mockResolvedValueOnce([
+      { id: 'prod-1', sku: 'CAM-001', name: 'Cámara IP' },
+    ]);
+
+    const res = await service.updatePurchaseOrderStatus('po-1', { status: 'aprobada' }, COMMERCIAL);
+    expect(res.status).toBe('aprobada');
+    expect(mockPrisma.purchaseOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'aprobada' } }),
+    );
+  });
+
   it('al recibir la orden incrementa el stock de los items y audita movement_in', async () => {
     const orderInTransit = {
       ...mockOrder,

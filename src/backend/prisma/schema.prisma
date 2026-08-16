@@ -123,6 +123,7 @@ model Product {
   listaId         String?
   technicalSpecs  Json?
   extraAttributes Json?
+  documents       Json?
   isActive        Boolean        @default(false)
   isVisible       Boolean        @default(false)
   publishStatus   String         @default("borrador")

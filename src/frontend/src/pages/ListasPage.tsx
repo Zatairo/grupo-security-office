@@ -30,6 +30,48 @@ import { hasPersistedImportState } from '../features/products/import/store/impor
 const CURRENCIES = ['COP', 'USD', 'EUR'] as const
 const LISTA_TYPES = ['mayorista', 'detalle', 'oro', 'platino', 'instalador', 'tienda'] as const
 
+type ProductCountFilter = 'all' | 'zero' | 'low' | 'mid' | 'high'
+type UpdateFilter = 'all' | '7d' | '30d' | 'older'
+type ExpiryDateFilter = 'all' | 'with_expiry' | 'no_expiry'
+
+/** Rango (bucket) de cantidad de productos de una Lista. */
+function countBucket(count: number): ProductCountFilter {
+  if (count === 0) return 'zero'
+  if (count <= 10) return 'low'
+  if (count <= 50) return 'mid'
+  return 'high'
+}
+
+/** Rango de antigüedad de la última actualización. */
+function updateBucket(iso: string): UpdateFilter {
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return 'older'
+  const days = (Date.now() - t) / 86400000
+  if (days <= 7) return '7d'
+  if (days <= 30) return '30d'
+  return 'older'
+}
+
+/** Etiqueta de próxima vigencia (cliente-side, campos validFrom/validUntil). */
+function nextExpiryLabel(lista: Lista): { label: string; tone: 'neutral' | 'ok' | 'warn' | 'danger' } {
+  if (lista.validUntil) {
+    const d = new Date(lista.validUntil)
+    if (Number.isNaN(d.getTime())) return { label: 'Sin vigencia', tone: 'neutral' }
+    if (lista.isExpired) return { label: `Vencida ${formatDate(lista.validUntil)}`, tone: 'danger' }
+    if (lista.isExpiringSoon) return { label: `Vence ${formatDate(lista.validUntil)}`, tone: 'warn' }
+    return { label: `Vigente hasta ${formatDate(lista.validUntil)}`, tone: 'ok' }
+  }
+  if (lista.validFrom) return { label: 'Vigente', tone: 'ok' }
+  return { label: 'Sin vigencia', tone: 'neutral' }
+}
+
+const EXPIRY_TONE_CLASSES: Record<string, string> = {
+  neutral: 'bg-neutral-100 text-neutral-600',
+  ok: 'bg-emerald-100 text-emerald-700',
+  warn: 'bg-amber-100 text-amber-700',
+  danger: 'bg-red-100 text-red-700',
+}
+
 function StatusBadge({ isActive, archived }: { isActive: boolean; archived: boolean }) {
   let label = isActive ? 'Activo' : 'Inactivo'
   let cls = isActive
@@ -61,6 +103,9 @@ export default function ListasPage() {
   const [expiryFilter, setExpiryFilter] = useState<'all' | 'active' | 'expiring' | 'expired'>('all')
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [indicatorFilter, setIndicatorFilter] = useState<'all' | 'with_prices' | 'no_prices' | 'no_stock'>('all')
+  const [productCountFilter, setProductCountFilter] = useState<ProductCountFilter>('all')
+  const [updateFilter, setUpdateFilter] = useState<UpdateFilter>('all')
+  const [expiryDateFilter, setExpiryDateFilter] = useState<ExpiryDateFilter>('all')
   const [actionNotice, setActionNotice] = useState<string | null>(null)
   const [deleteImpactIds, setDeleteImpactIds] = useState<string[]>([])
   const selectAllRef = useRef<HTMLInputElement>(null)
@@ -88,22 +133,43 @@ export default function ListasPage() {
         (expiryFilter === 'expiring' && l.isExpiringSoon && !l.isExpired) ||
         (expiryFilter === 'expired' && l.isExpired)
       const matchesType = typeFilter === 'all' || (l.type ?? '') === typeFilter
-      return matchesSearch && matchesState && matchesExpiry && matchesType
+      const matchesCount =
+        productCountFilter === 'all' || countBucket(l.productCount ?? 0) === productCountFilter
+      const matchesUpdate =
+        updateFilter === 'all' || updateBucket(l.updatedAt ?? '') === updateFilter
+      const matchesExpiryDate =
+        expiryDateFilter === 'all' ||
+        (expiryDateFilter === 'with_expiry' ? !!l.validUntil : !l.validUntil)
+      return (
+        matchesSearch && matchesState && matchesExpiry && matchesType &&
+        matchesCount && matchesUpdate && matchesExpiryDate
+      )
     })
-  }, [listas, search, activeFilter, expiryFilter, typeFilter])
+  }, [listas, search, activeFilter, expiryFilter, typeFilter, productCountFilter, updateFilter, expiryDateFilter])
 
   const indicatorActive = indicatorFilter !== 'all'
+  const needsCountEnrichment =
+    productCountFilter !== 'all' && baseFiltered.some((l) => l.productCount == null)
   const productsByListaQuery = useQuery({
-    queryKey: ['lista-products-enrichment', baseFiltered.map((l) => l.id).join(','), indicatorActive],
+    queryKey: [
+      'lista-products-enrichment',
+      baseFiltered.map((l) => l.id).join(','),
+      indicatorActive,
+      needsCountEnrichment,
+    ],
     queryFn: async () => {
       const entries = await Promise.all(
         baseFiltered.map(async (l) => [l.id, await fetchListaProducts(l.id)] as const)
       )
       return new Map(entries)
     },
-    enabled: indicatorActive && baseFiltered.length > 0,
+    enabled: (indicatorActive || needsCountEnrichment) && baseFiltered.length > 0,
   })
   const productsByLista = productsByListaQuery.data ?? new Map<string, any[]>()
+
+  /** Conteo de productos por Lista: _count.products del backend o fallback client-side. */
+  const countOf = (l: Lista): number =>
+    l.productCount ?? productsByLista.get(l.id)?.length ?? 0
 
   const filtered = useMemo(() => {
     if (indicatorFilter === 'all') return baseFiltered
@@ -396,6 +462,39 @@ export default function ListasPage() {
             <option value="no_prices">Sin precios</option>
             <option value="no_stock">Sin stock</option>
           </select>
+          <select
+            value={productCountFilter}
+            onChange={(e) => setProductCountFilter(e.target.value as ProductCountFilter)}
+            className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
+            aria-label="Filtrar por cantidad de productos"
+          >
+            <option value="all">Cualquier cantidad</option>
+            <option value="zero">Sin productos</option>
+            <option value="low">1-10 productos</option>
+            <option value="mid">11-50 productos</option>
+            <option value="high">Más de 50</option>
+          </select>
+          <select
+            value={updateFilter}
+            onChange={(e) => setUpdateFilter(e.target.value as UpdateFilter)}
+            className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
+            aria-label="Filtrar por última actualización"
+          >
+            <option value="all">Cualquier actualización</option>
+            <option value="7d">Actualizadas (7 días)</option>
+            <option value="30d">Actualizadas (30 días)</option>
+            <option value="older">Sin cambios recientes</option>
+          </select>
+          <select
+            value={expiryDateFilter}
+            onChange={(e) => setExpiryDateFilter(e.target.value as ExpiryDateFilter)}
+            className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
+            aria-label="Filtrar por vigencia definida"
+          >
+            <option value="all">Cualquier vigencia</option>
+            <option value="with_expiry">Con fecha de vencimiento</option>
+            <option value="no_expiry">Sin fecha de vencimiento</option>
+          </select>
         </div>
       </div>
 
@@ -549,8 +648,19 @@ export default function ListasPage() {
                       </span>
                     )}
                     <span className="text-xs text-neutral-500 whitespace-nowrap">
-                      {productCountOf(lista)} producto(s)
+                      {countOf(lista)} producto(s)
                     </span>
+                    {(() => {
+                      const expiry = nextExpiryLabel(lista)
+                      return (
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full whitespace-nowrap ${EXPIRY_TONE_CLASSES[expiry.tone]}`}
+                          title="Próxima vigencia"
+                        >
+                          {expiry.label}
+                        </span>
+                      )
+                    })()}
                   </div>
                 </div>
 

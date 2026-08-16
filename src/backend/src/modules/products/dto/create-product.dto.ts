@@ -44,6 +44,15 @@ export class CreateProductDto {
   extraAttributes?: Record<string, any>;
 
   @ApiPropertyOptional({
+    type: [Object],
+    example: [{ name: 'ficha-tecnica.pdf', url: '/uploads/doc-1.pdf', type: 'application/pdf', size: 204800 }],
+    description: 'Documentos asociados al producto (name, url, type, size).',
+  })
+  @IsArray()
+  @IsOptional()
+  documents?: any[];
+
+  @ApiPropertyOptional({
     type: [PriceInputDto],
     example: [{ priceListId: 'price-list-uuid', value: 1500000, currency: 'COP' }],
   })
