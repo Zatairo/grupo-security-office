@@ -1,15 +1,61 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../services/api'
-import type { Product, PriceList } from '../features/products/types/product.types'
+import type { Product, Category, Brand, PriceList } from '../features/products/types/product.types'
 import { usePriceLists } from '../features/products/hooks/usePriceLists'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatCurrency, formatDate } from '../lib/format'
 import { useProductMutations } from '../features/products/hooks/useProductMutations'
-import { hasPermission } from '../lib/rbac'
+import { hasPermission, hasRole } from '../lib/rbac'
+import { ROLES } from '../lib/roles'
+import { Button, Modal, Badge, Alert } from '../components/ui'
+import {
+  fetchProductStock,
+  updateProductStock,
+  fetchProductAudit,
+  fetchProductSuppliers,
+  publishProduct,
+  unpublishProduct,
+  schedulePublish,
+  uploadProductImage,
+  deleteProductImage,
+  markProductImagePrimary,
+  isNotImplemented,
+  type ProductStock,
+  type AuditLog,
+} from '../services/product-detail.service'
+import {
+  fetchPricesByProduct,
+  createPrice,
+  updatePrice,
+  deletePrice,
+  fetchPriceLists,
+  type Price,
+} from '../services/prices.service'
 
-type DetailTab = 'specs' | 'prices' | 'images'
+type DetailTab =
+  | 'info'
+  | 'specs'
+  | 'images'
+  | 'prices'
+  | 'stock'
+  | 'suppliers'
+  | 'access'
+  | 'publish'
+  | 'audit'
+
+const TABS: { id: DetailTab; label: string }[] = [
+  { id: 'info', label: 'Información' },
+  { id: 'specs', label: 'Atributos' },
+  { id: 'images', label: 'Imágenes' },
+  { id: 'prices', label: 'Precios' },
+  { id: 'stock', label: 'Stock' },
+  { id: 'suppliers', label: 'Proveedores' },
+  { id: 'access', label: 'Accesos' },
+  { id: 'publish', label: 'Publicación' },
+  { id: 'audit', label: 'Auditoría' },
+]
 
 const PRICE_LIST_ORDER = [
   'CLIENTE_FINAL_IVA',
@@ -20,6 +66,9 @@ const PRICE_LIST_ORDER = [
   'INSTALADOR_IVA',
   'INSTALLER_SIN_IVA',
 ]
+
+const inputClass =
+  'w-full px-3 py-2.5 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm'
 
 function findPrice(product: Product, priceListId: string) {
   return product.prices?.find((p) => p.priceList.id === priceListId)
@@ -34,204 +83,1273 @@ function orderedPriceLists(lists: PriceList[]): PriceList[] {
   return [...ordered, ...extras]
 }
 
-const SPEC_GROUPS: Array<{ title: string; keys: string[] }> = [
-  {
-    title: 'Camera',
-    keys: ['Image Sensor', 'Max. Resolution', 'Min. Illumination', 'Shutter Time', 'Day & Night'],
-  },
-  {
-    title: 'Lens',
-    keys: ['Lens Type', 'Focal Length & FOV', 'Lens Mount', 'Iris Type', 'Aperture', 'Depth of Field'],
-  },
-  {
-    title: 'DORI',
-    keys: ['DORI'],
-  },
-  {
-    title: 'Illuminator',
-    keys: [
-      'IR Wavelength',
-      'Supplement Light Range',
-      'Smart Supplement Light',
-      'Supplement Light Type',
-    ],
-  },
-  {
-    title: 'Video',
-    keys: [
-      'Main Stream',
-      'Sub-Stream',
-      'Third Stream',
-      'Fourth Stream',
-      'Video Compression',
-      'Video Bit Rate',
-      'H.264 Type',
-      'H.265 Type',
-      'Scalable Video Coding (SVC)',
-      'Bit Rate Control',
-      'Region of Interest (ROI)',
-      'Target Cropping',
-    ],
-  },
-  {
-    title: 'Audio',
-    keys: [
-      'Audio Type',
-      'Audio Compression',
-      'Audio Bit Rate',
-      'Audio Sampling Rate',
-      'Environment Noise Filtering',
-      'Built-in Speaker',
-      'Audio Input',
-      'Audio Output',
-    ],
-  },
-  {
-    title: 'Network',
-    keys: [
-      'Simultaneous Live View',
-      'API',
-      'Protocols',
-      'User/Host',
-      'Security',
-      'Network Storage',
-      'Client',
-      'Web Browser',
-    ],
-  },
-  {
-    title: 'Image',
-    keys: [
-      'Wide Dynamic Range (WDR)',
-      'Privacy Mask',
-      'Day/Night Switch',
-      'Image Enhancement',
-      'Image Parameters Switch',
-      'SNR',
-    ],
-  },
-  {
-    title: 'Interface',
-    keys: ['Ethernet Interface', 'On-Board Storage', 'Reset Key', 'Alarm', 'General Function'],
-  },
-  {
-    title: 'Event',
-    keys: ['Basic Event', 'Smart Event', 'Linkage'],
-  },
-  {
-    title: 'Deep Learning Function',
-    keys: ['Face Capture', 'Perimeter Protection', 'Line Crossing', 'Intrusion', 'Loitering', 'People Gathering'],
-  },
-  {
-    title: 'Power',
-    keys: ['Power', 'Power Consumption'],
-  },
-  {
-    title: 'Dimension & Weight',
-    keys: [
-      'Material',
-      'Dimension',
-      'Package Dimension',
-      'Storage Conditions',
-      'Startup and Operating Conditions',
-      'Approx. Weight',
-      'With Package Weight',
-    ],
-  },
-  {
-    title: 'Other',
-    keys: ['Language', 'Anti-Corrosion Protection', 'General Function'],
-  },
-]
+function ComingSoon({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="text-center py-10">
+      <svg
+        className="w-12 h-12 mx-auto mb-3 text-neutral-300"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1}
+          d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+        />
+      </svg>
+      <p className="text-sm font-medium text-neutral-600">{title}</p>
+      <p className="text-xs text-neutral-400 mt-1">{message}</p>
+    </div>
+  )
+}
 
-function SpecGroup({
-  group,
-  data,
+// ------------------------------ Editor clave-valor ------------------------------
+function KeyValueEditor({
+  value,
+  onChange,
+  valuePlaceholder,
 }: {
-  group: { title: string; keys: string[] }
-  data: Record<string, unknown> | null
+  value: Record<string, unknown>
+  onChange: (next: Record<string, unknown>) => void
+  valuePlaceholder?: string
 }) {
-  const entries = group.keys
-    .map((key) => {
-      const value = data?.[key]
-      if (value === undefined || value === null || value === '') return null
-      return [key, value] as [string, unknown]
-    })
-    .filter(Boolean) as [string, unknown][]
+  const entries = Object.entries(value)
+  const keys = entries.map(([k]) => k)
+  const hasEmptyKey = keys.some((k) => k.trim() === '')
+  const hasDuplicates = new Set(keys).size !== keys.length
+  const invalid = hasEmptyKey || hasDuplicates
 
-  if (entries.length === 0) return null
+  const updateRowKey = (oldKey: string, newKey: string) => {
+    if (newKey === oldKey) return
+    const next: Record<string, unknown> = {}
+    for (const [k, v] of entries) {
+      if (k === oldKey) next[newKey] = v
+      else next[k] = v
+    }
+    onChange(next)
+  }
 
-  const [open, setOpen] = useState(true)
+  const updateRowValue = (key: string, raw: string) => {
+    onChange({ ...value, [key]: raw })
+  }
+
+  const removeRow = (key: string) => {
+    const next = { ...value }
+    delete next[key]
+    onChange(next)
+  }
 
   return (
-    <div className="border-b border-neutral-100">
+    <div className="space-y-2">
+      {invalid && (
+        <Alert variant="warning">
+          Las claves no pueden estar vacías ni repetirse. Corrige antes de guardar.
+        </Alert>
+      )}
+      {entries.length === 0 && (
+        <p className="text-sm text-neutral-400 py-4 text-center">Sin atributos definidos.</p>
+      )}
+      {entries.map(([key, val], idx) => (
+        <div key={idx} className="flex gap-2 items-center">
+          <input
+            value={key}
+            onChange={(e) => updateRowKey(key, e.target.value)}
+            className={`${inputClass} w-2/5`}
+            placeholder="clave"
+            aria-label="Clave del atributo"
+          />
+          <input
+            value={String(val ?? '')}
+            onChange={(e) => updateRowValue(key, e.target.value)}
+            className={`${inputClass} flex-1`}
+            placeholder={valuePlaceholder ?? 'valor'}
+            aria-label="Valor del atributo"
+          />
+          <button
+            type="button"
+            onClick={() => removeRow(key)}
+            className="p-2 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+            title="Eliminar atributo"
+            aria-label="Eliminar atributo"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
+      ))}
       <button
-        onClick={() => setOpen(!open)}
         type="button"
-        className="w-full flex items-center justify-between text-left py-3"
+        onClick={() => onChange({ ...value, '': '' })}
+        className="px-3 py-2 border border-dashed border-neutral-300 rounded-lg text-sm text-neutral-500 hover:text-[var(--color-primary)] hover:border-[var(--color-primary)] transition-colors"
       >
-        <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">
-          {group.title}
-        </span>
-        <svg
-          className={`w-4 h-4 text-neutral-400 transition-transform ${open ? 'rotate-180' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        + Agregar atributo
       </button>
-      {open && (
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 pb-3">
-          {entries.map(([key, value]) => (
-            <div key={key} className="flex justify-between py-1">
-              <dt className="text-sm text-neutral-600">{key}</dt>
-              <dd className="text-sm font-medium text-neutral-800 text-right max-w-[60%]">
-                {String(value)}
-              </dd>
+    </div>
+  )
+}
+
+// ------------------------------ Información ------------------------------
+function InfoTab({
+  product,
+  categories,
+  brands,
+}: {
+  product: Product
+  categories: Category[]
+  brands: Brand[]
+}) {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({
+    name: product.name,
+    description: product.description ?? '',
+    categoryId: product.categoryId,
+    brandId: product.brandId,
+    isActive: product.isActive,
+    isVisible: product.isVisible,
+  })
+  const [error, setError] = useState('')
+
+  const mutation = useMutation({
+    mutationFn: () => api.put(`/products/${product.id}`, form),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['product', product.id] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+    },
+  })
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!form.name.trim()) {
+      setError('El nombre es requerido.')
+      return
+    }
+    if (!form.categoryId || !form.brandId) {
+      setError('Categoría y marca son requeridas.')
+      return
+    }
+    setError('')
+    mutation.mutate()
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {(error || mutation.isError) && (
+        <Alert variant="error">
+          {error || getApiErrorMessage(mutation.error, 'No se pudo guardar el producto.')}
+        </Alert>
+      )}
+      {mutation.isSuccess && (
+        <Alert variant="success">Producto actualizado correctamente.</Alert>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-neutral-700 mb-1.5">SKU</label>
+          <input value={product.sku} disabled className={`${inputClass} bg-neutral-50 text-neutral-500`} />
+          <p className="text-xs text-neutral-400 mt-1">El SKU no se puede modificar.</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-neutral-700 mb-1.5">Nombre</label>
+          <input
+            type="text"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className={inputClass}
+            required
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-neutral-700 mb-1.5">Descripción</label>
+        <textarea
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+          className={`${inputClass} resize-none`}
+          rows={3}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-neutral-700 mb-1.5">Categoría</label>
+          <select
+            value={form.categoryId}
+            onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+            className={inputClass}
+          >
+            <option value="">Seleccionar...</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-neutral-700 mb-1.5">Marca</label>
+          <select
+            value={form.brandId}
+            onChange={(e) => setForm({ ...form, brandId: e.target.value })}
+            className={inputClass}
+          >
+            <option value="">Seleccionar...</option>
+            {brands.map((brand) => (
+              <option key={brand.id} value={brand.id}>
+                {brand.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex gap-6">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+            className="w-4 h-4 text-[var(--color-primary)] border-neutral-300 rounded focus:ring-[var(--color-primary-focus-ring)]"
+          />
+          <span className="text-sm text-neutral-700">Activo</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.isVisible}
+            onChange={(e) => setForm({ ...form, isVisible: e.target.checked })}
+            className="w-4 h-4 text-[var(--color-primary)] border-neutral-300 rounded focus:ring-[var(--color-primary-focus-ring)]"
+          />
+          <span className="text-sm text-neutral-700">Visible</span>
+        </label>
+      </div>
+
+      <div className="flex justify-end">
+        <Button type="submit" loading={mutation.isPending}>
+          Guardar cambios
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+// ------------------------------ Atributos ------------------------------
+function AtributosTab({ product }: { product: Product }) {
+  const queryClient = useQueryClient()
+  const [specs, setSpecs] = useState<Record<string, unknown>>(() =>
+    product.technicalSpecs && typeof product.technicalSpecs === 'object'
+      ? { ...(product.technicalSpecs as Record<string, unknown>) }
+      : {}
+  )
+  const [extra, setExtra] = useState<Record<string, unknown>>(() =>
+    product.extraAttributes && typeof product.extraAttributes === 'object'
+      ? { ...(product.extraAttributes as Record<string, unknown>) }
+      : {}
+  )
+  const [error, setError] = useState('')
+
+  const specsValid =
+    Object.keys(specs).every((k) => k.trim() !== '') &&
+    new Set(Object.keys(specs)).size === Object.keys(specs).length
+  const extraValid =
+    Object.keys(extra).every((k) => k.trim() !== '') &&
+    new Set(Object.keys(extra)).size === Object.keys(extra).length
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      api.put(`/products/${product.id}`, {
+        technicalSpecs: Object.keys(specs).length ? specs : {},
+        extraAttributes: Object.keys(extra).length ? extra : {},
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['product', product.id] })
+    },
+  })
+
+  const handleSave = () => {
+    if (!specsValid || !extraValid) {
+      setError('Corrige las claves vacías o duplicadas antes de guardar.')
+      return
+    }
+    setError('')
+    mutation.mutate()
+  }
+
+  return (
+    <div className="space-y-6">
+      {(error || mutation.isError) && (
+        <Alert variant="error">
+          {error || getApiErrorMessage(mutation.error, 'No se pudieron guardar los atributos.')}
+        </Alert>
+      )}
+      {mutation.isSuccess && (
+        <Alert variant="success">Atributos guardados correctamente.</Alert>
+      )}
+
+      <div>
+        <h3 className="text-sm font-semibold text-neutral-700 mb-2">Especificaciones técnicas</h3>
+        <KeyValueEditor value={specs} onChange={setSpecs} />
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-neutral-700 mb-2">Atributos extra</h3>
+        <KeyValueEditor value={extra} onChange={setExtra} />
+      </div>
+
+      <p className="text-xs text-neutral-400">
+        Los atributos se serializan como JSON en los campos technicalSpecs y extraAttributes del
+        producto. Las plantillas de atributos por categoría no están disponibles aún.
+      </p>
+
+      <div className="flex justify-end">
+        <Button onClick={handleSave} loading={mutation.isPending}>
+          Guardar atributos
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ------------------------------ Imágenes ------------------------------
+function ImagesTab({ product }: { product: Product }) {
+  const queryClient = useQueryClient()
+  const images = product.images ?? []
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['product', product.id] })
+  }
+
+  const upload = useMutation({
+    mutationFn: (file: File) => uploadProductImage(product.id, file, images.length === 0),
+    onSuccess: refresh,
+  })
+
+  const remove = useMutation({
+    mutationFn: (imageId: string) => deleteProductImage(imageId),
+    onSuccess: refresh,
+  })
+
+  const primary = useMutation({
+    mutationFn: (imageId: string) => markProductImagePrimary(imageId),
+    onSuccess: refresh,
+  })
+
+  return (
+    <div className="space-y-4">
+      {upload.isError && (
+        <Alert variant="error">
+          {getApiErrorMessage(upload.error, 'Error al subir la imagen. Máximo 8MB.')}
+        </Alert>
+      )}
+      {primary.isError && isNotImplemented(primary.error) && (
+        <Alert variant="info">Marcar imagen como principal estará disponible próximamente.</Alert>
+      )}
+
+      <label className="inline-flex items-center gap-2 px-4 py-2.5 border border-neutral-300 rounded-lg text-sm font-medium text-neutral-700 hover:bg-neutral-50 cursor-pointer transition-colors">
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        </svg>
+        Subir imagen
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          disabled={upload.isPending}
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) upload.mutate(file)
+            e.target.value = ''
+          }}
+        />
+      </label>
+      {upload.isPending && <p className="text-xs text-neutral-400">Subiendo imagen...</p>}
+
+      {images.length === 0 ? (
+        <p className="text-sm text-neutral-400 py-6 text-center">No hay imágenes aún.</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          {images.map((img) => (
+            <div key={img.id} className="border border-neutral-200 rounded-lg overflow-hidden">
+              <img
+                src={img.url}
+                alt={img.alt ?? product.name}
+                className="w-full h-28 object-cover bg-neutral-100"
+              />
+              <div className="flex items-center justify-between p-2">
+                <button
+                  type="button"
+                  disabled={img.isPrimary || primary.isPending}
+                  onClick={() => primary.mutate(img.id)}
+                  className={`text-xs font-medium rounded px-2 py-1 transition-colors ${
+                    img.isPrimary
+                      ? 'bg-[var(--color-primary-bg-subtle)] text-[var(--color-primary)] cursor-default'
+                      : 'text-neutral-500 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)]'
+                  }`}
+                >
+                  {img.isPrimary ? 'Principal' : 'Marcar principal'}
+                </button>
+                <button
+                  type="button"
+                  disabled={remove.isPending}
+                  onClick={() => {
+                    if (confirm('¿Eliminar esta imagen?')) remove.mutate(img.id)
+                  }}
+                  className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                  title="Eliminar"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
             </div>
           ))}
-        </dl>
+        </div>
+      )}
+      <p className="text-xs text-neutral-400">
+        El orden de visualización respeta el sortOrder asignado por el backend. El reordenamiento
+        manual estará disponible próximamente.
+      </p>
+    </div>
+  )
+}
+
+// ------------------------------ Precios ------------------------------
+function PriceModal({
+  mode,
+  price,
+  productId,
+  productName,
+  onClose,
+  onSaved,
+}: {
+  mode: 'create' | 'edit'
+  price?: Price
+  productId: string
+  productName: string
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [value, setValue] = useState(price ? String(price.value) : '')
+  const [currency, setCurrency] = useState(price?.currency ?? '')
+  const [priceListId, setPriceListId] = useState(price?.priceListId ?? '')
+  const [validFrom, setValidFrom] = useState(price?.validFrom ? price.validFrom.slice(0, 10) : '')
+  const [validUntil, setValidUntil] = useState(price?.validUntil ? price.validUntil.slice(0, 10) : '')
+  const [formError, setFormError] = useState('')
+
+  const { data: priceLists = [], isLoading: listsLoading } = useQuery({
+    queryKey: ['priceLists'],
+    queryFn: fetchPriceLists,
+  })
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (mode === 'edit' && price) {
+        return updatePrice(price.id, {
+          value: Number(value),
+          currency,
+          validFrom: validFrom || null,
+          validUntil: validUntil || null,
+        })
+      }
+      return createPrice({
+        productId,
+        priceListId,
+        value: Number(value),
+        currency,
+        ...(validFrom ? { validFrom } : {}),
+        ...(validUntil ? { validUntil } : {}),
+      })
+    },
+    onSuccess: () => {
+      onSaved()
+      onClose()
+    },
+  })
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const num = Number(value)
+    if (!value || !Number.isFinite(num) || num <= 0) {
+      setFormError('El valor debe ser mayor que 0.')
+      return
+    }
+    if (!currency) {
+      setFormError('La moneda es requerida.')
+      return
+    }
+    if (mode === 'create' && !priceListId) {
+      setFormError('Selecciona una tarifa.')
+      return
+    }
+    if (validFrom && validUntil && validUntil < validFrom) {
+      setFormError('La fecha de fin no puede ser anterior a la fecha de inicio.')
+      return
+    }
+    setFormError('')
+    mutation.mutate()
+  }
+
+  return (
+    <Modal
+      open
+      onClose={() => {
+        if (!mutation.isPending) onClose()
+      }}
+      title={mode === 'edit' ? 'Editar precio' : 'Nuevo precio'}
+      footer={
+        <>
+          <Button variant="secondary" disabled={mutation.isPending} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" form="product-price-form" loading={mutation.isPending}>
+            {mode === 'edit' ? 'Guardar cambios' : 'Crear precio'}
+          </Button>
+        </>
+      }
+    >
+      <form id="product-price-form" onSubmit={handleSubmit} className="space-y-4">
+        {(formError || mutation.isError) && (
+          <Alert variant="error">
+            {formError || getApiErrorMessage(mutation.error, 'No se pudo guardar el precio.')}
+          </Alert>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-neutral-800 mb-1.5">Producto</label>
+          <input
+            value={productName}
+            disabled
+            className="w-full px-3 py-2.5 border border-neutral-200 rounded-lg bg-neutral-50 text-sm text-neutral-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-neutral-800 mb-1.5">
+            Tarifa <span className="text-red-500">*</span>
+          </label>
+          {mode === 'edit' && price ? (
+            <input
+              value={price.priceList?.name ?? price.priceListId}
+              disabled
+              className="w-full px-3 py-2.5 border border-neutral-200 rounded-lg bg-neutral-50 text-sm text-neutral-500"
+            />
+          ) : (
+            <select
+              value={priceListId}
+              onChange={(e) => {
+                setPriceListId(e.target.value)
+                const pl = priceLists.find((item) => item.id === e.target.value)
+                if (pl && !currency) setCurrency(pl.currency)
+              }}
+              className={inputClass}
+            >
+              <option value="">Seleccionar tarifa...</option>
+              {listsLoading ? (
+                <option disabled>Cargando...</option>
+              ) : (
+                priceLists.map((pl) => (
+                  <option key={pl.id} value={pl.id}>
+                    {pl.name} ({pl.code})
+                  </option>
+                ))
+              )}
+            </select>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-800 mb-1.5">
+              Valor <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-neutral-800 mb-1.5">
+              Moneda <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-800 mb-1.5">Desde</label>
+            <input
+              type="date"
+              value={validFrom}
+              onChange={(e) => setValidFrom(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-neutral-800 mb-1.5">Hasta</label>
+            <input
+              type="date"
+              value={validUntil}
+              onChange={(e) => setValidUntil(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function PricesTab({ product }: { product: Product }) {
+  const queryClient = useQueryClient()
+  const [modal, setModal] = useState<{ mode: 'create' } | { mode: 'edit'; price: Price } | null>(null)
+  const canEdit = hasPermission('products:write')
+
+  const { data: prices = [], isLoading, error } = useQuery({
+    queryKey: ['product-prices', product.id],
+    queryFn: () => fetchPricesByProduct(product.id),
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: string) => deletePrice(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['product-prices', product.id] })
+      queryClient.invalidateQueries({ queryKey: ['product', product.id] })
+    },
+  })
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-neutral-500 uppercase tracking-wide">
+          Precios del producto ({prices.length})
+        </p>
+        {canEdit && (
+          <Button onClick={() => setModal({ mode: 'create' })}>Nuevo precio</Button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-neutral-400 py-6 text-center">Cargando precios...</p>
+      ) : error ? (
+        <Alert variant="error">
+          {getApiErrorMessage(error, 'No se pudieron cargar los precios.')}
+        </Alert>
+      ) : prices.length === 0 ? (
+        <p className="text-sm text-neutral-400 py-6 text-center">
+          Este producto aún no tiene precios asignados.
+        </p>
+      ) : (
+        <div className="overflow-x-auto border border-neutral-200 rounded-lg">
+          <table className="min-w-full divide-y divide-neutral-200 text-sm">
+            <thead className="bg-neutral-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
+                  Tarifa
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-neutral-600 uppercase">
+                  Precio
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
+                  Vigencia
+                </th>
+                {canEdit && (
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-neutral-600 uppercase">
+                    Acciones
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {prices.map((price) => (
+                <tr key={price.id} className="hover:bg-neutral-50">
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-neutral-800">
+                        {price.priceList?.name ?? price.priceListId}
+                      </span>
+                      {price.priceList?.code && (
+                        <span className="text-xs text-neutral-400 font-mono">
+                          {price.priceList.code}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right font-medium text-neutral-800 tabular-nums">
+                    {formatCurrency(Number(price.value), price.currency)}
+                  </td>
+                  <td className="px-4 py-3 text-neutral-500 text-xs">
+                    {price.validFrom && price.validUntil
+                      ? `${formatDate(price.validFrom)} – ${formatDate(price.validUntil)}`
+                      : price.validFrom
+                        ? `Desde ${formatDate(price.validFrom)}`
+                        : price.validUntil
+                          ? `Hasta ${formatDate(price.validUntil)}`
+                          : 'Sin vigencia'}
+                  </td>
+                  {canEdit && (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setModal({ mode: 'edit', price })}
+                          className="text-xs font-medium text-neutral-500 hover:text-[var(--color-primary)]"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          disabled={remove.isPending}
+                          onClick={() => {
+                            if (confirm('¿Eliminar este precio?')) remove.mutate(price.id)
+                          }}
+                          className="text-xs font-medium text-neutral-400 hover:text-red-500"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {modal && (
+        <PriceModal
+          mode={modal.mode}
+          price={modal.mode === 'edit' ? modal.price : undefined}
+          productId={product.id}
+          productName={product.name}
+          onClose={() => setModal(null)}
+          onSaved={() =>
+            queryClient.invalidateQueries({ queryKey: ['product-prices', product.id] })
+          }
+        />
       )}
     </div>
   )
 }
 
-function SpecGrid({ data }: { data?: Record<string, unknown> | null }) {
-  if (!data || Object.keys(data).length === 0) {
-    return <p className="text-sm text-neutral-400">Sin datos</p>
+// ------------------------------ Stock ------------------------------
+function StockTab({ product }: { product: Product }) {
+  const queryClient = useQueryClient()
+  const [quantity, setQuantity] = useState('')
+  const [location, setLocation] = useState('')
+  const [adjustmentType, setAdjustmentType] = useState<'in' | 'out' | 'adjust' | ''>('')
+  const [reason, setReason] = useState('')
+  const [formError, setFormError] = useState('')
+  const canEdit = hasPermission('products:write')
+
+  const { data: stocks = [], isLoading, error } = useQuery({
+    queryKey: ['product-stock', product.id],
+    queryFn: () => fetchProductStock(product.id),
+    retry: false,
+  })
+
+  const unavailable = isNotImplemented(error)
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      updateProductStock(product.id, {
+        quantity: Number(quantity),
+        ...(location.trim() ? { location: location.trim() } : {}),
+        ...(adjustmentType ? { adjustmentType } : {}),
+        ...(reason.trim() ? { reason: reason.trim() } : {}),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['product-stock', product.id] })
+      queryClient.invalidateQueries({ queryKey: ['product', product.id] })
+      setQuantity('')
+      setLocation('')
+      setReason('')
+      setAdjustmentType('')
+    },
+  })
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const num = Number(quantity)
+    if (!Number.isFinite(num)) {
+      setFormError('La cantidad debe ser un número.')
+      return
+    }
+    if (num <= 0) {
+      setFormError('La cantidad debe ser mayor que 0.')
+      return
+    }
+    setFormError('')
+    mutation.mutate()
   }
-  const shownKeys = new Set<string>()
+
+  const adjustmentHint =
+    adjustmentType === 'in'
+      ? 'Suma la cantidad al stock disponible.'
+      : adjustmentType === 'out'
+        ? 'Resta la cantidad al stock disponible (no permite dejar stock negativo).'
+        : adjustmentType === 'adjust'
+          ? 'Establece el stock disponible al valor indicado.'
+          : 'Guarda el valor como stock disponible sin registrar movimiento.'
+
+  if (unavailable) {
+    return (
+      <ComingSoon
+        title="Stock"
+        message="El módulo de stock de producto estará disponible próximamente."
+      />
+    )
+  }
+
   return (
-    <div className="divide-y divide-neutral-100 border border-neutral-100 rounded-lg overflow-hidden">
-      {SPEC_GROUPS.map((group) => {
-        const entries = group.keys
-          .map((key) => {
-            const value = data[key]
-            if (value === undefined || value === null || value === '') return null
-            shownKeys.add(key)
-            return [key, value] as [string, unknown]
-          })
-          .filter(Boolean) as [string, unknown][]
-        if (entries.length === 0) return null
-        return <SpecGroup key={group.title} group={group} data={data} />
-      })}
-      {Object.entries(data)
-        .filter(([key]) => !shownKeys.has(key))
-        .map(([key, value]) => (
-          <div key={key} className="flex justify-between py-2 border-b border-neutral-100 last:border-0">
-            <dt className="text-sm text-neutral-600">{key}</dt>
-            <dd className="text-sm font-medium text-neutral-800">{String(value ?? '')}</dd>
+    <div className="space-y-6">
+      {error && !unavailable && (
+        <Alert variant="error">{getApiErrorMessage(error, 'No se pudo cargar el stock.')}</Alert>
+      )}
+
+      {isLoading ? (
+        <p className="text-sm text-neutral-400 py-6 text-center">Cargando stock...</p>
+      ) : stocks.length === 0 ? (
+        <p className="text-sm text-neutral-400 py-4 text-center">
+          Este producto aún no tiene registro de stock.
+        </p>
+      ) : (
+        <div className="overflow-x-auto border border-neutral-200 rounded-lg">
+          <table className="min-w-full divide-y divide-neutral-200 text-sm">
+            <thead className="bg-neutral-50">
+              <tr>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-neutral-600 uppercase">
+                  Disponible
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-neutral-600 uppercase">
+                  Reservado
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
+                  Ubicación
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
+                  Actualizado
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {stocks.map((stock: ProductStock) => (
+                <tr key={stock.id}>
+                  <td className="px-4 py-3 text-right font-medium text-neutral-800 tabular-nums">
+                    {stock.availableQty}
+                  </td>
+                  <td className="px-4 py-3 text-right text-neutral-600 tabular-nums">
+                    {stock.reservedQty}
+                  </td>
+                  <td className="px-4 py-3 text-neutral-700">{stock.location ?? '—'}</td>
+                  <td className="px-4 py-3 text-neutral-500 text-xs">
+                    {formatDate(stock.updatedAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {canEdit && (
+        <form onSubmit={handleSubmit} className="space-y-3 border border-neutral-200 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-neutral-700">
+            {stocks.length > 0 ? 'Ajustar stock' : 'Registrar stock'}
+          </h3>
+          {(formError || mutation.isError) && (
+            <Alert variant="error">
+              {formError || getApiErrorMessage(mutation.error, 'No se pudo guardar el stock.')}
+            </Alert>
+          )}
+          {mutation.isSuccess && <Alert variant="success">Stock guardado correctamente.</Alert>}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                Tipo de ajuste
+              </label>
+              <select
+                value={adjustmentType}
+                onChange={(e) => setAdjustmentType(e.target.value as 'in' | 'out' | 'adjust' | '')}
+                className={inputClass}
+              >
+                <option value="">Establecer stock</option>
+                <option value="in">Entrada (incrementar)</option>
+                <option value="out">Salida (decrementar)</option>
+                <option value="adjust">Ajuste (fijar valor)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                Cantidad
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1.5">Ubicación</label>
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className={inputClass}
+                placeholder="Ej: BODEGA-PEREIRA"
+                maxLength={120}
+              />
+            </div>
           </div>
-        ))}
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1.5">Motivo</label>
+            <input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className={inputClass}
+              placeholder="Motivo del movimiento (opcional)"
+              maxLength={300}
+            />
+            <p className="text-xs text-neutral-400 mt-1">{adjustmentHint}</p>
+          </div>
+          <div className="flex justify-end">
+            <Button type="submit" loading={mutation.isPending}>
+              Guardar stock
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   )
 }
 
+// ------------------------------ Proveedores (defensivo) ------------------------------
+function SuppliersTab({ product }: { product: Product }) {
+  const { data = [], isLoading, error } = useQuery({
+    queryKey: ['product-suppliers', product.id],
+    queryFn: () => fetchProductSuppliers(product.id),
+    retry: false,
+  })
+
+  if (isNotImplemented(error)) {
+    return (
+      <ComingSoon
+        title="Proveedores"
+        message="El vínculo producto ↔ proveedor estará disponible próximamente."
+      />
+    )
+  }
+
+  if (isLoading) {
+    return <p className="text-sm text-neutral-400 py-6 text-center">Cargando proveedores...</p>
+  }
+
+  if (error) {
+    return (
+      <Alert variant="error">
+        {getApiErrorMessage(error, 'No se pudieron cargar los proveedores.')}
+      </Alert>
+    )
+  }
+
+  if (data.length === 0) {
+    return <p className="text-sm text-neutral-400 py-6 text-center">Sin proveedores asociados.</p>
+  }
+
+  return (
+    <div className="overflow-x-auto border border-neutral-200 rounded-lg">
+      <table className="min-w-full divide-y divide-neutral-200 text-sm">
+        <tbody className="divide-y divide-neutral-100">
+          {data.map((s, idx) => (
+            <tr key={idx}>
+              <td className="px-4 py-3 text-neutral-700">{String(s)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ------------------------------ Accesos (defensivo) ------------------------------
+function AccessTab() {
+  return (
+    <ComingSoon
+      title="Accesos"
+      message="La gestión de accesos por producto (asignaciones ACL) estará disponible próximamente."
+    />
+  )
+}
+
+// ------------------------------ Publicación (defensivo) ------------------------------
+function PublishTab({ product }: { product: Product }) {
+  const queryClient = useQueryClient()
+  const [notAvailable, setNotAvailable] = useState(false)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const canEdit = hasPermission('products:write') || hasPermission('publish:manage')
+
+  const status = product.publishStatus
+  const statusBadge =
+    status === 'publicado' ? (
+      <Badge variant="success">Publicado</Badge>
+    ) : status === 'programado' ? (
+      <Badge variant="info">Programado</Badge>
+    ) : status === 'borrador' ? (
+      <Badge variant="warning">Borrador</Badge>
+    ) : null
+
+  const publish = useMutation({
+    mutationFn: () => publishProduct(product.id),
+    onError: (err) => {
+      if (isNotImplemented(err)) setNotAvailable(true)
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['product', product.id] }),
+  })
+
+  const unpublish = useMutation({
+    mutationFn: () => unpublishProduct(product.id),
+    onError: (err) => {
+      if (isNotImplemented(err)) setNotAvailable(true)
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['product', product.id] }),
+  })
+
+  const schedule = useMutation({
+    mutationFn: (payload: { publishAt: string; unpublishAt?: string }) =>
+      schedulePublish(product.id, payload),
+    onError: (err) => {
+      if (isNotImplemented(err)) setNotAvailable(true)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['product', product.id] })
+      setScheduleOpen(false)
+    },
+  })
+
+  return (
+    <div className="space-y-4">
+      {notAvailable && (
+        <Alert variant="info">El módulo de publicación programada estará disponible próximamente.</Alert>
+      )}
+
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-neutral-600">Estado de publicación:</span>
+        {statusBadge ?? <Badge variant="neutral">Sin estado</Badge>}
+      </div>
+
+      {(product.publishAt || product.unpublishAt) && (
+        <div className="text-xs text-neutral-500 space-y-1">
+          {product.publishAt && (
+            <p>Publicar programado: {formatDate(product.publishAt)}</p>
+          )}
+          {product.unpublishAt && (
+            <p>Despublicar programado: {formatDate(product.unpublishAt)}</p>
+          )}
+        </div>
+      )}
+
+      {canEdit && (
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => publish.mutate()} loading={publish.isPending}>
+            Publicar
+          </Button>
+          <Button variant="secondary" onClick={() => unpublish.mutate()} loading={unpublish.isPending}>
+            Despublicar
+          </Button>
+          <Button variant="secondary" onClick={() => setScheduleOpen(true)}>
+            Programar
+          </Button>
+        </div>
+      )}
+
+      {publish.isError && !isNotImplemented(publish.error) && (
+        <Alert variant="error">
+          {getApiErrorMessage(publish.error, 'No se pudo publicar el producto.')}
+        </Alert>
+      )}
+      {unpublish.isError && !isNotImplemented(unpublish.error) && (
+        <Alert variant="error">
+          {getApiErrorMessage(unpublish.error, 'No se pudo despublicar el producto.')}
+        </Alert>
+      )}
+
+      <ScheduleModal
+        open={scheduleOpen}
+        loading={schedule.isPending}
+        error={schedule.isError && !isNotImplemented(schedule.error) ? schedule.error : null}
+        onClose={() => setScheduleOpen(false)}
+        onConfirm={(payload) => schedule.mutate(payload)}
+      />
+    </div>
+  )
+}
+
+function ScheduleModal({
+  open,
+  loading,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean
+  loading: boolean
+  error: unknown
+  onClose: () => void
+  onConfirm: (payload: { publishAt: string; unpublishAt?: string }) => void
+}) {
+  const [publishAt, setPublishAt] = useState('')
+  const [unpublishAt, setUnpublishAt] = useState('')
+  const [formError, setFormError] = useState('')
+
+  const handleConfirm = () => {
+    if (!publishAt) {
+      setFormError('La fecha de publicación es requerida.')
+      return
+    }
+    if (unpublishAt && unpublishAt < publishAt) {
+      setFormError('La fecha de despublicación no puede ser anterior a la de publicación.')
+      return
+    }
+    setFormError('')
+    onConfirm({ publishAt, ...(unpublishAt ? { unpublishAt } : {}) })
+  }
+
+  const alertMessage =
+    formError || (error ? getApiErrorMessage(error, 'No se pudo programar la publicación.') : '')
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Programar publicación"
+      footer={
+        <>
+          <Button variant="secondary" disabled={loading} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button loading={loading} onClick={handleConfirm}>
+            Programar
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {alertMessage && <Alert variant="error">{alertMessage}</Alert>}
+        <div>
+          <label className="block text-sm font-medium text-neutral-800 mb-1.5">
+            Publicar en <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="datetime-local"
+            value={publishAt}
+            onChange={(e) => setPublishAt(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-neutral-800 mb-1.5">
+            Despublicar en (opcional)
+          </label>
+          <input
+            type="datetime-local"
+            value={unpublishAt}
+            onChange={(e) => setUnpublishAt(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ------------------------------ Auditoría ------------------------------
+function AuditTab({ product }: { product: Product }) {
+  const canView = hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.SUPERVISOR)
+
+  const { data: logs = [], isLoading, error } = useQuery({
+    queryKey: ['product-audit', product.id],
+    queryFn: () => fetchProductAudit('Product', product.id),
+    enabled: canView,
+    retry: false,
+  })
+
+  if (!canView) {
+    return <p className="text-sm text-neutral-400 py-6 text-center">No tienes permisos para ver la auditoría.</p>
+  }
+
+  if (isLoading) {
+    return <p className="text-sm text-neutral-400 py-6 text-center">Cargando auditoría...</p>
+  }
+
+  if (error) {
+    return <Alert variant="error">{getApiErrorMessage(error, 'No se pudo cargar la auditoría.')}</Alert>
+  }
+
+  if (logs.length === 0) {
+    return <p className="text-sm text-neutral-400 py-6 text-center">Sin eventos de auditoría para este producto.</p>
+  }
+
+  return (
+    <div className="overflow-x-auto border border-neutral-200 rounded-lg">
+      <table className="min-w-full divide-y divide-neutral-200 text-sm">
+        <thead className="bg-neutral-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Fecha</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Usuario</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Acción</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Detalle</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-neutral-100">
+          {logs.map((log: AuditLog) => (
+            <tr key={log.id}>
+              <td className="px-4 py-3 text-neutral-500 text-xs whitespace-nowrap">
+                {formatDate(log.createdAt)}
+              </td>
+              <td className="px-4 py-3 text-neutral-700">
+                {log.user?.name ?? log.user?.email ?? 'Sistema'}
+              </td>
+              <td className="px-4 py-3">
+                <Badge variant={log.action === 'delete' ? 'error' : log.action === 'create' ? 'success' : 'info'}>
+                  {log.action}
+                </Badge>
+              </td>
+              <td className="px-4 py-3 text-xs text-neutral-500">
+                <details>
+                  <summary className="cursor-pointer text-[var(--color-primary)]">
+                    Ver cambios
+                  </summary>
+                  <pre className="mt-2 bg-neutral-50 p-2 rounded overflow-x-auto text-[11px] text-neutral-600">
+                    {JSON.stringify({ anterior: log.oldValues, nuevo: log.newValues }, null, 2)}
+                  </pre>
+                </details>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ------------------------------ Página ------------------------------
 export default function ProductDetailPage() {
   const { productId } = useParams<{ productId: string }>()
-  const [tab, setTab] = useState<DetailTab>('specs')
+  const [tab, setTab] = useState<DetailTab>('info')
   const [selectedImage, setSelectedImage] = useState(0)
 
   const { data: product, isLoading, error } = useQuery({
@@ -244,8 +1362,25 @@ export default function ProductDetailPage() {
     retry: 1,
   })
 
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const res = await api.get('/categories')
+      return (res.data as { data: Category[] }).data
+    },
+  })
+
+  const { data: brands = [] } = useQuery({
+    queryKey: ['brands'],
+    queryFn: async () => {
+      const res = await api.get('/brands')
+      return (res.data as { data: Brand[] }).data
+    },
+  })
+
   const { priceLists } = usePriceLists()
   const { toggleActive, toggleVisibility } = useProductMutations()
+  const canEdit = hasPermission('products:write')
 
   if (isLoading) {
     return (
@@ -347,42 +1482,24 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="absolute top-4 left-4 flex flex-col gap-1.5 z-10">
-              <span className="px-2.5 py-1 bg-emerald-500 text-white text-[11px] font-semibold rounded">
+              <span className={`px-2.5 py-1 text-white text-[11px] font-semibold rounded ${product.isActive ? 'bg-emerald-500' : 'bg-neutral-500'}`}>
                 {product.isActive ? 'Activo' : 'Inactivo'}
               </span>
-              <span className="px-2.5 py-1 bg-security-600 text-white text-[11px] font-semibold rounded">
+              <span className={`px-2.5 py-1 text-white text-[11px] font-semibold rounded ${product.isVisible ? 'bg-security-600' : 'bg-neutral-400'}`}>
                 {product.isVisible ? 'Visible' : 'Oculto'}
               </span>
+              {product.publishStatus && (
+                <span className={`px-2.5 py-1 text-white text-[11px] font-semibold rounded ${
+                  product.publishStatus === 'publicado'
+                    ? 'bg-sky-500'
+                    : product.publishStatus === 'programado'
+                      ? 'bg-indigo-500'
+                      : 'bg-amber-500'
+                }`}>
+                  {product.publishStatus}
+                </span>
+              )}
             </div>
-
-            {hasPermission('products:write') && (
-              <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                <button
-                  onClick={() => {
-                    const editingEvent = new CustomEvent('open-product-edit', {
-                      detail: { productId: product.id },
-                    })
-                    window.dispatchEvent(editingEvent)
-                  }}
-                  className="p-2 bg-white rounded-lg shadow hover:bg-neutral-50 text-neutral-600 hover:text-security-600 transition-colors"
-                  title="Editar producto"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 012.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                    />
-                  </svg>
-                </button>
-              </div>
-            )}
 
             {gallery.length > 1 && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
@@ -424,7 +1541,7 @@ export default function ProductDetailPage() {
               </p>
             )}
 
-            {hasPermission('products:write') && (
+            {canEdit && (
               <div className="mt-4 flex gap-2">
                 <button
                   onClick={() => toggleActive.mutate(product.id)}
@@ -471,145 +1588,31 @@ export default function ProductDetailPage() {
 
       <div className="border border-neutral-200 rounded-xl bg-white">
         <div className="px-6 pt-4 border-b border-neutral-200 flex gap-1 overflow-x-auto">
-          {(
-            [
-              ['specs', 'Especificaciones'],
-              ['prices', 'Precios'],
-              ['images', 'Imágenes'],
-            ] as [DetailTab, string][]
-          ).map(([t, label]) => (
+          {TABS.map((t) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={t.id}
+              onClick={() => setTab(t.id)}
               className={`px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors whitespace-nowrap ${
-                tab === t
+                tab === t.id
                   ? 'border-security-600 text-security-700'
                   : 'border-transparent text-neutral-500 hover:text-neutral-700'
               }`}
             >
-              {label}
+              {t.label}
             </button>
           ))}
         </div>
 
         <div className="p-6">
-          {tab === 'specs' && (
-            <div>
-              <SpecGrid data={product.technicalSpecs} />
-            </div>
-          )}
-
-          {tab === 'prices' && (
-            <div className="overflow-x-auto">
-              {orderedLists.length > 0 ? (
-                <table className="min-w-full divide-y divide-neutral-200 text-sm">
-                  <thead className="bg-neutral-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
-                        Lista de precios
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-neutral-600 uppercase">
-                        Precio unitario
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">
-                        Vigencia
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-100">
-                    {orderedLists.map((list) => {
-                      const price = findPrice(product, list.id)
-                      const val = price ? Number(price.value) : undefined
-                      return (
-                        <tr key={list.id}>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-col">
-                              <span className="font-medium text-neutral-800">
-                                {list.name}
-                              </span>
-                              <span className="text-xs text-neutral-400 font-mono">
-                                {list.code}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {val === undefined ? (
-                              <span className="text-neutral-300 text-xs">—</span>
-                            ) : val === 0 ? (
-                              <span className="text-neutral-300 text-xs">Sin precio</span>
-                            ) : (
-                              <span className="font-medium text-neutral-800">
-                                {formatCurrency(val, list.currency)}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-neutral-500 text-xs">
-                            {price?.validFrom && price?.validUntil
-                              ? `${formatDate(price.validFrom)} – ${formatDate(price.validUntil)}`
-                              : price?.validFrom
-                                ? `Desde ${formatDate(price.validFrom)}`
-                                : price?.validUntil
-                                  ? `Hasta ${formatDate(price.validUntil)}`
-                                  : 'Sin vigencia'}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="text-neutral-400 text-sm py-6 text-center">
-                  No hay listas de precios disponibles
-                </p>
-              )}
-            </div>
-          )}
-
-          {tab === 'images' && (
-            <div className="space-y-4">
-              <p className="text-xs text-neutral-500 uppercase tracking-wide">
-                Galería de imágenes ({product.images.length})
-              </p>
-              {product.images.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                  {product.images.map((img, i) => (
-                    <div
-                      key={img.id}
-                      className="border border-neutral-200 rounded-lg overflow-hidden"
-                    >
-                      <img
-                        src={img.url}
-                        alt={`${product.name} #${i + 1}`}
-                        className="w-full h-24 object-cover"
-                      />
-                      {img.isPrimary && (
-                        <span className="block text-[10px] font-semibold bg-security-600 text-white px-2 py-0.5">
-                          Principal
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-neutral-400">
-                  <svg
-                    className="w-12 h-12 mx-auto mb-2 text-neutral-300"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1}
-                      d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                    />
-                  </svg>
-                  <p>No hay imágenes</p>
-                </div>
-              )}
-            </div>
-          )}
+          {tab === 'info' && <InfoTab product={product} categories={categories} brands={brands} />}
+          {tab === 'specs' && <AtributosTab product={product} />}
+          {tab === 'images' && <ImagesTab product={product} />}
+          {tab === 'prices' && <PricesTab product={product} />}
+          {tab === 'stock' && <StockTab product={product} />}
+          {tab === 'suppliers' && <SuppliersTab product={product} />}
+          {tab === 'access' && <AccessTab />}
+          {tab === 'publish' && <PublishTab product={product} />}
+          {tab === 'audit' && <AuditTab product={product} />}
         </div>
       </div>
     </div>

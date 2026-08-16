@@ -45,6 +45,20 @@ export class PricesService {
   }
 
   /**
+   * Convierte un valor de fecha del DTO (string ISO como '2026-01-01') a Date.
+   * Valida que no sea Invalid Date → 400. null/undefined/vacío → null.
+   * Evita el 500 de Prisma ("premature end of input") al persistir strings (BUG-1).
+   */
+  private parsePriceDate(value: string | null | undefined): Date | null {
+    if (value === null || value === undefined || value === '') return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) {
+      throw new BadRequestException(`Fecha inválida: ${value}`);
+    }
+    return d;
+  }
+
+  /**
    * Valida invariantes de precio:
    *  - valor no negativo (value >= 0).
    *  - vigencia coherente (validFrom <= validUntil), combinando el valor nuevo
@@ -61,11 +75,73 @@ export class PricesService {
       throw new BadRequestException('El valor del precio no puede ser negativo');
     }
 
-    const from = validFrom ? new Date(validFrom) : existingFrom ? new Date(existingFrom as any) : null;
-    const until = validUntil ? new Date(validUntil) : existingUntil ? new Date(existingUntil as any) : null;
+    const from = validFrom ? this.parsePriceDate(validFrom) : (existingFrom instanceof Date ? existingFrom : null);
+    const until = validUntil ? this.parsePriceDate(validUntil) : (existingUntil instanceof Date ? existingUntil : null);
     if (from && until && until.getTime() < from.getTime()) {
       throw new BadRequestException(
         'La fecha de fin (validUntil) no puede ser anterior a la fecha de inicio (validFrom)',
+      );
+    }
+  }
+
+  /**
+   * Determina si dos vigencias de precio se solapan. Un null indica límite abierto:
+   *  - validFrom null → inicio en -infinito.
+   *  - validUntil null → fin en +infinito.
+   * Dos rangos [aFrom, aUntil] y [bFrom, bUntil] se solapan si aFrom <= bUntil && bFrom <= aUntil.
+   */
+  private rangesOverlap(
+    aFrom: Date | string | null,
+    aUntil: Date | string | null,
+    bFrom: Date | string | null,
+    bUntil: Date | string | null,
+  ): boolean {
+    const aFromMs = aFrom ? new Date(aFrom as any).getTime() : -Infinity;
+    const aUntilMs = aUntil ? new Date(aUntil as any).getTime() : Infinity;
+    const bFromMs = bFrom ? new Date(bFrom as any).getTime() : -Infinity;
+    const bUntilMs = bUntil ? new Date(bUntil as any).getTime() : Infinity;
+    return aFromMs <= bUntilMs && bFromMs <= aUntilMs;
+  }
+
+  /** Formatea una fecha para el mensaje de solapamiento; null = 'abierto'. */
+  private formatOverlapDate(d: Date | string | null): string {
+    if (!d) return 'abierto';
+    return new Date(d as any).toISOString();
+  }
+
+  /**
+   * Control de solapamiento (checklist 21): busca otro precio del mismo producto
+   * con la misma priceListId o la misma Lista (listaId) cuya vigencia se solape.
+   * Si hay conflicto → 409 con mensaje claro.
+   */
+  private async assertNoOverlap(params: {
+    productId: string;
+    priceListId?: string;
+    listaId?: string | null;
+    excludeId?: string;
+    validFrom: Date | string | null;
+    validUntil: Date | string | null;
+  }): Promise<void> {
+    const { productId, priceListId, listaId, excludeId, validFrom, validUntil } = params;
+
+    const others = (await this.prisma.price.findMany({
+      where: {
+        productId,
+        OR: [
+          ...(priceListId ? [{ priceListId }] : []),
+          ...(listaId ? [{ listaId }] : []),
+        ],
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+    })) ?? [];
+
+    const conflict = others.find((p) =>
+      this.rangesOverlap(validFrom, validUntil, p.validFrom, p.validUntil),
+    );
+
+    if (conflict) {
+      throw new ConflictException(
+        `El precio se solapa con la vigencia del precio ${conflict.id} (desde ${this.formatOverlapDate(conflict.validFrom)} hasta ${this.formatOverlapDate(conflict.validUntil)})`,
       );
     }
   }
@@ -89,10 +165,11 @@ export class PricesService {
   }
 
   async findOnePriceList(id: string, ctx?: AccessContext) {
-    // ACL: los precios incluidos deben filtrarse por las Listas autorizadas (deny-by-default).
+    // ACL: los precios incluidos se filtran por las Listas donde el usuario tiene
+    // edit_prices o superior (checklist 29/30: ver precios exige edit_prices).
     let allowedListaIds: string[] | null = null;
     if (ctx) {
-      allowedListaIds = await this.acl.getAllowedListaIds(ctx.userId, ctx.roles, 'view');
+      allowedListaIds = await this.acl.getAllowedListaIds(ctx.userId, ctx.roles, 'edit_prices');
     }
 
     const pricesWhere =
@@ -243,8 +320,8 @@ export class PricesService {
   }
 
   async findPricesByProduct(productId: string, ctx?: AccessContext) {
-    // Deny-by-default: exigir acceso a la Lista del producto.
-    if (ctx) await this.acl.assertProductAccess(productId, ctx, 'view');
+    // Deny-by-default: ver precios exige edit_prices sobre la Lista del producto (checklist 29/30).
+    if (ctx) await this.acl.assertProductAccess(productId, ctx, 'edit_prices');
 
     const prices = await this.prisma.price.findMany({
       where: { productId },
@@ -255,10 +332,11 @@ export class PricesService {
   }
 
   async findPricesByPriceList(priceListId: string, ctx?: AccessContext) {
-    // Deny-by-default: solo precios cuyo producto pertenece a una Lista autorizada.
+    // Deny-by-default: solo precios cuyo producto pertenece a una Lista donde el
+    // usuario tiene edit_prices o superior (ver precios exige edit_prices).
     let pricesWhere: { priceListId: string; product?: { listaId: { in: string[] } } } = { priceListId };
     if (ctx) {
-      const allowed = await this.acl.getAllowedListaIds(ctx.userId, ctx.roles, 'view');
+      const allowed = await this.acl.getAllowedListaIds(ctx.userId, ctx.roles, 'edit_prices');
       if (allowed !== null) {
         pricesWhere.product = { listaId: { in: allowed } };
       }
@@ -284,8 +362,8 @@ export class PricesService {
     const priceList = await this.prisma.priceList.findUnique({ where: { id: dto.priceListId } });
     if (!priceList) throw new NotFoundException('Lista de precios no encontrada');
 
-    // ACL: crear precio exige `edit` sobre la Lista del producto.
-    if (ctx && product.listaId) await this.acl.assertListaAccess(product.listaId, ctx, 'edit');
+    // ACL: crear precio exige `edit_prices` sobre la Lista del producto (checklist 29/30).
+    if (ctx && product.listaId) await this.acl.assertListaAccess(product.listaId, ctx, 'edit_prices');
 
     const existing = await this.prisma.price.findUnique({
       where: {
@@ -309,6 +387,20 @@ export class PricesService {
 this.validateCurrency(dto.currency);
     this.validatePrice(dto.value, dto.validFrom, dto.validUntil);
 
+    // Fechas normalizadas a Date (string 'YYYY-MM-DD' → Date) para evitar 500 de Prisma.
+    const validFrom = this.parsePriceDate(dto.validFrom);
+    const validUntil = this.parsePriceDate(dto.validUntil);
+
+    // Control de solapamiento (checklist 21): 409 si otro precio del mismo producto
+    // (misma priceListId o misma Lista) tiene una vigencia que se solapa con la nueva.
+    await this.assertNoOverlap({
+      productId: dto.productId,
+      priceListId: dto.priceListId,
+      listaId: productListaId,
+      validFrom,
+      validUntil,
+    });
+
     const created = await this.prisma.price.create({
       data: {
         productId: dto.productId,
@@ -316,8 +408,8 @@ this.validateCurrency(dto.currency);
         ...(productListaId ? { listaId: dto.listaId ?? productListaId } : {}),
         value: dto.value,
         currency: dto.currency ?? 'COP',
-        validFrom: dto.validFrom,
-        validUntil: dto.validUntil,
+        validFrom,
+        validUntil,
       },
       include: {
         product: { select: { id: true, sku: true, name: true } },
@@ -349,9 +441,9 @@ this.validateCurrency(dto.currency);
     const price = await this.prisma.price.findUnique({ where: { id } });
     if (!price) throw new NotFoundException('Precio no encontrado');
 
-    // ACL: actualizar precio exige `edit` sobre la Lista del producto dueño.
+    // ACL: actualizar precio exige `edit_prices` sobre la Lista del producto dueño.
     if (ctx) {
-      await this.acl.assertProductAccess(price.productId, ctx, 'edit');
+      await this.acl.assertProductAccess(price.productId, ctx, 'edit_prices');
     }
 
     // Invariante: si se cambia el listaId, debe coincidir con la Lista del producto.
@@ -376,12 +468,28 @@ this.validateCurrency(dto.currency);
       price.validUntil,
     );
 
+    // Control de solapamiento (checklist 21): 409 si otro precio del mismo producto
+    // (misma priceListId o misma Lista) se solapa con la nueva vigencia (excluye este precio).
+    // Fechas normalizadas a Date (string 'YYYY-MM-DD' → Date) para evitar 500 de Prisma (BUG-1).
+    const newFrom =
+      dto.validFrom !== undefined ? this.parsePriceDate(dto.validFrom) : price.validFrom;
+    const newUntil =
+      dto.validUntil !== undefined ? this.parsePriceDate(dto.validUntil) : price.validUntil;
+    await this.assertNoOverlap({
+      productId: price.productId,
+      priceListId: price.priceListId,
+      listaId: price.listaId,
+      excludeId: price.id,
+      validFrom: newFrom,
+      validUntil: newUntil,
+    });
+
     const data = {
       ...(dto.value !== undefined && { value: dto.value }),
       ...(dto.listaId !== undefined && { listaId: dto.listaId }),
       ...(dto.currency && { currency: dto.currency }),
-      ...(dto.validFrom !== undefined && { validFrom: dto.validFrom ?? null }),
-      ...(dto.validUntil !== undefined && { validUntil: dto.validUntil ?? null }),
+      ...(dto.validFrom !== undefined && { validFrom: newFrom }),
+      ...(dto.validUntil !== undefined && { validUntil: newUntil }),
     };
 
     const updated = await this.prisma.price.update({
@@ -393,6 +501,9 @@ this.validateCurrency(dto.currency);
       },
     });
 
+    // Historial inmutable (checklist 22): el log de update incluye oldValues completos
+    // (value/currency/validFrom/validUntil anteriores) y newValues completos resultantes
+    // con origin 'manual'. Nunca se borran ni editan los logs existentes.
     await this.audit.log({
       userId: ctx?.userId,
       action: 'update',
@@ -405,7 +516,14 @@ this.validateCurrency(dto.currency);
         validFrom: price.validFrom,
         validUntil: price.validUntil,
       },
-      newValues: data,
+      newValues: {
+        value: dto.value !== undefined ? dto.value : price.value,
+        currency: dto.currency !== undefined ? dto.currency : price.currency,
+        listaId: dto.listaId !== undefined ? dto.listaId : price.listaId,
+        validFrom: newFrom,
+        validUntil: newUntil,
+        origin: 'manual',
+      },
     });
 
     return updated;
@@ -414,6 +532,11 @@ this.validateCurrency(dto.currency);
   async removePrice(id: string, ctx?: AccessContext) {
     const price = await this.prisma.price.findUnique({ where: { id } });
     if (!price) throw new NotFoundException('Precio no encontrado');
+
+    // ACL: eliminar precio exige `edit_prices` sobre la Lista del producto dueño.
+    if (ctx) {
+      await this.acl.assertProductAccess(price.productId, ctx, 'edit_prices');
+    }
 
     await this.audit.log({
       userId: ctx?.userId,

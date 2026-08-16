@@ -145,6 +145,7 @@ export const createPrismaMock = () => ({
     delete: jest.fn(),
     deleteMany: jest.fn(),
     updateMany: jest.fn(),
+    count: jest.fn(),
   },
   $connect: jest.fn(),
   $disconnect: jest.fn(),

@@ -5,6 +5,7 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { SuppliersService } from './suppliers.service';
 
@@ -110,8 +111,8 @@ function buildPrisma(): AnyMock {
   p.stock.findMany.mockResolvedValue([mockStock]);
   p.stock.upsert.mockImplementation(async (args: any) => ({
     id: randomUUID(),
-    ...(args.update ?? {}),
     ...args.create,
+    ...(args.update ?? {}),
     updatedAt: new Date(),
   }));
   p.stock.update.mockImplementation(async (args: any) => ({
@@ -404,19 +405,19 @@ describe('SuppliersService — módulo proveedores (OLA 7A)', () => {
     );
   });
 
-  it('actualiza status a recibida y audita update', async () => {
+  it('actualiza status a aprobada (transición válida) y audita status_change', async () => {
     const res = await service.updatePurchaseOrderStatus(
       'po-1',
-      { status: 'recibida' },
+      { status: 'aprobada' },
       COMMERCIAL,
     );
-    expect(res.status).toBe('recibida');
+    expect(res.status).toBe('aprobada');
     expect(mockAudit.log).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: 'update',
+        action: 'status_change',
         entity: 'PurchaseOrder',
         oldValues: { status: 'solicitada' },
-        newValues: { status: 'recibida' },
+        newValues: expect.objectContaining({ status: 'aprobada', movedByUserId: COMMERCIAL.userId }),
       }),
     );
   });
@@ -444,5 +445,328 @@ describe('SuppliersService — módulo proveedores (OLA 7A)', () => {
   it('404 al eliminar orden inexistente', async () => {
     mockPrisma.purchaseOrder.findUnique.mockResolvedValueOnce(null);
     await expect(service.removePurchaseOrder('no-existe', ADMIN)).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('SuppliersService — Tanda 1C (stock avanzado, PO flujo completo, dashboard, reportes)', () => {
+  let service: SuppliersService;
+  let mockPrisma: AnyMock;
+  let mockAudit: { log: jest.Mock; findByEntity?: jest.Mock };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPrisma = buildPrisma();
+    mockAudit = { log: jest.fn().mockResolvedValue({}) };
+    service = new SuppliersService(mockPrisma as any, mockAudit as any);
+  });
+
+  // ---------- Stock: movimientos y alertas ----------
+
+  it('registra movement_in en upsert con adjustmentType=in (trazabilidad en audit)', async () => {
+    mockPrisma.stock.findUnique.mockResolvedValueOnce(mockStock); // availableQty 42
+    const res = await service.upsertStock(
+      'prod-1',
+      { quantity: 5, adjustmentType: 'in', reason: 'Compra proveedor' },
+      COMMERCIAL,
+    );
+    expect(res.availableQty).toBe(47);
+    expect(mockAudit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'movement_in',
+        entity: 'Stock',
+        newValues: expect.objectContaining({
+          adjustmentType: 'in',
+          reason: 'Compra proveedor',
+          quantityAntes: 42,
+          quantityDespues: 47,
+        }),
+      }),
+    );
+  });
+
+  it('registra movement_out y ajuste (adjust) con cantidades antes/después', async () => {
+    mockPrisma.stock.findUnique.mockResolvedValueOnce(mockStock); // 42
+    await service.upsertStock('prod-1', { quantity: 2, adjustmentType: 'out', reason: 'Venta' }, COMMERCIAL);
+    expect(mockAudit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'movement_out',
+        newValues: expect.objectContaining({ quantityAntes: 42, quantityDespues: 40 }),
+      }),
+    );
+
+    mockPrisma.stock.findUnique.mockResolvedValueOnce(mockStock); // 42
+    const res = await service.upsertStock('prod-1', { quantity: 9, adjustmentType: 'adjust' }, COMMERCIAL);
+    expect(res.availableQty).toBe(9);
+    expect(mockAudit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'adjust',
+        newValues: expect.objectContaining({ quantityAntes: 42, quantityDespues: 9 }),
+      }),
+    );
+  });
+
+  it('400 si una salida deja el stock negativo', async () => {
+    mockPrisma.stock.findUnique.mockResolvedValueOnce(mockStock); // 42
+    await expect(
+      service.upsertStock('prod-1', { quantity: 100, adjustmentType: 'out' }, COMMERCIAL),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.upsertStock('prod-1', { quantity: 100, adjustmentType: 'out' }, COMMERCIAL),
+    ).rejects.toThrow('Stock insuficiente');
+  });
+
+  it('persiste minQuantity en auditoría (sin migración) al crear/actualizar stock', async () => {
+    const res = await service.upsertStock('prod-1', { quantity: 10, minQuantity: 5 }, COMMERCIAL);
+    expect(mockAudit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'settings',
+        entity: 'Stock',
+        entityId: res.id,
+        newValues: expect.objectContaining({ minQuantity: 5 }),
+      }),
+    );
+  });
+
+  it('lista alertas de stock (out_of_stock / below_min desde audit settings)', async () => {
+    mockPrisma.stock.findMany.mockResolvedValueOnce([
+      { id: 's1', productId: 'prod-1', availableQty: 0, location: 'A', updatedAt: new Date() },
+      { id: 's2', productId: 'prod-2', availableQty: 3, location: 'B', updatedAt: new Date() },
+      { id: 's3', productId: 'prod-3', availableQty: 10, location: 'C', updatedAt: new Date() },
+    ]);
+    mockPrisma.auditLog.findMany.mockResolvedValueOnce([
+      { entityId: 's2', newValues: { minQuantity: 5 } },
+    ]);
+    mockPrisma.product.findMany.mockResolvedValueOnce([
+      { id: 'prod-1', sku: 'CAM-001', name: 'Cámara' },
+      { id: 'prod-2', sku: 'CAM-002', name: 'Cámara 2' },
+      { id: 'prod-3', sku: 'CAM-003', name: 'Cámara 3' },
+    ]);
+    const res = await service.findStockAlerts();
+    expect(res.data.map((a: any) => a.reason)).toEqual(['out_of_stock', 'below_min']);
+  });
+
+  it('404 al listar alertas si el producto referenciado no existe (se omite sin romper)', async () => {
+    mockPrisma.stock.findMany.mockResolvedValueOnce([
+      { id: 's1', productId: 'prod-ghost', availableQty: 0, location: 'A', updatedAt: new Date() },
+    ]);
+    mockPrisma.auditLog.findMany.mockResolvedValueOnce([]);
+    mockPrisma.product.findMany.mockResolvedValueOnce([]);
+    const res = await service.findStockAlerts();
+    expect(res.data[0].productId).toBe('prod-ghost');
+    expect(res.data[0].name).toBeNull();
+  });
+
+  // ---------- Órdenes de compra: matriz de transiciones ----------
+
+  it('400 al pasar de solicitada a recibida (transición inválida)', async () => {
+    const promise = service.updatePurchaseOrderStatus('po-1', { status: 'recibida' }, COMMERCIAL);
+    await expect(promise).rejects.toThrow(BadRequestException);
+    await expect(promise).rejects.toThrow('No se puede pasar de solicitada a recibida');
+  });
+
+  it('400 al pasar de aprobada a recibida (debe ir por en_transito)', async () => {
+    mockPrisma.purchaseOrder.findUnique.mockResolvedValueOnce({ ...mockOrder, status: 'aprobada' });
+    await expect(
+      service.updatePurchaseOrderStatus('po-1', { status: 'recibida' }, COMMERCIAL),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('400 al moverse desde un estado terminal (cerrada)', async () => {
+    mockPrisma.purchaseOrder.findUnique.mockResolvedValueOnce({ ...mockOrder, status: 'cerrada' });
+    await expect(
+      service.updatePurchaseOrderStatus('po-1', { status: 'recibida' }, COMMERCIAL),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('403 al cancelar una orden sin rol Super Admin', async () => {
+    const promise = service.updatePurchaseOrderStatus('po-1', { status: 'cancelada' }, COMMERCIAL);
+    await expect(promise).rejects.toThrow(ForbiddenException);
+  });
+
+  it('Super Admin puede cancelar una orden', async () => {
+    const res = await service.updatePurchaseOrderStatus('po-1', { status: 'cancelada', comment: 'Ya no se necesita' }, ADMIN);
+    expect(res.status).toBe('cancelada');
+    expect(mockAudit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'status_change',
+        entity: 'PurchaseOrder',
+        oldValues: { status: 'solicitada' },
+        newValues: expect.objectContaining({ status: 'cancelada', comment: 'Ya no se necesita' }),
+      }),
+    );
+  });
+
+  it('al recibir la orden incrementa el stock de los items y audita movement_in', async () => {
+    const orderInTransit = {
+      ...mockOrder,
+      status: 'en_transito',
+      code: 'PO-RECV',
+      items: { productId: 'prod-1', quantity: 10 },
+    };
+    mockPrisma.purchaseOrder.findUnique.mockResolvedValueOnce(orderInTransit);
+    mockPrisma.stock.findUnique.mockResolvedValueOnce(mockStock); // availableQty 42
+
+    const res = await service.updatePurchaseOrderStatus(
+      'po-1',
+      { status: 'recibida', comment: 'Recibido en bodega' },
+      COMMERCIAL,
+    );
+    expect(res.status).toBe('recibida');
+    expect(mockPrisma.stock.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { productId: 'prod-1' },
+        update: { availableQty: 52 },
+      }),
+    );
+    expect(mockAudit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'movement_in',
+        entity: 'Stock',
+        newValues: expect.objectContaining({
+          productId: 'prod-1',
+          reason: 'orden de compra PO-RECV',
+          quantityAntes: 42,
+          quantityDespues: 52,
+        }),
+      }),
+    );
+    expect(mockAudit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'status_change',
+        entity: 'PurchaseOrder',
+        newValues: expect.objectContaining({ status: 'recibida', comment: 'Recibido en bodega' }),
+      }),
+    );
+  });
+
+  it('detalle de orden con historial desde auditoría (checklist 49)', async () => {
+    mockPrisma.purchaseOrder.findUnique.mockResolvedValueOnce(mockOrder);
+    (mockAudit as any).findByEntity = jest.fn().mockResolvedValue({
+      data: [
+        { id: 'log-1', action: 'create', newValues: { code: 'PO-ABCD' } },
+        { id: 'log-2', action: 'status_change', newValues: { status: 'aprobada' } },
+      ],
+    });
+    const res = await service.findOnePurchaseOrder('po-1');
+    expect(res.data.id).toBe('po-1');
+    expect(res.data.history).toHaveLength(2);
+    expect(res.data.history[1].action).toBe('status_change');
+  });
+
+  // ---------- Panel de compras ----------
+
+  it('panel de compras con shape exacto (checklist 50)', async () => {
+    const now = new Date();
+    mockPrisma.purchaseOrder.findMany.mockResolvedValueOnce([
+      { id: 'po-a', code: 'PO-A', status: 'solicitada', supplierId: 'supp-1', items: {}, createdAt: now, supplier: { id: 'supp-1', name: 'Prov', nit: '900' } },
+      { id: 'po-b', code: 'PO-B', status: 'recibida', supplierId: 'supp-1', items: { productId: 'prod-1', quantity: 4 }, createdAt: now, supplier: { id: 'supp-1', name: 'Prov', nit: '900' } },
+      { id: 'po-c', code: 'PO-C', status: 'cancelada', supplierId: 'supp-1', items: {}, createdAt: now, supplier: { id: 'supp-1', name: 'Prov', nit: '900' } },
+      { id: 'po-d', code: 'PO-D', status: 'cerrada', supplierId: 'supp-1', items: {}, createdAt: now, supplier: { id: 'supp-1', name: 'Prov', nit: '900' } },
+    ]);
+    mockPrisma.supplier.findMany.mockResolvedValueOnce([
+      { id: 'supp-1', name: 'Prov', nit: '900', category: 'X', status: 'active' },
+      { id: 'supp-2', name: 'Prov2', nit: '901', category: 'X', status: 'active' },
+    ]);
+    mockPrisma.supplierEvaluation.findMany.mockResolvedValueOnce([
+      { supplierId: 'supp-1', date: new Date('2020-01-01') },
+    ]);
+    mockPrisma.price.count.mockResolvedValueOnce(3);
+    mockPrisma.stock.findMany.mockResolvedValueOnce([]);
+    mockPrisma.auditLog.findMany.mockResolvedValueOnce([]);
+    mockPrisma.product.findMany.mockResolvedValueOnce([
+      { id: 'prod-1', sku: 'CAM-001', name: 'Cámara' },
+    ]);
+
+    const res = await service.getPurchaseOrderDashboard();
+    expect(res.data.openOrders).toBe(2);
+    expect(res.data.ordersByStatus).toEqual({ solicitada: 1, recibida: 1, cancelada: 1, cerrada: 1 });
+    expect(res.data.expiringPrices).toBe(3);
+    expect(res.data.lowStock).toBe(0);
+    expect(res.data.pendingSupplierEvaluations.count).toBe(2);
+    expect(res.data.recentOrders).toHaveLength(4);
+    expect(res.data.recentOrders[1].products[0]).toEqual({ id: 'prod-1', sku: 'CAM-001', name: 'Cámara' });
+  });
+
+  // ---------- Proveedor ↔ producto (asociación por POs) ----------
+
+  it('resuelve productos de un proveedor desde los items de sus POs (distinct)', async () => {
+    mockPrisma.purchaseOrder.findMany.mockResolvedValueOnce([
+      { ...mockOrder, items: [{ productId: 'prod-1', quantity: 5 }, { productId: 'prod-2', quantity: 3 }] },
+      { ...mockOrder, items: { productId: 'prod-1', quantity: 2 } },
+    ]);
+    mockPrisma.product.findMany.mockResolvedValueOnce([
+      { id: 'prod-1', sku: 'CAM-001', name: 'Cámara' },
+      { id: 'prod-2', sku: 'DVR-001', name: 'DVR' },
+    ]);
+    const res = await service.findSupplierProducts('supp-1');
+    expect(res.data).toHaveLength(2);
+    const p1 = res.data.find((p: any) => p.productId === 'prod-1');
+    expect(p1.totalOrdered).toBe(7);
+  });
+
+  it('resuelve proveedores de un producto desde sus POs', async () => {
+    mockPrisma.purchaseOrder.findMany.mockResolvedValueOnce([
+      { supplierId: 'supp-1', items: { productId: 'prod-1', quantity: 1 }, createdAt: new Date('2026-08-01'), supplier: { id: 'supp-1', name: 'A', nit: '1', category: 'X' } },
+      { supplierId: 'supp-2', items: { productId: 'prod-2', quantity: 1 }, createdAt: new Date('2026-08-02'), supplier: { id: 'supp-2', name: 'B', nit: '2', category: 'X' } },
+    ]);
+    const res = await service.findProductSuppliers('prod-1');
+    expect(res.data).toHaveLength(1);
+    expect(res.data[0].id).toBe('supp-1');
+  });
+
+  // ---------- Promedio, alertas y reporte ----------
+
+  it('incluye averageScore y lastEvaluationDate en el detalle del proveedor', async () => {
+    mockPrisma.supplier.findUnique.mockResolvedValueOnce({
+      ...mockSupplier,
+      _count: { evaluations: 2, purchaseOrders: 1 },
+    });
+    mockPrisma.supplierEvaluation.findMany.mockResolvedValueOnce([
+      { supplierId: 'supp-1', score: 80, date: new Date('2026-08-01') },
+      { supplierId: 'supp-1', score: 60, date: new Date('2026-07-01') },
+    ]);
+    const res = await service.findOneSupplier('supp-1');
+    expect(res.averageScore).toBe(70);
+    expect(res.lastEvaluationDate).toEqual(new Date('2026-08-01'));
+  });
+
+  it('alertas de proveedores con motivo bajo_score / sin_evaluacion_reciente', async () => {
+    mockPrisma.supplier.findMany.mockResolvedValueOnce([
+      { id: 'supp-1', name: 'A', nit: '1', category: 'X', status: 'active' },
+      { id: 'supp-2', name: 'B', nit: '2', category: 'X', status: 'active' },
+      { id: 'supp-3', name: 'C', nit: '3', category: 'X', status: 'active' },
+    ]);
+    mockPrisma.supplierEvaluation.findMany.mockResolvedValueOnce([
+      { supplierId: 'supp-1', score: 50, date: new Date('2026-08-01') },
+      { supplierId: 'supp-2', score: 90, date: new Date('2026-08-01') },
+      { supplierId: 'supp-3', score: 85, date: new Date('2020-01-01') },
+    ]);
+    const res = await service.findSupplierAlerts(60);
+    const byId = Object.fromEntries(res.data.map((a: any) => [a.id, a]));
+    expect(byId['supp-1'].reason).toBe('bajo_score');
+    expect(byId['supp-3'].reason).toBe('sin_evaluacion_reciente');
+    expect(byId['supp-2']).toBeUndefined();
+  });
+
+  it('reporte comparativo por categoría ordenado por averageScore desc (checklist 40)', async () => {
+    mockPrisma.supplier.findMany.mockResolvedValueOnce([
+      { id: 'supp-1', name: 'A', nit: '1', category: 'VIDEO', status: 'active' },
+      { id: 'supp-2', name: 'B', nit: '2', category: 'VIDEO', status: 'active' },
+    ]);
+    mockPrisma.supplierEvaluation.findMany.mockResolvedValueOnce([
+      { supplierId: 'supp-1', score: 80 },
+      { supplierId: 'supp-2', score: 50 },
+    ]);
+    mockPrisma.purchaseOrder.findMany.mockResolvedValueOnce([
+      { supplierId: 'supp-1', status: 'recibida', items: { productId: 'prod-1', quantity: 10 } },
+      { supplierId: 'supp-2', status: 'cancelada', items: { productId: 'prod-1', quantity: 99 } },
+    ]);
+    const res = await service.getSupplierReport('VIDEO');
+    expect(res.data.category).toBe('VIDEO');
+    expect(res.data.suppliers[0].name).toBe('A');
+    expect(res.data.suppliers[0].averageScore).toBe(80);
+    expect(res.data.suppliers[0].totalOrdered).toBe(10);
+    expect(res.data.suppliers[1].totalOrdered).toBe(0); // cancelada no suma
+    expect(res.data.ranking[0].rank).toBe(1);
   });
 });

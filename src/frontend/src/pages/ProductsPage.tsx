@@ -3,17 +3,37 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Product } from '../features/products/types/product.types'
 import { useProducts } from '../features/products/hooks/useProducts'
 import { useProductMutations } from '../features/products/hooks/useProductMutations'
+import { useAccessMatrix } from '../features/products/hooks/useAccessMatrix'
 import { ProductCard } from '../features/products/components/ProductCard'
 import { ProductTableRow } from '../features/products/components/ProductTableRow'
 import { ProductSpreadsheetTable } from '../features/products/components/ProductSpreadsheetTable'
 import ProductFormModal from '../features/products/components/ProductFormModal'
 import { ProductPagination } from '../components/ProductPagination'
 import { fetchListas, type Lista } from '../services/listas.service'
+import { publishProduct, unpublishProduct, schedulePublish } from '../services/product-detail.service'
+import api from '../services/api'
 import { hasPermission } from '../lib/rbac'
 import { Button } from '../components/ui'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const DEFAULT_PAGE_SIZE = 20
+
+type BulkActionKind =
+  | 'activate'
+  | 'deactivate'
+  | 'show'
+  | 'hide'
+  | 'archive'
+  | 'restore'
+  | 'publish'
+  | 'unpublish'
+
+function extractErrorMessage(error: unknown): string {
+  const res = (error as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
+  if (Array.isArray(res)) return res.join(', ')
+  if (typeof res === 'string') return res
+  return 'Error de red o del servidor'
+}
 
 export default function ProductsPage() {
   const queryClient = useQueryClient()
@@ -29,6 +49,10 @@ export default function ProductsPage() {
   const [createListaId, setCreateListaId] = useState('')
   const [showListaSelector, setShowListaSelector] = useState(false)
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(() => new Set())
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null)
+  const [bulkError, setBulkError] = useState<string | null>(null)
+  const [bulkPending, setBulkPending] = useState(false)
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
 
   const listasQuery = useQuery({
     queryKey: ['listas'],
@@ -53,6 +77,11 @@ export default function ProductsPage() {
   const { toggleVisibility, toggleActive, deleteProduct } = useProductMutations()
 
   const canBulkDelete = hasPermission('products:delete')
+  const canBulkManage = canBulkDelete || hasPermission('products:write')
+  const { restrictedIds: accessRestrictedIds, unavailable: accessUnavailable } = useAccessMatrix(
+    'PRODUCT',
+    !isLoading
+  )
   const currentProducts = products ?? []
   const allPageSelected = currentProducts.length > 0 && currentProducts.every((p) => selectedProductIds.has(p.id))
 
@@ -81,9 +110,129 @@ export default function ProductsPage() {
     const count = selectedProductIds.size
     if (count === 0) return
     if (!window.confirm(`¿Eliminar ${count} producto(s) seleccionado(s)? Esta acción no se puede deshacer.`)) return
-    void Promise.allSettled(Array.from(selectedProductIds).map((id) => deleteProduct.mutateAsync(id))).then(() => {
+    void Promise.allSettled(Array.from(selectedProductIds).map((id) => deleteProduct.mutateAsync(id))).then((results) => {
+      const ok = results.filter((r) => r.status === 'fulfilled').length
+      const failed = results.length - ok
+      setBulkNotice(failed === 0 ? `${ok} producto(s) eliminados correctamente.` : `${ok} OK, ${failed} fallaron.`)
       setSelectedProductIds(new Set())
+      queryClient.invalidateQueries({ queryKey: ['products'] })
     })
+  }
+
+  const runBulkAction = async (kind: BulkActionKind) => {
+    const ids = Array.from(selectedProductIds)
+    if (ids.length === 0) return
+
+    const appliesTo = (p: Product): boolean => {
+      switch (kind) {
+        case 'activate':
+          return !p.isActive
+        case 'deactivate':
+          return p.isActive
+        case 'show':
+          return !p.isVisible
+        case 'hide':
+          return p.isVisible
+        case 'archive':
+          return p.isActive || p.isVisible
+        case 'restore':
+          return !p.isActive || !p.isVisible
+        case 'publish':
+          return p.publishStatus !== 'publicado'
+        case 'unpublish':
+          return p.publishStatus === 'publicado' || p.publishStatus === 'listo'
+      }
+    }
+
+    const labels: Record<BulkActionKind, { action: string; verb: string }> = {
+      activate: { action: 'Activar', verb: 'activados' },
+      deactivate: { action: 'Desactivar', verb: 'desactivados' },
+      show: { action: 'Mostrar', verb: 'mostrados' },
+      hide: { action: 'Ocultar', verb: 'ocultados' },
+      archive: { action: 'Archivar', verb: 'archivados' },
+      restore: { action: 'Restaurar', verb: 'restaurados' },
+      publish: { action: 'Publicar', verb: 'publicados' },
+      unpublish: { action: 'Despublicar', verb: 'despublicados' },
+    }
+    const { action, verb } = labels[kind]
+
+    const applicable = currentProducts.filter((p) => ids.includes(p.id) && appliesTo(p))
+    if (applicable.length === 0) {
+      setBulkNotice(`Ningún producto seleccionado aplica para "${action}".`)
+      return
+    }
+    if (!window.confirm(`¿${action} ${applicable.length} producto(s)?`)) return
+
+    setBulkPending(true)
+    setBulkNotice(null)
+    setBulkError(null)
+
+    const results = await Promise.allSettled(
+      applicable.map((p) => {
+        switch (kind) {
+          case 'activate':
+            return api.put(`/products/${p.id}`, { isActive: true })
+          case 'deactivate':
+            return api.put(`/products/${p.id}`, { isActive: false })
+          case 'show':
+            return api.put(`/products/${p.id}`, { isVisible: true })
+          case 'hide':
+            return api.put(`/products/${p.id}`, { isVisible: false })
+          case 'archive':
+            return api.put(`/products/${p.id}`, { isActive: false, isVisible: false })
+          case 'restore':
+            return api.put(`/products/${p.id}`, { isActive: true, isVisible: true })
+          case 'publish':
+            return publishProduct(p.id)
+          case 'unpublish':
+            return unpublishProduct(p.id, 'Despublicación masiva')
+        }
+      })
+    )
+
+    const ok = results.filter((r) => r.status === 'fulfilled').length
+    const failed = results.length - ok
+    setBulkPending(false)
+    setBulkNotice(failed === 0 ? `${ok} producto(s) ${verb} correctamente.` : `${ok} OK, ${failed} fallaron.`)
+    if (failed > 0) {
+      const messages = results
+        .filter((r) => r.status === 'rejected')
+        .slice(0, 4)
+        .map((r) => extractErrorMessage((r as PromiseRejectedResult).reason))
+      setBulkError(messages.join(' • '))
+    }
+    setSelectedProductIds(new Set())
+    queryClient.invalidateQueries({ queryKey: ['products'] })
+  }
+
+  const runScheduledPublish = async (publishAt: string, unpublishAt?: string) => {
+    const ids = Array.from(selectedProductIds)
+    if (ids.length === 0) return
+    if (!publishAt) return
+    setBulkPending(true)
+    setBulkNotice(null)
+    setBulkError(null)
+    const results = await Promise.allSettled(
+      ids.map((id) => schedulePublish(id, { publishAt, unpublishAt }))
+    )
+    const ok = results.filter((r) => r.status === 'fulfilled').length
+    const failed = results.length - ok
+    setBulkPending(false)
+    setBulkNotice(
+      failed === 0
+        ? `${ok} producto(s) programados para publicar.`
+        : `${ok} OK, ${failed} fallaron al programar.`
+    )
+    if (failed > 0) {
+      const messages = results
+        .filter((r) => r.status === 'rejected')
+        .slice(0, 4)
+        .map((r) => extractErrorMessage((r as PromiseRejectedResult).reason))
+      setBulkError(messages.join(' • '))
+    }
+    setSelectedProductIds(new Set())
+    setShowScheduleModal(false)
+    queryClient.invalidateQueries({ queryKey: ['products'] })
   }
 
   useEffect(() => {
@@ -247,20 +396,51 @@ export default function ProductsPage() {
         />
       </div>
 
-      {canBulkDelete && selectedProductIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-white rounded-xl border border-neutral-200">
-          <span className="text-sm font-medium text-neutral-600">{selectedProductIds.size} seleccionado(s)</span>
-          <button
-            onClick={() => setSelectedProductIds(new Set())}
-            className="text-sm text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
-          >
-            Limpiar selección
-          </button>
-          <div className="ml-auto">
-            <Button variant="danger" onClick={bulkDeleteProducts}>
-              Eliminar seleccionados
-            </Button>
+      {canBulkManage && selectedProductIds.size > 0 && (
+        <div className="px-4 py-3 bg-white rounded-xl border border-neutral-200 space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium text-neutral-600">{selectedProductIds.size} seleccionado(s)</span>
+            <button
+              onClick={() => {
+                setSelectedProductIds(new Set())
+                setBulkNotice(null)
+                setBulkError(null)
+              }}
+              className="text-sm text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+            >
+              Limpiar selección
+            </button>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {canBulkManage && (
+                <>
+                  <BulkButton label="Activar" disabled={bulkPending} onClick={() => runBulkAction('activate')} />
+                  <BulkButton label="Desactivar" disabled={bulkPending} onClick={() => runBulkAction('deactivate')} />
+                  <BulkButton label="Mostrar" disabled={bulkPending} onClick={() => runBulkAction('show')} />
+                  <BulkButton label="Ocultar" disabled={bulkPending} onClick={() => runBulkAction('hide')} />
+                  <BulkButton label="Archivar" disabled={bulkPending} onClick={() => runBulkAction('archive')} />
+                  <BulkButton label="Restaurar" disabled={bulkPending} onClick={() => runBulkAction('restore')} />
+                  <BulkButton label="Publicar" disabled={bulkPending} onClick={() => runBulkAction('publish')} />
+                  <BulkButton label="Despublicar" disabled={bulkPending} onClick={() => runBulkAction('unpublish')} />
+                  <BulkButton label="Programar" disabled={bulkPending} onClick={() => setShowScheduleModal(true)} />
+                </>
+              )}
+              {canBulkDelete && (
+                <Button variant="danger" onClick={bulkDeleteProducts} disabled={bulkPending}>
+                  Eliminar
+                </Button>
+              )}
+            </div>
           </div>
+          {bulkNotice && (
+            <div
+              className={`text-sm px-3 py-2 rounded-lg ${
+                bulkError ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
+              }`}
+            >
+              {bulkNotice}
+              {bulkError && <span className="block mt-1 text-xs opacity-80">{bulkError}</span>}
+            </div>
+          )}
         </div>
       )}
 
@@ -303,7 +483,7 @@ export default function ProductsPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {canBulkDelete && (
+                {canBulkManage && (
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     <input
                       type="checkbox"
@@ -325,11 +505,11 @@ export default function ProductsPage() {
             <tbody className="divide-y divide-gray-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={canBulkDelete ? 7 : 6} className="px-6 py-12 text-center text-gray-400">Cargando...</td>
+                  <td colSpan={canBulkManage ? 7 : 6} className="px-6 py-12 text-center text-gray-400">Cargando...</td>
                 </tr>
               ) : products?.length === 0 ? (
                 <tr>
-                  <td colSpan={canBulkDelete ? 7 : 6} className="px-6 py-12 text-center text-gray-400">No hay productos</td>
+                  <td colSpan={canBulkManage ? 7 : 6} className="px-6 py-12 text-center text-gray-400">No hay productos</td>
                 </tr>
               ) : (
                 products?.map((product) => (
@@ -341,7 +521,9 @@ export default function ProductsPage() {
                     onToggleVisibility={toggleVisibility.mutate}
                     onDelete={deleteProduct.mutate}
                     selected={selectedProductIds.has(product.id)}
-                    onToggleSelect={canBulkDelete ? toggleSelectProduct : undefined}
+                    onToggleSelect={canBulkManage ? toggleSelectProduct : undefined}
+                    accessRestrictedIds={accessRestrictedIds}
+                    accessUnavailable={accessUnavailable}
                   />
                 ))
               )}
@@ -356,9 +538,11 @@ export default function ProductsPage() {
           onToggleActive={toggleActive.mutate}
           onToggleVisibility={toggleVisibility.mutate}
           onDelete={deleteProduct.mutate}
-          selectedProductIds={canBulkDelete ? selectedProductIds : undefined}
-          onToggleSelectProduct={canBulkDelete ? toggleSelectProduct : undefined}
-          onToggleSelectAllProducts={canBulkDelete ? toggleSelectAllPage : undefined}
+          selectedProductIds={canBulkManage ? selectedProductIds : undefined}
+          onToggleSelectProduct={canBulkManage ? toggleSelectProduct : undefined}
+          onToggleSelectAllProducts={canBulkManage ? toggleSelectAllPage : undefined}
+          accessRestrictedIds={accessRestrictedIds}
+          accessUnavailable={accessUnavailable}
         />
       )}
 
@@ -408,6 +592,105 @@ export default function ProductsPage() {
           onClose={() => setShowListaSelector(false)}
         />
       )}
+
+      {showScheduleModal && (
+        <SchedulePublishModal
+          count={selectedProductIds.size}
+          onConfirm={runScheduledPublish}
+          onClose={() => setShowScheduleModal(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function BulkButton({
+  label,
+  onClick,
+  disabled,
+}: {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="px-3 py-2 text-xs font-medium rounded-lg border border-neutral-300 text-neutral-700 bg-white hover:bg-neutral-50 hover:border-security-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+    >
+      {label}
+    </button>
+  )
+}
+
+function SchedulePublishModal({
+  count,
+  onConfirm,
+  onClose,
+}: {
+  count: number
+  onConfirm: (publishAt: string, unpublishAt?: string) => void
+  onClose: () => void
+}) {
+  const [publishAt, setPublishAt] = useState('')
+  const [unpublishAt, setUnpublishAt] = useState('')
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl w-full max-w-md shadow-2xl">
+        <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between">
+          <h2 className="text-lg font-condensed font-semibold text-neutral-800">Programar publicación</h2>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-colors"
+            aria-label="Cerrar"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-neutral-500">
+            Programar la publicación de <strong>{count}</strong> producto(s) seleccionado(s). Hasta que llegue la
+            fecha, quedarán en estado LISTO.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Fecha y hora de publicación *</label>
+            <input
+              type="datetime-local"
+              value={publishAt}
+              onChange={(e) => setPublishAt(e.target.value)}
+              className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Despublicación automática (opcional)</label>
+            <input
+              type="datetime-local"
+              value={unpublishAt}
+              onChange={(e) => setUnpublishAt(e.target.value)}
+              className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm"
+            />
+            {unpublishAt && publishAt && new Date(unpublishAt) <= new Date(publishAt) && (
+              <p className="mt-1 text-xs text-red-600">La despublicación debe ser posterior a la publicación.</p>
+            )}
+          </div>
+          <div className="flex gap-3 justify-end pt-2">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={!publishAt || (!!unpublishAt && !!publishAt && new Date(unpublishAt) <= new Date(publishAt))}
+              onClick={() => onConfirm(publishAt, unpublishAt || undefined)}
+            >
+              Programar
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

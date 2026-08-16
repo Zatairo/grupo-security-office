@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useImportStore } from '../store/import.store';
-import { exportImportSummary } from '../utils/excel-generator';
+import { exportImportSummary, exportImportLog } from '../utils/excel-generator';
+import { fetchPriceLists } from '../../../../services/prices.service';
 
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -18,6 +20,14 @@ interface ImportStepResultProps {
 export default function ImportStepResult({ onNewImport, onClose }: ImportStepResultProps) {
   const executionResult = useImportStore((s) => s.executionResult);
   const fileName = useImportStore((s) => s.fileName);
+  const listaId = useImportStore((s) => s.listaId);
+
+  const { data: priceLists } = useQuery({
+    queryKey: ['priceLists'],
+    queryFn: fetchPriceLists,
+  });
+
+  const listaLabel = priceLists?.find((l) => l.id === listaId)?.name;
 
   const handleDownloadReport = useCallback(async () => {
     if (!executionResult) return;
@@ -31,6 +41,22 @@ export default function ImportStepResult({ onNewImport, onClose }: ImportStepRes
       fileName,
     );
   }, [executionResult, fileName]);
+
+  const handleDownloadLog = useCallback(() => {
+    if (!executionResult) return;
+    exportImportLog({
+      fileName,
+      listaLabel,
+      totals: {
+        total: executionResult.summary.total,
+        created: executionResult.summary.created,
+        updated: executionResult.summary.updated,
+        skipped: executionResult.summary.skipped,
+        errors: executionResult.summary.errors,
+      },
+      errors: executionResult.executionErrors,
+    });
+  }, [executionResult, fileName, listaLabel]);
 
   if (!executionResult) {
     return (
@@ -146,6 +172,16 @@ export default function ImportStepResult({ onNewImport, onClose }: ImportStepRes
       )}
 
       <div className="flex items-center justify-end gap-3">
+        <button
+          type="button"
+          onClick={handleDownloadLog}
+          className="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-md hover:bg-neutral-50 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Descargar log
+        </button>
         {hasErrors && (
           <button
             type="button"

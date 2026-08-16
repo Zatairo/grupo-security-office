@@ -88,6 +88,9 @@ export default function ProductFormModal({
     extraAttributes?: string
   }>({})
   const [prices, setPrices] = useState<Record<string, PriceRow>>(() => seedPrices(product))
+  const [draftChecked, setDraftChecked] = useState(false)
+  const [priceGateError, setPriceGateError] = useState('')
+  const [categoryError, setCategoryError] = useState('')
 
   const { priceLists, isLoading: isLoadingLists } = usePriceLists()
 
@@ -172,6 +175,23 @@ export default function ProductFormModal({
       setTab('specs')
       return
     }
+    if (!product && !form.categoryId) {
+      setCategoryError('La categoría es obligatoria para crear un producto.')
+      setTab('basic')
+      return
+    }
+    setCategoryError('')
+    if (!product) {
+      const hasPrice = (buildPricesPayload() ?? []).some((p) => p.value > 0)
+      if (!hasPrice && !draftChecked) {
+        setPriceGateError(
+          'Debes asignar al menos un precio mayor a 0 o marcar "Guardar como borrador / pendiente de precio".'
+        )
+        setTab('prices')
+        return
+      }
+    }
+    setPriceGateError('')
     const payload: ProductPayload = {
       sku: form.sku,
       name: form.name,
@@ -281,8 +301,11 @@ export default function ProductFormModal({
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Categoría</label>
                     <select
                       value={form.categoryId}
-                      onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                      className={inputClass}
+                      onChange={(e) => {
+                        setForm({ ...form, categoryId: e.target.value })
+                        setCategoryError('')
+                      }}
+                      className={`${inputClass} ${categoryError ? 'border-red-400' : ''}`}
                       required
                     >
                       <option value="">Seleccionar...</option>
@@ -292,6 +315,16 @@ export default function ProductFormModal({
                         </option>
                       ))}
                     </select>
+                    {categoryError && (
+                      <p className="text-xs text-red-600 mt-1" role="alert">
+                        {categoryError}
+                      </p>
+                    )}
+                    {!product && !categoryError && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Obligatoria al crear un producto.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Marca</label>
@@ -485,6 +518,27 @@ export default function ProductFormModal({
                       })}
                     </div>
                   </div>
+                )}
+                {!product && (
+                  <label className="flex items-center gap-2 mt-4 p-3 border border-dashed border-neutral-300 rounded-lg cursor-pointer hover:bg-neutral-50 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={draftChecked}
+                      onChange={(e) => {
+                        setDraftChecked(e.target.checked)
+                        setPriceGateError('')
+                      }}
+                      className="w-4 h-4 text-security-600 border-gray-300 rounded focus:ring-brand-primary/30 focus:border-brand-primary"
+                    />
+                    <span className="text-sm text-gray-700">
+                      Guardar como borrador / pendiente de precio
+                    </span>
+                  </label>
+                )}
+                {priceGateError && (
+                  <p className="text-xs text-red-600 mt-2" role="alert">
+                    {priceGateError}
+                  </p>
                 )}
                 <p className="text-xs text-gray-400 mt-3">
                   Los precios se guardan junto con el producto.

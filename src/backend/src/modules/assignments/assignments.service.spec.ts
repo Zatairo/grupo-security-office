@@ -7,7 +7,7 @@ jest.mock('../../prisma/prisma.service', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { AssignmentsService } from './assignments.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService } from '../../common/acl/acl.service';
@@ -20,10 +20,10 @@ const mockAcl = {
   levelsAtLeast: jest.fn().mockReturnValue([]),
   getAllowedListaIds: jest.fn().mockResolvedValue([]),
   getUserLevel: jest.fn().mockResolvedValue(null),
-  assertListaAccess: jest.fn().mockResolvedValue(undefined),
-  assertProductAccess: jest.fn().mockResolvedValue(undefined),
-  assertPriceAccess: jest.fn().mockResolvedValue(undefined),
-  can: jest.fn().mockResolvedValue(false),
+  canAdministerAccessOnLista: jest.fn().mockResolvedValue(true),
+  canManageAccessOnLista: jest.fn().mockResolvedValue(true),
+  canManageAccessOnProduct: jest.fn().mockResolvedValue(true),
+  actionsForLevel: jest.fn().mockReturnValue(['ver']),
 };
 
 const mockAssignment = {
@@ -170,7 +170,7 @@ describe('AssignmentsService', () => {
       expect(result.isActive).toBe(true);
       expect(mockPrisma.assignment.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ isActive: true, level: 'edit' }),
+          data: expect.objectContaining({ isActive: true, level: 'edit_products' }),
         }),
       );
       expect(mockPrisma.assignment.create).not.toHaveBeenCalled();
@@ -236,6 +236,172 @@ describe('AssignmentsService', () => {
       mockPrisma.assignment.findUnique.mockResolvedValue(null);
 
       await expect(service.remove('no-existe')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('TANDA 1B — ACL por producto, roles, anti-escalada, matrix/preview', () => {
+    const SUPER = { userId: 'admin-1', roles: ['Super Admin'] };
+    const MANAGER = { userId: 'assigner-1', roles: ['Admin Comercial'] };
+    const TARGET = { userId: 'target-1', roles: ['Operador'] };
+
+    it('crear asignación de PRODUCT con Super Admin', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(true);
+      mockPrisma.user.findUnique.mockResolvedValue({ id: TARGET.userId });
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1' });
+      mockPrisma.assignment.findUnique.mockResolvedValue(null);
+      mockPrisma.assignment.create.mockResolvedValue({ ...mockAssignment, resourceType: 'PRODUCT', resourceId: 'prod-1' });
+
+      const result = await service.create(
+        { userId: TARGET.userId, resourceType: 'PRODUCT', resourceId: 'prod-1', level: 'edit_prices' },
+        SUPER,
+      );
+
+      expect(result.resourceType).toBe('PRODUCT');
+      expect(mockPrisma.assignment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ resourceType: 'PRODUCT', level: 'edit_prices' }),
+        }),
+      );
+    });
+
+    it('grant por rol (ROLE:{nombre}) con Super Admin', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(true);
+      mockPrisma.user.findUnique.mockResolvedValue({ id: SUPER.userId });
+      mockPrisma.role.findUnique.mockResolvedValue({ id: 'role-1' });
+      mockPrisma.assignment.findUnique.mockResolvedValue(null);
+      mockPrisma.assignment.create.mockResolvedValue({
+        ...mockAssignment,
+        userId: SUPER.userId,
+        resourceId: 'ROLE:Admin Comercial',
+      });
+
+      const result = await service.create(
+        { userId: SUPER.userId, resourceType: 'LISTA', resourceId: 'ROLE:Admin Comercial', level: 'view' },
+        SUPER,
+      );
+
+      expect(mockPrisma.role.findUnique).toHaveBeenCalledWith({ where: { name: 'Admin Comercial' }, select: { id: true } });
+      expect(mockPrisma.assignment.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ resourceId: 'ROLE:Admin Comercial' }) }),
+      );
+      expect(result.resourceId).toBe('ROLE:Admin Comercial');
+    });
+
+    it('grant por rol rechazado para no Super Admin (403)', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(false);
+      mockPrisma.user.findUnique.mockResolvedValue({ id: TARGET.userId });
+      mockPrisma.role.findUnique.mockResolvedValue({ id: 'role-1' });
+
+      await expect(
+        service.create(
+          { userId: TARGET.userId, resourceType: 'LISTA', resourceId: 'ROLE:Admin Comercial', level: 'view' },
+          MANAGER,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('anti-escalada: manage NO puede otorgar manage_access (403)', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(false);
+      mockPrisma.user.findUnique.mockResolvedValue({ id: TARGET.userId });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1' });
+      mockAcl.canAdministerAccessOnLista.mockResolvedValue(true);
+      mockAcl.getUserLevel.mockResolvedValue('manage');
+
+      await expect(
+        service.create(
+          { userId: TARGET.userId, resourceType: 'LISTA', resourceId: 'lista-1', level: 'manage_access' },
+          MANAGER,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('anti-escalada: manage sí puede otorgar view (sin escalación)', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(false);
+      mockPrisma.user.findUnique.mockResolvedValue({ id: TARGET.userId });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1' });
+      mockAcl.canAdministerAccessOnLista.mockResolvedValue(true);
+      mockAcl.getUserLevel.mockResolvedValue('manage');
+      mockPrisma.assignment.findUnique.mockResolvedValue(null);
+      mockPrisma.assignment.create.mockResolvedValue({ ...mockAssignment, userId: TARGET.userId });
+
+      const result = await service.create(
+        { userId: TARGET.userId, resourceType: 'LISTA', resourceId: 'lista-1', level: 'view' },
+        MANAGER,
+      );
+
+      expect(result).toBeDefined();
+      expect(mockPrisma.assignment.create).toHaveBeenCalled();
+    });
+
+    it('anti-escalada: update no puede otorgar manage con solo edit (403)', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(false);
+      mockPrisma.assignment.findUnique.mockResolvedValue({ ...mockAssignment, level: 'view', resourceId: 'lista-1' });
+      mockAcl.canAdministerAccessOnLista.mockResolvedValue(true);
+      mockAcl.getUserLevel.mockResolvedValue('edit');
+
+      await expect(service.update('assign-1', { level: 'manage' }, MANAGER)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('matrix devuelve shape LISTA con asignaciones y acciones del viewer', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(true);
+      mockAcl.actionsForLevel.mockReturnValue(['ver']);
+      mockPrisma.lista.findMany.mockResolvedValue([{ id: 'lista-1', name: 'General' }]);
+      mockPrisma.assignment.findMany.mockResolvedValue([
+        { ...mockAssignment, resourceId: 'lista-1', level: 'view', user: { id: TARGET.userId, name: 'Pepito' } },
+      ]);
+      mockPrisma.auditLog.findMany.mockResolvedValue([{ entityId: 'assign-1', userId: SUPER.userId }]);
+
+      const res = await service.matrix('LISTA', SUPER);
+
+      expect(res.data).toHaveLength(1);
+      const row = res.data[0];
+      expect(row.resourceId).toBe('lista-1');
+      expect(row.asignaciones[0].assigneeType).toBe('usuario');
+      expect(row.asignaciones[0].asignadoPor).toBe(SUPER.userId);
+      expect(row.viewer.acciones).toEqual(['ver']);
+    });
+
+    it('matrix rechaza entity no soportada (400)', async () => {
+      await expect(service.matrix('TABLA', SUPER)).rejects.toThrow(BadRequestException);
+    });
+
+    it('preview LISTA devuelve nivel efectivo y productos restringidos', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(true);
+      mockAcl.getUserLevel.mockResolvedValue('view');
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', name: 'General' });
+      mockPrisma.userRole.findMany.mockResolvedValue([{ role: { name: 'Operador' } }]);
+      mockPrisma.product.findMany.mockResolvedValue([{ id: 'prod-1', name: 'Camara' }]);
+      mockPrisma.assignment.findMany.mockResolvedValue([
+        { resourceId: 'prod-1', level: 'view', isActive: false },
+      ]);
+
+      const res = await service.preview(
+        { userId: TARGET.userId, entity: 'LISTA', entityId: 'lista-1' },
+        SUPER,
+      );
+
+      expect(res.data.entity).toBe('LISTA');
+      expect(res.data.nivelListaEfectivo).toBe('view');
+      expect(res.data.preciosVisibles).toBe(false);
+      expect(res.data.productosRestringidos).toHaveLength(1);
+      expect(res.data.productosRestringidos[0].productName).toBe('Camara');
+    });
+
+    it('preview exige manage_access (403 si no lo tiene)', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(false);
+      mockAcl.canManageAccessOnLista.mockResolvedValue(false);
+
+      await expect(
+        service.preview({ userId: TARGET.userId, entity: 'LISTA', entityId: 'lista-1' }, MANAGER),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('preview requiere entityId (400)', async () => {
+      await expect(service.preview({ userId: TARGET.userId, entity: 'LISTA' }, SUPER)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

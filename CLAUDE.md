@@ -121,3 +121,53 @@ Mejorar el dashboard principal de Grupo Security Office para mostrar productos t
 3. Monitorear métricas de rendimiento del endpoint
 4. Considerar filtros avanzados (por categoría, rango de precios, etc.)
 5. Implementar pruebas de accesibilidad automatizadas
+
+### Tanda 1C — Módulo suppliers: stock avanzado, PO flujo completo, panel compras, proveedor↔producto, reportes (2026-08-15)
+
+#### Propósito
+Extender el módulo `suppliers` de la OLA 7A para cumplir los ítems 37-51 del checklist (trazabilidad de stock, flujo completo de órdenes de compra, panel de compras, asociación proveedor↔producto, promedio de evaluaciones y reportes), **sin tocar schema.prisma ni ejecutar migraciones** (agente A añade migración de publicación en paralelo).
+
+#### Decisiones sin migración (importante)
+- **Movimientos de stock** (checklist 44): el modelo Stock no tiene campos JSONB. Los movimientos (`movement_in`/`movement_out`/`adjust`) se registran en **auditoría** (entidad `Stock`) con `newValues: { adjustmentType, reason, quantityAntes, quantityDespues, productId }` + `userId`/`createdAt` del AuditLog (trazabilidad completa). `PATCH /api/stock/:id` y `POST /api/products/:productId/stock` aceptan `adjustmentType?: 'in'|'out'|'adjust'` y `reason?`; `out` con stock negativo → 400.
+- **minQuantity** (checklist 43): Stock no tiene columna `minQuantity` ni JSONB. Se acepta en create/update y se persiste en **auditoría** (acción `settings`, `newValues.minQuantity`). `GET /api/stock/alerts` recupera el último minQuantity por stock desde audit; sin configurar, alarma solo si `availableQty <= 0`.
+- **Asociación proveedor↔producto** (checklist 37): sin migración, se materializa vía `PurchaseOrder.items` (JSONB). `GET /api/suppliers/:id/products` resuelve productos distinct desde los items de sus POs; `GET /api/products/:productId/suppliers` resuelve proveedores desde las POs que referencian el producto. No se añadió columna a Product.
+- **stockStatus** (checklist 42): campo calculado en `products.service.ts` (`findAll`/`findOne`), NO se ocultan productos automáticamente (regla de negocio pendiente de decisión).
+
+#### Matriz de transiciones de PO y quién mueve cada estado
+| De → A | Rol |
+|---|---|
+| solicitada → aprobada \| cancelada | escritura (Super Admin, Admin Comercial) |
+| aprobada → en_transito \| cancelada | escritura |
+| en_transito → recibida \| cancelada | escritura |
+| recibida → cerrada | Super Admin |
+| cerrada / cancelada (terminales) | — |
+- Transición inválida → 400 "No se puede pasar de X a Y". Rol no autorizado → 403.
+- Al pasar a **recibida**: suma `items[].quantity` al `availableQty` (`stock.upsert` por productId) y registra audit `movement_in` con `reason: 'orden de compra PO-XXXX'`.
+- Historial por orden (checklist 49): cada cambio registra audit `status_change` con `oldValues{status}` y `newValues{status, movedByUserId, comment?}` (body acepta `comment?`). `GET /api/purchase-orders/:id` → `{ data: { ...po, history: [...] } }` (from audit).
+
+#### Panel de compras (checklist 50)
+`GET /api/purchase-orders/dashboard` (5 roles) → `{ data: { openOrders, ordersByStatus, pendingSupplierEvaluations, expiringPrices, lowStock, recentOrders } }`:
+- `openOrders`: PO no cerradas/canceladas (count).
+- `ordersByStatus`: agrupación por status.
+- `pendingSupplierEvaluations`: `{ count, suppliers }` — proveedores sin evaluación o con última > 90 días.
+- `expiringPrices`: count de precios con `validUntil` en próximos 30 días.
+- `lowStock`: count de stocks con `availableQty <= minQuantity` (o 0).
+- `recentOrders`: últimas 5 PO con supplier y products resueltos desde items.
+
+#### Endpoints nuevos (todos en `suppliers.controller.ts`, módulo suppliers)
+- `GET /api/stock/alerts?thresholdDays=` → `{ data: [...] }` (reasons `out_of_stock`/`below_min`/`no_recent_movement`).
+- `GET /api/purchase-orders/dashboard` → panel de compras.
+- `GET /api/purchase-orders/:id` → detalle con historial.
+- `GET /api/suppliers/:id/products` → productos asociados vía POs.
+- `GET /api/products/:productId/suppliers` → proveedores asociados vía POs.
+- `GET /api/suppliers/alerts?minScore=60` → `{ data: [...] }` con `reason: 'bajo_score' | 'sin_evaluacion_reciente'`.
+- `GET /api/suppliers/report?category=` → `{ data: { category, suppliers: [...], ranking } }` ordenado por averageScore desc.
+- `GET /api/suppliers/:id` y listado ahora incluyen `averageScore` y (detalle) `lastEvaluationDate` (calculados).
+
+#### Auditoría (checklist 51/49/73)
+Supplier (create/update/delete), SupplierEvaluation (create), Stock (create/update/delete/movements/settings) y PurchaseOrder (create/status_change/delete) registran audit. El PATCH de status usa acción `status_change` (antes `update`).
+
+#### Verificación
+- `npm test` (src/backend): **393/393** (baseline 352 + 41 nuevos: movimientos, transiciones inválidas 400, 403 por rol, recibida actualiza stock, historial, dashboard, alerts, report, averageScore, stockStatus).
+- `npm run build`: **0 errores**.
+- No se reinició el backend ni se ejecutaron migraciones. No se tocaron `schema.prisma` ni `src/frontend/**`.

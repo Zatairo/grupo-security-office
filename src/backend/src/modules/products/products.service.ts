@@ -3,9 +3,12 @@ import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AclService, AccessContext } from '../../common/acl/acl.service';
+import { AclService, AccessContext, LEVEL_RANK } from '../../common/acl/acl.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { PublishProductDto } from './dto/publish-product.dto';
+import { UnpublishProductDto } from './dto/unpublish-product.dto';
 import { PriceInputDto } from './dto/price-input.dto';
 import { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
@@ -21,7 +24,11 @@ const MAX_IMAGE_SIZE = 8 * 1024 * 1024; // 8 MB
 
 @Injectable()
 export class ProductsService {
-  constructor(private prisma: PrismaService, private acl: AclService) {}
+  constructor(
+    private prisma: PrismaService,
+    private acl: AclService,
+    private audit: AuditService,
+  ) {}
 
   private trendingCache: { data: any; timestamp: number } | null = null;
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutos de expiración de caché
@@ -42,6 +49,26 @@ export class ProductsService {
       data,
       timestamp: Date.now(),
     };
+  }
+
+  /**
+   * Estado calculado de stock para un conjunto de productos (checklist 42):
+   * 'in_stock' (availableQty > 0), 'out_of_stock' (availableQty 0), 'no_stock_data'
+   * (sin registro de stock). No oculta productos automáticamente: la regla de
+   * negocio para ocultar por falta de stock queda pendiente de decisión.
+   */
+  private async getStockStatusMap(
+    productIds: string[],
+  ): Promise<Map<string, 'in_stock' | 'out_of_stock' | 'no_stock_data'>> {
+    if (!productIds.length) return new Map();
+    const stocks = (await this.prisma.stock.findMany({
+      where: { productId: { in: productIds } },
+    })) ?? [];
+    const map = new Map<string, 'in_stock' | 'out_of_stock' | 'no_stock_data'>();
+    for (const s of stocks) {
+      map.set(s.productId, s.availableQty > 0 ? 'in_stock' : 'out_of_stock');
+    }
+    return map;
   }
 
   /**
@@ -115,6 +142,10 @@ export class ProductsService {
   ) {
     const { skip = 0, take = 50, search, categoryId, brandId, isVisible, isActive } = params || {};
 
+    // Lazy unpublish: si algún producto publicado venció su unpublishAt, se despublica
+    // en runtime (evaluación perezosa, sin cron). Ver autoUnpublishDueProducts().
+    await this.autoUnpublishDueProducts();
+
     // ACL por Lista (deny-by-default) cuando se provee contexto de usuario.
     // ctx opcional: los llamadores legacy/tests sin ctx conservan el comportamiento abierto.
     let allowedListaIds: string[] | null = null;
@@ -155,9 +186,55 @@ export class ProductsService {
       this.prisma.product.count({ where }),
     ]);
 
+    // Filtrado por restricción explícita de assignment PRODUCT (checklist 17/31).
+    // Si el usuario tiene assignment PRODUCT con isActive=false sobre algún producto,
+    // ese producto debe ser denegado (403) en findOne y excluido en findAll.
+    // Si el usuario tiene assignment PRODUCT activo con nivel suficiente, se permite.
+    let productAssignmentsCache: { resourceId: string; level: string; isActive: boolean }[] = [];
+    if (ctx) {
+      productAssignmentsCache = await this.prisma.assignment.findMany({
+        where: { userId: ctx.userId, resourceType: 'PRODUCT' },
+        select: { resourceId: true, level: true, isActive: true },
+      });
+    }
+
+    const deniedProductIds = new Set<string>();
+    const activeAssignmentsByProduct = new Map<string, string[]>();
+    if (productAssignmentsCache?.length > 0) {
+      for (const a of productAssignmentsCache) {
+        if (!a.isActive) {
+          deniedProductIds.add(a.resourceId);
+        } else {
+          const levels = activeAssignmentsByProduct.get(a.resourceId) || [];
+          levels.push(a.level);
+          activeAssignmentsByProduct.set(a.resourceId, levels);
+        }
+      }
+    }
+
+    const filteredProducts = products.filter((p) => {
+      // Si el producto está en la lista de denegación por isActive=false, excluirlo
+      if (deniedProductIds.has(p.id)) return false;
+      // Si el usuario tiene assignment PRODUCT activo, verificar nivel
+      if (activeAssignmentsByProduct.has(p.id)) {
+        const productLevels = activeAssignmentsByProduct.get(p.id)!;
+        const hasSufficientLevel = productLevels.some((lvl) => {
+          const rank = (LEVEL_RANK[lvl] ?? 0);
+          return rank >= (LEVEL_RANK['view'] ?? 0);
+        });
+        if (!hasSufficientLevel) return false;
+      }
+      return true;
+    });
+
+    const stockStatusMap = await this.getStockStatusMap(filteredProducts.map((p) => p.id));
+
     return {
-      data: products,
-      meta: { total, skip, take },
+      data: filteredProducts.map((p) => ({
+        ...p,
+        stockStatus: stockStatusMap.get(p.id) ?? 'no_stock_data',
+      })),
+      meta: { total: filteredProducts.length, skip, take },
     };
   }
 
@@ -176,13 +253,29 @@ export class ProductsService {
 
     if (!product) throw new NotFoundException('Producto no encontrado');
 
-    // Deny-by-default: si hay contexto, exige acceso a la Lista del producto.
-    if (ctx) {
-      if (!product.listaId) throw new NotFoundException('Producto no encontrado');
-      await this.acl.assertListaAccess(product.listaId, ctx, 'view');
+    // Lazy unpublish (sin cron): si el producto publicado venció su unpublishAt,
+    // se despublica en runtime antes de devolverlo.
+    if (product.publishStatus === 'publicado' && product.unpublishAt && product.unpublishAt <= new Date()) {
+      await this.autoUnpublishOne(product.id);
+      product.publishStatus = 'borrador';
+      product.unpublishReason = 'auto';
+      product.publishAt = null;
+      product.publishedAt = null;
     }
 
-    return product;
+    // Deny-by-default con restricción explícita por producto (checklist 17/31):
+    // assertProductAccess evalúa assignments PRODUCT (deny prevalece) y cae a la
+    // Lista dueña si no hay excepción por producto.
+    if (ctx) {
+      if (!product.listaId) throw new NotFoundException('Producto no encontrado');
+      await this.acl.assertProductAccess(id, ctx, 'view');
+    }
+
+    const stock = await this.prisma.stock.findUnique({ where: { productId: id } });
+    return {
+      ...product,
+      stockStatus: stock ? (stock.availableQty > 0 ? 'in_stock' : 'out_of_stock') : 'no_stock_data',
+    };
   }
 
   async create(dto: CreateProductDto, ctx?: AccessContext) {
@@ -204,8 +297,8 @@ export class ProductsService {
     // el producto nuevo hereda la visibilidad por defecto de su Lista.
     const lista = await this.resolveLista(dto.listaId);
 
-    // ACL: crear producto exige `edit` sobre la Lista destino.
-    if (ctx) await this.acl.assertListaAccess(lista.id, ctx, 'edit');
+    // ACL: crear producto exige `edit_products` sobre la Lista destino (checklist 29/30).
+    if (ctx) await this.acl.assertListaAccess(lista.id, ctx, 'edit_products');
 
     const product = await this.prisma.product.create({
       data: {
@@ -219,6 +312,9 @@ export class ProductsService {
         extraAttributes: dto.extraAttributes,
         isActive: dto.isActive ?? false,
         isVisible: dto.isVisible ?? lista.defaultVisibility,
+        ...(dto.publishStatus !== undefined && { publishStatus: dto.publishStatus }),
+        ...(dto.publishAt !== undefined && { publishAt: dto.publishAt ? new Date(dto.publishAt) : null }),
+        ...(dto.unpublishAt !== undefined && { unpublishAt: dto.unpublishAt ? new Date(dto.unpublishAt) : null }),
       },
       include: {
         category: { select: { id: true, name: true } },
@@ -237,14 +333,19 @@ export class ProductsService {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
 
-    // ACL: editar producto exige `edit` sobre la Lista del producto.
-    // Si se reasigna listaId, se autoriza sobre la nueva Lista.
+    // ACL: editar producto exige `edit_products` sobre el producto/Lista (checklist 29/30).
+    // assertProductAccess evalúa restricción explícita por producto + Lista dueña.
+    if (ctx && product.listaId) {
+      await this.acl.assertProductAccess(id, ctx, 'edit_products');
+    }
+    // Si se reasigna listaId, se autoriza además sobre la nueva Lista.
     let listaId: string | null = product.listaId ?? null;
     if (dto.listaId !== undefined) {
-      listaId = (await this.resolveLista(dto.listaId)).id;
-    }
-    if (ctx && listaId) {
-      await this.acl.assertListaAccess(listaId, ctx, 'edit');
+      const newLista = await this.resolveLista(dto.listaId);
+      if (ctx && newLista.id !== product.listaId) {
+        await this.acl.assertListaAccess(newLista.id, ctx, 'edit_products');
+      }
+      listaId = newLista.id;
     }
 
     if (dto.sku && dto.sku !== product.sku) {
@@ -277,6 +378,9 @@ export class ProductsService {
         ...(dto.extraAttributes !== undefined && { extraAttributes: dto.extraAttributes }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
         ...(dto.isVisible !== undefined && { isVisible: dto.isVisible }),
+        ...(dto.publishStatus !== undefined && { publishStatus: dto.publishStatus }),
+        ...(dto.publishAt !== undefined && { publishAt: dto.publishAt ? new Date(dto.publishAt) : null }),
+        ...(dto.unpublishAt !== undefined && { unpublishAt: dto.unpublishAt ? new Date(dto.unpublishAt) : null }),
       },
       include: {
         category: { select: { id: true, name: true } },
@@ -295,8 +399,10 @@ export class ProductsService {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
 
-    // Publicar/ocultar exige `manage` sobre la Lista del producto.
-    if (ctx && product.listaId) await this.acl.assertListaAccess(product.listaId, ctx, 'manage');
+    // Publicar/ocultar exige `edit_products` sobre el producto (checklist 29/30).
+    if (ctx && product.listaId) {
+      await this.acl.assertProductAccess(id, ctx, 'edit_products');
+    }
 
     return this.prisma.product.update({
       where: { id },
@@ -308,8 +414,10 @@ export class ProductsService {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
 
-    // Activar/desactivar exige `edit` sobre la Lista del producto.
-    if (ctx && product.listaId) await this.acl.assertListaAccess(product.listaId, ctx, 'edit');
+    // Activar/desactivar exige `edit_products` sobre el producto (checklist 29/30).
+    if (ctx && product.listaId) {
+      await this.acl.assertProductAccess(id, ctx, 'edit_products');
+    }
 
     return this.prisma.product.update({
       where: { id },
@@ -317,9 +425,286 @@ export class ProductsService {
     });
   }
 
-  async remove(id: string) {
+  /**
+   * Lazy unpublish (decisión documentada, sin cron):
+   * al leer productos (findOne/findAll) o al consultar publish-scheduled se evalúa
+   * en runtime si `unpublishAt <= now && publishStatus == 'publicado'`. Si aplica,
+   * el producto pasa a 'borrador' con unpublishReason 'auto'. Así la auto-despublicación
+   * se resuelve en la primera lectura posterior a la fecha límite.
+   */
+  private async autoUnpublishOne(id: string): Promise<void> {
+    await this.prisma.product.update({
+      where: { id },
+      data: { publishStatus: 'borrador', unpublishReason: 'auto', publishAt: null, publishedAt: null },
+    });
+    await this.audit.log({
+      action: 'unpublish',
+      entity: 'Product',
+      entityId: id,
+      oldValues: { publishStatus: 'publicado', unpublishReason: null },
+      newValues: { publishStatus: 'borrador', unpublishReason: 'auto' },
+    });
+  }
+
+  /**
+   * Lazy unpublish en lote: procesa todos los productos publicados cuya
+   * fecha de auto-despublicación ya venció (evaluación perezosa, sin cron).
+   */
+  private async autoUnpublishDueProducts(where: Prisma.ProductWhereInput = {}): Promise<void> {
+    const due = (await this.prisma.product.findMany({
+      where: {
+        ...where,
+        publishStatus: 'publicado',
+        unpublishAt: { lte: new Date() },
+      },
+      select: { id: true },
+    })) ?? [];
+
+    if (due.length === 0) return;
+
+    await this.prisma.product.updateMany({
+      where: { id: { in: due.map((d) => d.id) } },
+      data: { publishStatus: 'borrador', unpublishReason: 'auto', publishAt: null, publishedAt: null },
+    });
+
+    for (const d of due) {
+      await this.audit.log({
+        action: 'unpublish',
+        entity: 'Product',
+        entityId: d.id,
+        oldValues: { publishStatus: 'publicado', unpublishReason: null },
+        newValues: { publishStatus: 'borrador', unpublishReason: 'auto' },
+      });
+    }
+  }
+
+  /**
+   * Checklist previo a publicación (documentado):
+   *  (a) Lista destino activa y no archivada.
+   *  (b) Producto activo (isActive).
+   *  (c) Al menos 1 precio vigente (validFrom nulo o <= now y validUntil nulo o futuro) en la Lista.
+   *  (d) Al menos 1 imagen.
+   *  (e) Stock: si existe registro de stock, exige availableQty > 0.
+   *      Si NO existe registro de stock, NO se bloquea (decisión documentada).
+   * Devuelve la lista de TODOS los requisitos fallidos (mensaje 400 detallado).
+   */
+  private async validatePublishRequirements(product: {
+    id: string;
+    listaId: string | null;
+    isActive: boolean;
+  }): Promise<string[]> {
+    const failures: string[] = [];
+    const now = new Date();
+
+    // (a) Lista destino activa y no archivada.
+    let lista = null;
+    if (product.listaId) {
+      lista = await this.prisma.lista.findUnique({ where: { id: product.listaId } });
+    }
+    if (!lista || !lista.isActive || lista.archivedAt) {
+      failures.push('La lista destino no está activa o está archivada');
+    }
+
+    // (b) Producto activo.
+    if (!product.isActive) {
+      failures.push('El producto no está activo');
+    }
+
+    // (c) Al menos 1 precio vigente en la Lista.
+    const priceCount = await this.prisma.price.count({
+      where: {
+        productId: product.id,
+        ...(product.listaId ? { listaId: product.listaId } : {}),
+        AND: [
+          { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+          { OR: [{ validUntil: null }, { validUntil: { gt: now } }] },
+        ],
+      },
+    });
+    if (priceCount === 0) {
+      failures.push('El producto no tiene al menos un precio vigente en su lista');
+    }
+
+    // (d) Al menos 1 imagen.
+    const imageCount = await this.prisma.productImage.count({ where: { productId: product.id } });
+    if (imageCount === 0) {
+      failures.push('El producto no tiene al menos una imagen');
+    }
+
+    // (e) Stock: solo bloquea si existe registro de stock con availableQty <= 0.
+    const stock = await this.prisma.stock.findUnique({ where: { productId: product.id } });
+    if (stock && stock.availableQty <= 0) {
+      failures.push('El producto tiene stock registrado pero sin unidades disponibles (availableQty <= 0)');
+    }
+
+    return failures;
+  }
+
+  /**
+   * Publica o programa publicación de un producto.
+   *  - publishAt futuro: valida requisitos y deja en 'listo' (programado).
+   *  - sin publishAt: valida requisitos y publica de inmediato ('publicado', publishedAt=now).
+   * Si el producto ya está 'publicado' y se intenta publicar de nuevo → 409.
+   */
+  async publish(id: string, dto: PublishProductDto, ctx?: AccessContext) {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
+
+    // Lazy unpublish primero: si venció su auto-despublicación, pasa a 'borrador'.
+    if (product.publishStatus === 'publicado' && product.unpublishAt && product.unpublishAt <= new Date()) {
+      await this.autoUnpublishOne(id);
+      product.publishStatus = 'borrador';
+      product.unpublishReason = 'auto';
+      product.publishAt = null;
+      product.publishedAt = null;
+    }
+
+    if (product.publishStatus === 'publicado') {
+      throw new ConflictException('El producto ya está publicado');
+    }
+
+    // Publicar/programar exige `manage` sobre el producto/Lista (contrato publicación TANDA 1A).
+    if (ctx && product.listaId) {
+      await this.acl.assertProductAccess(id, ctx, 'manage');
+    }
+
+    const failures = await this.validatePublishRequirements(product);
+    if (failures.length > 0) {
+      const detail = failures.map((f, i) => `${i + 1}) ${f}`).join('; ');
+      throw new BadRequestException(`No se puede publicar. Requisitos incumplidos: ${detail}`);
+    }
+
+    const now = new Date();
+    const unpublishAt = dto.unpublishAt ? new Date(dto.unpublishAt) : null;
+
+    // Publicación programada (futura).
+    if (dto.publishAt) {
+      const publishAt = new Date(dto.publishAt);
+      const updated = await this.prisma.product.update({
+        where: { id },
+        data: {
+          publishStatus: 'listo',
+          publishAt,
+          unpublishAt,
+          publishedAt: null,
+          unpublishReason: null,
+          publishedById: ctx?.userId ?? null,
+        },
+      });
+
+      await this.audit.log({
+        userId: ctx?.userId,
+        action: 'schedule_publish',
+        entity: 'Product',
+        entityId: id,
+        oldValues: { publishStatus: product.publishStatus, publishAt: product.publishAt, unpublishAt: product.unpublishAt },
+        newValues: { publishStatus: 'listo', publishAt, unpublishAt },
+      });
+
+      return updated;
+    }
+
+    // Publicación inmediata.
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: {
+        publishStatus: 'publicado',
+        publishedAt: now,
+        publishAt: null,
+        unpublishAt,
+        unpublishReason: null,
+        publishedById: ctx?.userId ?? null,
+      },
+    });
+
+    await this.audit.log({
+      userId: ctx?.userId,
+      action: 'publish',
+      entity: 'Product',
+      entityId: id,
+      oldValues: { publishStatus: product.publishStatus, unpublishAt: product.unpublishAt },
+      newValues: { publishStatus: 'publicado', publishedAt: now, publishAt: null, unpublishAt },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Despublica un producto: pasa a 'borrador' con unpublishReason.
+   * Decisión documentada: 'archivado' es estado final de producto (archivar es aparte);
+   * la despublicación normal usa 'borrador' + razón.
+   */
+  async unpublish(id: string, dto: UnpublishProductDto, ctx?: AccessContext) {
+    const product = await this.prisma.product.findUnique({ where: { id } });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+
+    if (ctx && product.listaId) {
+      await this.acl.assertProductAccess(id, ctx, 'manage');
+    }
+
+    const reason = dto.reason || 'Despublicado manualmente';
+
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: {
+        publishStatus: 'borrador',
+        unpublishReason: reason,
+        publishAt: null,
+        publishedAt: null,
+        unpublishAt: null,
+      },
+    });
+
+    await this.audit.log({
+      userId: ctx?.userId,
+      action: 'unpublish',
+      entity: 'Product',
+      entityId: id,
+      oldValues: { publishStatus: product.publishStatus, unpublishReason: product.unpublishReason },
+      newValues: { publishStatus: 'borrador', unpublishReason: reason },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Lista productos programados (publishStatus 'listo') con publishAt en el rango
+   * [from, to]. Si no vienen from/to, usa [now, now+7 días]. También aplica lazy unpublish.
+   */
+  async findPublishScheduled(from?: string, to?: string) {
+    await this.autoUnpublishDueProducts();
+
+    const now = new Date();
+    const fromDate = from ? new Date(from) : now;
+    const toDate = to ? new Date(to) : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const products = (await this.prisma.product.findMany({
+      where: {
+        publishStatus: 'listo',
+        publishAt: { gte: fromDate, lte: toDate },
+      },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        publishAt: true,
+        unpublishAt: true,
+        lista: { select: { id: true, name: true, code: true } },
+      },
+      orderBy: { publishAt: 'asc' },
+    })) ?? [];
+
+    return { data: products };
+  }
+
+  async remove(id: string, ctx?: AccessContext) {
+    const product = await this.prisma.product.findUnique({ where: { id } });
+    if (!product) throw new NotFoundException('Producto no encontrado');
+
+    // Eliminar exige `edit_products` sobre el producto (checklist 29/30).
+    if (ctx && product.listaId) {
+      await this.acl.assertProductAccess(id, ctx, 'edit_products');
+    }
 
     const images = await this.prisma.productImage.findMany({ where: { productId: id } });
 
@@ -346,9 +731,19 @@ export class ProductsService {
    * Sube una imagen para un producto y registra la fila ProductImage.
    * Valida tipo (jpeg/png/webp/gif) y tamaño máximo (8 MB).
    */
-  async uploadImage(productId: string, file: Express.Multer.File, isPrimary = false) {
+  async uploadImage(
+    productId: string,
+    file: Express.Multer.File,
+    isPrimary = false,
+    ctx?: AccessContext,
+  ) {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException('Producto no encontrado');
+
+    // Subir imagen exige `edit_products` sobre el producto (checklist 29/30).
+    if (ctx && product.listaId) {
+      await this.acl.assertProductAccess(productId, ctx, 'edit_products');
+    }
 
     if (!file) {
       throw new BadRequestException('Archivo requerido en el campo "file"');
@@ -392,9 +787,14 @@ export class ProductsService {
   /**
    * Elimina una imagen: borra el registro y el archivo del disco si existe.
    */
-  async deleteImage(imageId: string) {
+  async deleteImage(imageId: string, ctx?: AccessContext) {
     const image = await this.prisma.productImage.findUnique({ where: { id: imageId } });
     if (!image) throw new NotFoundException('Imagen no encontrada');
+
+    // Eliminar imagen exige `edit_products` sobre el producto dueño (checklist 29/30).
+    if (ctx && image.productId) {
+      await this.acl.assertProductAccess(image.productId, ctx, 'edit_products');
+    }
 
     const filename = path.basename(image.url);
     const filePath = path.join(UPLOADS_DIR, filename);

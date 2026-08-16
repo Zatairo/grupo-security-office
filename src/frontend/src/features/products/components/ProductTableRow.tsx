@@ -1,5 +1,6 @@
 import type { Product } from '../types/product.types'
 import { ProductStatusBadge } from './ProductStatusBadge'
+import { ProductIndicators } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
 import { formatCurrency } from '../../../lib/format'
 
@@ -11,6 +12,8 @@ interface ProductTableRowProps {
   onDelete: (id: string) => void
   selected?: boolean
   onToggleSelect?: (id: string) => void
+  accessRestrictedIds?: Set<string>
+  accessUnavailable?: boolean
 }
 
 export function ProductTableRow({
@@ -21,6 +24,8 @@ export function ProductTableRow({
   onDelete,
   selected = false,
   onToggleSelect,
+  accessRestrictedIds,
+  accessUnavailable,
 }: ProductTableRowProps) {
   return (
     <tr className="hover:bg-gray-50 transition-colors">
@@ -78,6 +83,13 @@ export function ProductTableRow({
               product.isVisible ? 'bg-security-100 text-security-700' : 'bg-gray-100 text-gray-600'
             }`}
             onClick={() => onToggleVisibility(product.id)}
+          />
+        </div>
+        <div className="flex items-center gap-1 mt-1.5">
+          <ProductIndicators
+            product={product}
+            restricted={accessRestrictedIds?.has(product.id)}
+            accessUnavailable={accessUnavailable}
           />
         </div>
       </td>

@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AclService, AccessContext } from '../../common/acl/acl.service';
+import { AclService, AccessContext, LEVEL_RANK } from '../../common/acl/acl.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateListaDto } from './dto/create-lista.dto';
 import { UpdateListaDto } from './dto/update-lista.dto';
@@ -93,15 +93,23 @@ export class ListasService {
     if (params?.isActive !== undefined) where.isActive = params.isActive;
     if (params?.isVisible !== undefined) where.isVisible = params.isVisible;
 
+    // Niveles (checklist 29/30): view ve la Lista SIN precios; los precios solo se
+    // incluyen si el usuario tiene edit_prices o superior sobre la Lista.
+    const canSeePrices = await this.userCanSeePrices(id, ctx);
+
+    const include: Record<string, unknown> = {
+      category: { select: { id: true, name: true, slug: true } },
+      brand: { select: { id: true, name: true, slug: true } },
+      images: { where: { isPrimary: true }, take: 1 },
+    };
+    if (canSeePrices) {
+      include.prices = { include: { priceList: true } };
+    }
+
     const [products, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
-        include: {
-          category: { select: { id: true, name: true, slug: true } },
-          brand: { select: { id: true, name: true, slug: true } },
-          images: { where: { isPrimary: true }, take: 1 },
-          prices: { include: { priceList: true } },
-        },
+        include,
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.product.count({ where }),
@@ -110,9 +118,9 @@ export class ListasService {
     return { data: products, meta: { total } };
   }
 
-  /** Precios de productos de una Lista (scoped + deny-by-default). */
+  /** Precios de productos de una Lista (scoped + deny-by-default; exige edit_prices). */
   async findPrices(id: string, ctx: AccessContext) {
-    await this.acl.assertListaAccess(id, ctx, 'view');
+    await this.acl.assertListaAccess(id, ctx, 'edit_prices');
 
     const prices = await this.prisma.price.findMany({
       where: { product: { listaId: id } },
@@ -132,7 +140,7 @@ export class ListasService {
    * con `daysRemaining` (ceil). El interceptor global envuelve la respuesta en `{ data }`.
    */
   async findExpiringPrices(listaId: string, ctx: AccessContext, days = 30) {
-    await this.acl.assertListaAccess(listaId, ctx, 'view');
+    await this.acl.assertListaAccess(listaId, ctx, 'edit_prices');
 
     const lista = await this.prisma.lista.findUnique({
       where: { id: listaId },
@@ -181,9 +189,9 @@ export class ListasService {
     };
   }
 
-  /** Accesos (assignments LISTA) de una Lista — requiere manage. */
+  /** Accesos (assignments LISTA) de una Lista — requiere manage_access (checklist 30). */
   async findAssignments(id: string, ctx: AccessContext) {
-    await this.acl.assertListaAccess(id, ctx, 'manage');
+    await this.acl.assertListaAccess(id, ctx, 'manage_access');
     const assignments = await this.prisma.assignment.findMany({
       where: { resourceType: 'LISTA', resourceId: id },
       orderBy: { createdAt: 'desc' },
@@ -274,7 +282,7 @@ export class ListasService {
   async duplicateLista(id: string, ctx: AccessContext) {
     const source = await this.prisma.lista.findUnique({ where: { id } });
     if (!source) throw new NotFoundException('Lista no encontrada');
-    await this.acl.assertListaAccess(id, ctx, 'edit');
+    await this.acl.assertListaAccess(id, ctx, 'manage');
 
     const nameSuffix = ' (copia)';
     const name = `${source.name.slice(0, this.LISTA_NAME_MAX - nameSuffix.length)}${nameSuffix}`;
@@ -353,9 +361,15 @@ export class ListasService {
     };
 
     // El nivel requerido depende de si se está archivando/restaurando.
+    // Niveles (checklist 29/30): editar campos → edit_products; archivar/restaurar → manage.
+    // Para archivar/restaurar se usa assertListaRestoreAccess: NO exige isActive/archivedAt,
+    // así una Lista ya archivada (isActive=false) puede restaurarse (BUG-3).
     const requiresManage = dto.archivedAt !== undefined;
-    const requiredLevel = requiresManage ? 'manage' : 'edit';
-    await this.acl.assertListaAccess(id, ctx, requiredLevel);
+    if (requiresManage) {
+      await this.acl.assertListaRestoreAccess(id, ctx, 'manage');
+    } else {
+      await this.acl.assertListaAccess(id, ctx, 'edit_products');
+    }
 
     if (dto.code && dto.code !== lista.code) {
       const dup = await this.prisma.lista.findUnique({ where: { code: dto.code }, select: { id: true } });
@@ -395,11 +409,11 @@ export class ListasService {
     return updated;
   }
 
-  /** Activar / desactivar Lista — requiere edit+. */
+  /** Activar / desactivar Lista — requiere edit_products (checklist 29/30). */
   async toggleActive(id: string, ctx: AccessContext) {
     const lista = await this.prisma.lista.findUnique({ where: { id } });
     if (!lista) throw new NotFoundException('Lista no encontrada');
-    await this.acl.assertListaAccess(id, ctx, 'edit');
+    await this.acl.assertListaAccess(id, ctx, 'edit_products');
 
     const updated = await this.prisma.lista.update({
       where: { id },
@@ -441,11 +455,11 @@ export class ListasService {
     return updated;
   }
 
-  /** Restaurar (desarchivar) — requiere manage. */
+  /** Restaurar (desarchivar) — requiere manage (assertListaRestoreAccess: la Lista archivada/inactiva no bloquea). */
   async restore(id: string, ctx: AccessContext) {
     const lista = await this.prisma.lista.findUnique({ where: { id } });
     if (!lista) throw new NotFoundException('Lista no encontrada');
-    await this.acl.assertListaAccess(id, ctx, 'manage');
+    await this.acl.assertListaRestoreAccess(id, ctx, 'manage');
 
     const updated = await this.prisma.lista.update({
       where: { id },
@@ -520,6 +534,16 @@ export class ListasService {
   /** Alias interno: require manage (incluye deny-by-default por inactiva/archivada). */
   private async assertManage(id: string, ctx: AccessContext): Promise<void> {
     await this.acl.assertListaAccess(id, ctx, 'manage');
+  }
+
+  /**
+   * ¿El usuario puede ver precios sobre una Lista? Requiere edit_prices o superior
+   * (checklist 29/30). Super Admin siempre.
+   */
+  private async userCanSeePrices(listaId: string, ctx: AccessContext): Promise<boolean> {
+    if (this.acl.isSuperAdmin(ctx.roles)) return true;
+    const level = await this.acl.getUserLevel(ctx.userId!, listaId, ctx.roles);
+    return !!level && (LEVEL_RANK[level] ?? 0) >= (LEVEL_RANK['edit_prices'] ?? 0);
   }
 
   /**

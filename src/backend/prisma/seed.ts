@@ -113,7 +113,7 @@ async function main() {
   // Create roles (definitivos, en español)
   const superAdminRole = await upsertRole('Super Admin');
   await upsertRole('Supervisor');
-  await upsertRole('Admin Comercial');
+  const adminComercialRole = await upsertRole('Admin Comercial');
   await upsertRole('Operador');
   await upsertRole('Consulta');
 
@@ -143,6 +143,78 @@ async function main() {
   });
 
   console.log('✅ Admin user created (admin@gruposecurity.co / admin123) → Super Admin');
+
+  // Usuario real de Compras (Admin Comercial — rol que gestiona PO según TAREA 2).
+  const comprasPassword = await bcrypt.hash('compras123', 12);
+
+  const comprasUser = await prisma.user.upsert({
+    where: { email: 'compras@gruposecurity.co' },
+    update: {},
+    create: {
+      email: 'compras@gruposecurity.co',
+      name: 'Compras Security',
+      password: comprasPassword,
+      isActive: true,
+    },
+  });
+
+  await prisma.userRole.upsert({
+    where: { userId_roleId: { userId: comprasUser.id, roleId: adminComercialRole.id } },
+    update: {},
+    create: { userId: comprasUser.id, roleId: adminComercialRole.id },
+  });
+
+  console.log('✅ Compras user created (compras@gruposecurity.co / compras123) → Admin Comercial');
+
+  // Listas de ejemplo (idempotente por code/name; no crea productos ni precios).
+  // 1. LISTA-GENERAL: la raíz actual. Si ya existe, se mantiene (update {} = no la toca).
+  await prisma.lista.upsert({
+    where: { code: 'LISTA-GENERAL' },
+    update: {},
+    create: {
+      code: 'LISTA-GENERAL',
+      name: 'Lista General',
+      description: 'Lista raíz del catálogo',
+      currency: 'COP',
+      isActive: true,
+      defaultVisibility: false,
+    },
+  });
+
+  // 2. Lista Comercial Q3 — tipo comercial, vigencia Q3 2026, responsable = admin.
+  await prisma.lista.upsert({
+    where: { code: 'LISTA-COMERCIAL-Q3' },
+    update: {},
+    create: {
+      code: 'LISTA-COMERCIAL-Q3',
+      name: 'Lista Comercial Q3',
+      description: 'Lista comercial del tercer trimestre 2026',
+      type: 'comercial',
+      currency: 'COP',
+      isActive: true,
+      defaultVisibility: false,
+      responsibleId: adminUser.id,
+      validFrom: new Date('2026-07-01T00:00:00Z'),
+      validUntil: new Date('2026-09-30T23:59:59Z'),
+    },
+  });
+
+  // 3. Lista Auditoría Interna — tipo auditoria (campo `type` es string libre en el modelo), vigencia abierta.
+  await prisma.lista.upsert({
+    where: { code: 'LISTA-AUDITORIA-INTERNA' },
+    update: {},
+    create: {
+      code: 'LISTA-AUDITORIA-INTERNA',
+      name: 'Lista Auditoría Interna',
+      description: 'Lista de trabajo para auditoría interna (vigencia abierta)',
+      type: 'auditoria',
+      currency: 'COP',
+      isActive: true,
+      defaultVisibility: false,
+    },
+  });
+
+  console.log('✅ Listas creadas (LISTA-GENERAL / Lista Comercial Q3 / Lista Auditoría Interna)');
 
   // Create sample categories
   const cctv = await prisma.category.upsert({

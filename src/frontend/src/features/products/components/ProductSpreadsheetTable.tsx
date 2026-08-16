@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Product, ProductPrice } from '../types/product.types'
 import { ProductStatusBadge } from './ProductStatusBadge'
+import { ProductIndicators } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
 import { formatCurrency, formatDate } from '../../../lib/format'
 
@@ -17,6 +18,8 @@ interface ProductSpreadsheetTableProps {
   selectedProductIds?: Set<string>
   onToggleSelectProduct?: (id: string) => void
   onToggleSelectAllProducts?: () => void
+  accessRestrictedIds?: Set<string>
+  accessUnavailable?: boolean
 }
 
 const COLUMN_WIDTHS = {
@@ -29,6 +32,7 @@ const COLUMN_WIDTHS = {
   visible: 96,
   active: 96,
   updated: 140,
+  indicators: 200,
   actions: 120,
 } as const
 
@@ -152,6 +156,8 @@ export function ProductSpreadsheetTable({
   selectedProductIds,
   onToggleSelectProduct,
   onToggleSelectAllProducts,
+  accessRestrictedIds,
+  accessUnavailable,
 }: ProductSpreadsheetTableProps) {
   const canWrite = hasPermission('products:write')
   const canDelete = hasPermission('products:delete')
@@ -252,7 +258,7 @@ export function ProductSpreadsheetTable({
 
   const visiblePriceColumns = getVisiblePriceColumns(products)
   const priceColCount = visiblePriceColumns.length
-  const TOTAL_COLS = 5 + priceColCount + 4
+  const TOTAL_COLS = 5 + priceColCount + 5
   const widthStyle = baseWidthStyle
 
   return (
@@ -344,6 +350,9 @@ export function ProductSpreadsheetTable({
                 Actualizado
                 {sortIndicator('updatedAt')}
               </button>
+            </th>
+            <th scope="col" style={widthStyle(COLUMN_WIDTHS.indicators)} className={thBase}>
+              Indicadores
             </th>
             <th scope="col" style={widthStyle(COLUMN_WIDTHS.actions)} className={`${thBase} text-center`}>
               Acciones
@@ -481,6 +490,13 @@ export function ProductSpreadsheetTable({
                   </td>
                   <td style={widthStyle(COLUMN_WIDTHS.updated)} className={`${cellBase} px-3 py-3`}>
                     <span className="text-sm text-gray-600 tabular-nums">{formatDate(product.updatedAt)}</span>
+                  </td>
+                  <td style={widthStyle(COLUMN_WIDTHS.indicators)} className={`${cellBase} px-3 py-3`}>
+                    <ProductIndicators
+                      product={product}
+                      restricted={accessRestrictedIds?.has(product.id)}
+                      accessUnavailable={accessUnavailable}
+                    />
                   </td>
                   <td
                     style={widthStyle(COLUMN_WIDTHS.actions)}

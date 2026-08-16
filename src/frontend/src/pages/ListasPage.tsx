@@ -9,6 +9,10 @@ import {
   toggleListaActive,
   archiveLista,
   restoreLista,
+  fetchListaProducts,
+  fetchListaPrices,
+  fetchListaAssignments,
+  fetchListaAudit,
   productCountOf,
   downloadListaTemplateCsv,
   type Lista,
@@ -55,7 +59,10 @@ export default function ListasPage() {
   const [showImportModal, setShowImportModal] = useState(hasPersistedImportState)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expiryFilter, setExpiryFilter] = useState<'all' | 'active' | 'expiring' | 'expired'>('all')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [indicatorFilter, setIndicatorFilter] = useState<'all' | 'with_prices' | 'no_prices' | 'no_stock'>('all')
   const [actionNotice, setActionNotice] = useState<string | null>(null)
+  const [deleteImpactIds, setDeleteImpactIds] = useState<string[]>([])
   const selectAllRef = useRef<HTMLInputElement>(null)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['listas'] })
@@ -65,7 +72,7 @@ export default function ListasPage() {
     queryFn: fetchListas,
   })
 
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     if (!listas) return []
     return listas.filter((l) => {
       const matchesSearch =
@@ -80,9 +87,42 @@ export default function ListasPage() {
         (expiryFilter === 'active' && !l.isExpired && !l.isExpiringSoon) ||
         (expiryFilter === 'expiring' && l.isExpiringSoon && !l.isExpired) ||
         (expiryFilter === 'expired' && l.isExpired)
-      return matchesSearch && matchesState && matchesExpiry
+      const matchesType = typeFilter === 'all' || (l.type ?? '') === typeFilter
+      return matchesSearch && matchesState && matchesExpiry && matchesType
     })
-  }, [listas, search, activeFilter, expiryFilter])
+  }, [listas, search, activeFilter, expiryFilter, typeFilter])
+
+  const indicatorActive = indicatorFilter !== 'all'
+  const productsByListaQuery = useQuery({
+    queryKey: ['lista-products-enrichment', baseFiltered.map((l) => l.id).join(','), indicatorActive],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        baseFiltered.map(async (l) => [l.id, await fetchListaProducts(l.id)] as const)
+      )
+      return new Map(entries)
+    },
+    enabled: indicatorActive && baseFiltered.length > 0,
+  })
+  const productsByLista = productsByListaQuery.data ?? new Map<string, any[]>()
+
+  const filtered = useMemo(() => {
+    if (indicatorFilter === 'all') return baseFiltered
+    return baseFiltered.filter((l) => {
+      const products = productsByLista.get(l.id) ?? []
+      const hasPrices = products.some((p) => (p.prices ?? []).length > 0)
+      const hasNoStock = products.some(
+        (p) =>
+          p.stockStatus === 'out_of_stock' ||
+          (typeof p.availableQty === 'number' && p.availableQty <= 0)
+      )
+      if (indicatorFilter === 'with_prices') return hasPrices
+      if (indicatorFilter === 'no_prices') return l.productCount !== 0 && !hasPrices
+      if (indicatorFilter === 'no_stock') return hasNoStock
+      return true
+    })
+  }, [baseFiltered, indicatorFilter, productsByLista])
+
+  const filteredCount = filtered.length
 
   const toggleMutation = useMutation({
     mutationFn: (lista: Lista) => toggleListaActive(lista.id, !lista.isActive),
@@ -181,9 +221,8 @@ export default function ListasPage() {
       setActionError('No hay Listas seleccionadas para eliminar.')
       return
     }
-    if (!window.confirm(`¿Eliminar definitivamente ${ids.length} lista(s) seleccionada(s)? Esta acción no se puede deshacer.`)) return
     setActionNotice(null)
-    deleteMutation.mutate(ids)
+    setDeleteImpactIds(ids)
   }
 
   const toggleSelect = (id: string) =>
@@ -335,6 +374,28 @@ export default function ListasPage() {
               </button>
             ))}
           </div>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
+            aria-label="Filtrar por tipo"
+          >
+            <option value="all">Todos los tipos</option>
+            {LISTA_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+          <select
+            value={indicatorFilter}
+            onChange={(e) => setIndicatorFilter(e.target.value as typeof indicatorFilter)}
+            className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
+            aria-label="Filtrar por indicador"
+          >
+            <option value="all">Todos los indicadores</option>
+            <option value="with_prices">Con precios</option>
+            <option value="no_prices">Sin precios</option>
+            <option value="no_stock">Sin stock</option>
+          </select>
         </div>
       </div>
 
@@ -351,6 +412,10 @@ export default function ListasPage() {
           <button onClick={() => setActionNotice(null)} className="p-0.5 rounded hover:bg-emerald-100/60" aria-label="Cerrar" />
         </div>
       )}
+
+      <p className="text-sm text-neutral-500">
+        {isLoading ? 'Cargando listas...' : `${filteredCount} resultado(s)`}
+      </p>
 
       {listError && (
         <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
@@ -600,6 +665,110 @@ export default function ListasPage() {
           }}
         />
       )}
+
+      {deleteImpactIds.length > 0 && (
+        <DeleteImpactModal
+          listas={listas ?? []}
+          ids={deleteImpactIds}
+          onClose={() => setDeleteImpactIds([])}
+          onConfirm={(ids) => {
+            setDeleteImpactIds([])
+            deleteMutation.mutate(ids)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function DeleteImpactModal({
+  listas,
+  ids,
+  onClose,
+  onConfirm,
+}: {
+  listas: Lista[]
+  ids: string[]
+  onClose: () => void
+  onConfirm: (ids: string[]) => void
+}) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['lista-delete-impact', ids.join(',')],
+    queryFn: async () => {
+      const [prices, assignments, audit] = await Promise.all([
+        Promise.all(ids.map((id) => fetchListaPrices(id).catch(() => [] as any[]))),
+        Promise.all(ids.map((id) => fetchListaAssignments(id).catch(() => [] as any[]))),
+        Promise.all(ids.map((id) => fetchListaAudit(id).catch(() => [] as any[]))),
+      ])
+      const products = ids.reduce((acc, id) => acc + productCountOf(listas.find((l) => l.id === id)), 0)
+      return {
+        products,
+        prices: prices.flat().length,
+        assignments: assignments.flat().length,
+        audit: audit.flat().length,
+      }
+    },
+    enabled: ids.length > 0,
+    staleTime: 0,
+  })
+
+  const impactError = error ? getApiErrorMessage(error, 'No se pudo calcular el impacto') : null
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl w-full max-w-md shadow-2xl">
+        <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between">
+          <h2 className="text-lg font-condensed font-semibold text-neutral-800">Confirmar eliminación</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-colors" aria-label="Cerrar">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {isLoading ? (
+            <p className="text-sm text-neutral-400">Calculando impacto...</p>
+          ) : (
+            <>
+              {impactError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5" role="alert">
+                  {impactError}
+                </p>
+              )}
+              <p className="text-sm text-neutral-600">
+                Esta acción eliminará la Lista y afectará aproximadamente a{' '}
+                <strong>{data?.products ?? 0} productos</strong>,{' '}
+                <strong>{data?.prices ?? 0} precios</strong> y{' '}
+                <strong>{data?.assignments ?? 0} asignaciones</strong>
+                {data && data.audit > 0 ? ` y ${data.audit} registros de auditoría` : ''}. Esta acción no se puede
+                deshacer.
+              </p>
+              <p className="text-xs text-neutral-400">
+                {ids.length} Lista(s) seleccionada(s):{' '}
+                {ids
+                  .map((id) => listas.find((l) => l.id === id)?.name)
+                  .filter(Boolean)
+                  .join(', ')}
+              </p>
+            </>
+          )}
+
+          <div className="flex gap-3 justify-end pt-2">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={isLoading}
+              onClick={() => onConfirm(ids)}
+            >
+              Eliminar definitivamente
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

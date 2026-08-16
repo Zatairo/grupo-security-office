@@ -39,6 +39,13 @@ export interface Product {
   extraAttributes?: Record<string, unknown> | null
   isActive: boolean
   isVisible: boolean
+  publishStatus?: 'borrador' | 'listo' | 'programado' | 'publicado' | 'archivado' | string | null
+  publishedAt?: string | null
+  publishAt?: string | null
+  unpublishAt?: string | null
+  unpublishReason?: string | null
+  stockStatus?: 'in_stock' | 'out_of_stock' | 'no_stock_data' | string | null
+  availableQty?: number | null
   category: { id: string; name: string; slug: string }
   brand: { id: string; name: string; slug: string }
   images: ProductImage[]

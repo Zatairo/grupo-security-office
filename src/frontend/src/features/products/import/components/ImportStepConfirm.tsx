@@ -1,6 +1,143 @@
 import { useState } from 'react';
 import { useImportStore } from '../store/import.store';
 import { useSaveImportMapping } from '../hooks/useImportMappings';
+import { usePriceComparison } from '../hooks/usePriceComparison';
+import {
+  PRICE_FIELD_LABELS,
+  computeDeltaPercent,
+} from '../utils/price-comparison';
+import { formatCurrency } from '../../../../lib/format';
+import { getApiErrorMessage } from '../../../../lib/apiError';
+import { Alert } from '../../../../components/ui';
+
+const PRICE_FIELDS = [
+  'price_instalador_iva',
+  'price_tienda_iva',
+  'price_dpp_oro_iva',
+  'price_dpp_platino_iva',
+  'price_cliente_final_iva',
+  'price_oro_sin_iva',
+  'price_installer_sin_iva',
+];
+
+function PriceComparisonSection() {
+  const fileBuffer = useImportStore((s) => s.fileBuffer);
+  const columnMappings = useImportStore((s) => s.columnMappings);
+  const { comparison, isLoading, error } = usePriceComparison();
+
+  const priceMapped = columnMappings.some((m) => PRICE_FIELDS.includes(m.targetField));
+
+  if (!priceMapped) {
+    return (
+      <div className="border border-gray-200 rounded-lg p-5">
+        <h3 className="text-sm font-medium text-gray-700 mb-1">Comparación de precios</h3>
+        <p className="text-sm text-gray-500">
+          No hay columnas de precio mapeadas. Mapea al menos una columna de precio en el paso
+          anterior para comparar con el catálogo actual.
+        </p>
+      </div>
+    );
+  }
+
+  if (!fileBuffer) {
+    return (
+      <div className="border border-gray-200 rounded-lg p-5">
+        <h3 className="text-sm font-medium text-gray-700 mb-1">Comparación de precios</h3>
+        <p className="text-sm text-gray-500">
+          Vuelve a cargar el archivo para habilitar la comparación de precios con el catálogo.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-gray-700">Comparación de precios</h3>
+        {comparison && comparison.totalRowsWithPrices > 0 && (
+          <span className="text-xs text-gray-400">
+            {comparison.rows.length} de {comparison.totalRowsWithPrices} filas con precio
+          </span>
+        )}
+      </div>
+
+      {isLoading && (
+        <p className="text-sm text-gray-400">Cargando comparación de precios...</p>
+      )}
+
+      {error && !isLoading && (
+        <Alert variant="warning">
+          No se pudo cargar la comparación: {getApiErrorMessage(error, 'Error de red')}
+        </Alert>
+      )}
+
+      {!isLoading && !error && comparison && (
+        comparison.rows.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            Sin filas con precio para comparar en el archivo.
+          </p>
+        ) : (
+          <>
+            {comparison.truncated && (
+              <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-md p-2 mb-2">
+                Comparación limitada a las primeras {comparison.rows.length} filas con precio.
+              </p>
+            )}
+            <div className="overflow-x-auto border border-gray-200 rounded-lg max-h-72 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">Fila</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">SKU</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">Tarifa</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-700">Precio actual</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-700">Precio nuevo</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-700">Δ%</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {comparison.rows.map((row) =>
+                    row.fields.map((f, idx) => {
+                      const delta = computeDeltaPercent(f.currentPrice?.value ?? null, f.newPrice);
+                      return (
+                        <tr key={`${row.excelRow}-${idx}`}>
+                          <td className="px-3 py-2 text-gray-500">{row.excelRow}</td>
+                          <td className="px-3 py-2 font-medium text-gray-800">{row.sku || 'N/A'}</td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {PRICE_FIELD_LABELS[f.field] ?? f.label}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-600 tabular-nums">
+                            {f.currentPrice === null ? (
+                              <span className="text-amber-600 font-medium">SIN PRECIO ACTUAL</span>
+                            ) : (
+                              formatCurrency(f.currentPrice.value)
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-security-800 tabular-nums">
+                            {formatCurrency(f.newPrice ?? 0)}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {delta === null ? (
+                              <span className="text-gray-300">—</span>
+                            ) : (
+                              <span className={delta > 0 ? 'text-red-600' : delta < 0 ? 'text-green-600' : 'text-gray-600'}>
+                                {delta > 0 ? '+' : ''}{delta.toFixed(1)}%
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    }),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )
+      )}
+    </div>
+  );
+}
 
 export default function ImportStepConfirm() {
   const preview = useImportStore((s) => s.preview);
@@ -108,6 +245,8 @@ export default function ImportStepConfirm() {
           ))}
         </div>
       </div>
+
+      <PriceComparisonSection />
 
       <div className="border border-gray-200 rounded-lg p-5">
         <label className="flex items-center gap-2 cursor-pointer">

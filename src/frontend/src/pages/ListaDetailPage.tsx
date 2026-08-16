@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useMemo, type FormEvent } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import api from '../services/api'
@@ -14,6 +14,7 @@ import ProductFormModal from '../features/products/components/ProductFormModal'
 import ImportWizard from '../features/products/import/components/ImportWizard'
 import { hasPersistedImportState } from '../features/products/import/store/import.store'
 import type { Category, Brand, Product } from '../features/products/types/product.types'
+import { ProductIndicators } from '../features/products/components/ProductIndicators'
 
 type Tab = 'products' | 'prices' | 'access' | 'audit'
 
@@ -214,7 +215,9 @@ function ProductosTab({
   listaId: string
 }) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [view, setView] = useState<'table' | 'folder'>('table')
   const canEdit = canManage || hasPermission('products:write')
 
   const { data: categories } = useQuery({
@@ -237,61 +240,90 @@ function ProductosTab({
       </div>
     )
   }
+
   return (
     <>
-      <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-neutral-200">
-            <thead className="bg-neutral-100">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">SKU</th>
-                <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Producto</th>
-                <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Categoría</th>
-                <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Marca</th>
-                <th className="px-4 py-3 text-right text-xs font-condensed font-semibold text-neutral-500 uppercase">Precio base</th>
-                <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Estado</th>
-                <th className="px-4 py-3 text-right text-xs font-condensed font-semibold text-neutral-500 uppercase">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {products.map((p: any) => (
-                <tr key={p.id} className="hover:bg-neutral-50">
-                  <td className="px-4 py-3 text-sm font-mono text-neutral-700">{p.sku}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 font-medium">{p.name}</td>
-                  <td className="px-4 py-3 text-sm text-neutral-700">{p.category?.name ?? '-'}</td>
-                  <td className="px-4 py-3 text-sm text-neutral-700">{p.brand?.name ?? '-'}</td>
-                  <td className="px-4 py-3 text-sm text-neutral-700 text-right">
-                    {Array.isArray(p.prices) && p.prices.length > 0
-                      ? `${p.prices[0].currency} ${Number(p.prices[0].value).toLocaleString('es-CO')}`
-                      : '-'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <PriceIndicator prices={p.prices} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <Link
-                        to={`/commercial/products/${p.id}`}
-                        className="px-2.5 py-1 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
-                      >
-                        Ver
-                      </Link>
-                      {canEdit && (
-                        <button
-                          onClick={() => setEditingProduct(p as Product)}
-                          className="px-2.5 py-1 text-xs font-medium text-neutral-600 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
-                        >
-                          Editar
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex gap-1.5 bg-neutral-100 rounded-lg p-1 text-xs font-medium text-neutral-600">
+          <button
+            onClick={() => setView('table')}
+            className={`px-3 py-1.5 rounded ${view === 'table' ? 'bg-white shadow text-neutral-800' : ''}`}
+          >
+            Tabla
+          </button>
+          <button
+            onClick={() => setView('folder')}
+            className={`px-3 py-1.5 rounded ${view === 'folder' ? 'bg-white shadow text-neutral-800' : ''}`}
+          >
+            Carpeta
+          </button>
         </div>
+        <span className="text-xs text-neutral-500">{products.length} producto(s)</span>
       </div>
+
+      {view === 'folder' ? (
+        <FolderView products={products} onOpenProduct={(id) => navigate(`/commercial/products/${id}`)} />
+      ) : (
+        <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-neutral-200">
+              <thead className="bg-neutral-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">SKU</th>
+                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Producto</th>
+                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Categoría</th>
+                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Marca</th>
+                  <th className="px-4 py-3 text-right text-xs font-condensed font-semibold text-neutral-500 uppercase">Precio base</th>
+                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Estado</th>
+                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Indicadores</th>
+                  <th className="px-4 py-3 text-right text-xs font-condensed font-semibold text-neutral-500 uppercase">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {products.map((p: any) => (
+                  <tr key={p.id} className="hover:bg-neutral-50">
+                    <td className="px-4 py-3 text-sm font-mono text-neutral-700">{p.sku}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">{p.name}</td>
+                    <td className="px-4 py-3 text-sm text-neutral-700">{p.category?.name ?? '-'}</td>
+                    <td className="px-4 py-3 text-sm text-neutral-700">{p.brand?.name ?? '-'}</td>
+                    <td className="px-4 py-3 text-sm text-neutral-700 text-right">
+                      {Array.isArray(p.prices) && p.prices.length > 0
+                        ? `${p.prices[0].currency} ${Number(p.prices[0].value).toLocaleString('es-CO')}`
+                        : '-'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <PriceIndicator prices={p.prices} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <ProductIndicators product={p as Product} />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <Link
+                          to={`/commercial/products/${p.id}`}
+                          className="px-2.5 py-1 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                        >
+                          Ver
+                        </Link>
+                        {canEdit && (
+                          <button
+                            onClick={() => setEditingProduct(p as Product)}
+                            className="px-2.5 py-1 text-xs font-medium text-neutral-600 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                          >
+                            Editar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {editingProduct && (
         <ProductFormModal
@@ -308,6 +340,92 @@ function ProductosTab({
         />
       )}
     </>
+  )
+}
+
+function FolderView({
+  products,
+  onOpenProduct,
+}: {
+  products: any[]
+  onOpenProduct: (id: string) => void
+}) {
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set())
+
+  const groups = useMemo(() => {
+    const map = new Map<string, any[]>()
+    for (const p of products) {
+      const key = p.category?.name ?? 'Sin categoría'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(p)
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'es'))
+  }, [products])
+
+  const toggleGroup = (key: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  if (groups.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-neutral-200 text-center py-12">
+        <p className="text-neutral-500">Sin productos para agrupar.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {groups.map(([category, items]) => {
+        const open = openGroups.has(category)
+        return (
+          <div key={category} className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
+            <button
+              onClick={() => toggleGroup(category)}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+              aria-expanded={open}
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold text-neutral-800">
+                <svg
+                  className={`w-4 h-4 text-neutral-400 transition-transform ${open ? 'rotate-90' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                {category}
+              </span>
+              <span className="text-xs font-medium text-neutral-500 bg-neutral-100 px-2.5 py-1 rounded-full">
+                {items.length} producto(s)
+              </span>
+            </button>
+            {open && (
+              <div className="px-4 pb-4 pt-1 border-t border-neutral-100">
+                <div className="flex flex-wrap gap-2">
+                  {items.map((p: any) => (
+                    <button
+                      key={p.id}
+                      onClick={() => onOpenProduct(p.id)}
+                      className="flex flex-col items-start gap-1 px-3 py-2 border border-neutral-200 rounded-lg hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                    >
+                      <span className="text-xs font-medium text-gray-900 max-w-56 truncate">{p.name}</span>
+                      <span className="text-[10px] font-mono text-neutral-400">{p.sku}</span>
+                      <ProductIndicators product={p as Product} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

@@ -52,12 +52,37 @@ export class SuppliersController {
     return this.suppliersService.findAllSuppliers({ search, status });
   }
 
+  @Get('suppliers/alerts')
+  @Roles(...READ_ROLES)
+  @ApiOperation({ summary: 'Alertas de evaluación de proveedores (bajo score / sin evaluación reciente)' })
+  @ApiQuery({ name: 'minScore', required: false, type: Number, description: 'Umbral de score (default 60)' })
+  findSupplierAlerts(@Query('minScore') minScore?: string) {
+    const parsed = minScore !== undefined ? Number(minScore) : undefined;
+    return this.suppliersService.findSupplierAlerts(Number.isFinite(parsed) ? parsed : 60);
+  }
+
+  @Get('suppliers/report')
+  @Roles(...READ_ROLES)
+  @ApiOperation({ summary: 'Reporte comparativo de proveedores por categoría' })
+  @ApiQuery({ name: 'category', required: true, type: String })
+  getSupplierReport(@Query('category') category: string) {
+    return this.suppliersService.getSupplierReport(category);
+  }
+
   @Get('suppliers/:id')
   @Roles(...READ_ROLES)
-  @ApiOperation({ summary: 'Detalle de un proveedor' })
+  @ApiOperation({ summary: 'Detalle de un proveedor (incluye averageScore y lastEvaluationDate)' })
   @ApiResponse({ status: 404, description: 'Proveedor no encontrado' })
   findOne(@Param('id') id: string) {
     return this.suppliersService.findOneSupplier(id);
+  }
+
+  @Get('suppliers/:id/products')
+  @Roles(...READ_ROLES)
+  @ApiOperation({ summary: 'Productos asociados a un proveedor (resueltos desde sus órdenes de compra)' })
+  @ApiResponse({ status: 404, description: 'Proveedor no encontrado' })
+  findSupplierProducts(@Param('id') id: string) {
+    return this.suppliersService.findSupplierProducts(id);
   }
 
   @Post('suppliers')
@@ -123,6 +148,23 @@ export class SuppliersController {
     return this.suppliersService.findStockByProduct(productId);
   }
 
+  @Get('products/:productId/suppliers')
+  @Roles(...READ_ROLES)
+  @ApiOperation({ summary: 'Proveedores asociados a un producto (resueltos desde sus órdenes de compra)' })
+  @ApiResponse({ status: 404, description: 'Producto no encontrado' })
+  findProductSuppliers(@Param('productId') productId: string) {
+    return this.suppliersService.findProductSuppliers(productId);
+  }
+
+  @Get('stock/alerts')
+  @Roles(...READ_ROLES)
+  @ApiOperation({ summary: 'Alertas de stock mínimo (out_of_stock / below_min / no_recent_movement)' })
+  @ApiQuery({ name: 'thresholdDays', required: false, type: Number })
+  findStockAlerts(@Query('thresholdDays') thresholdDays?: string) {
+    const parsed = thresholdDays !== undefined ? Number(thresholdDays) : undefined;
+    return this.suppliersService.findStockAlerts(Number.isFinite(parsed) ? parsed : undefined);
+  }
+
   @Post('products/:productId/stock')
   @Roles(...WRITE_ROLES)
   @HttpCode(HttpStatus.CREATED)
@@ -157,6 +199,21 @@ export class SuppliersController {
 
   // ============================ Órdenes de compra ============================
 
+  @Get('purchase-orders/dashboard')
+  @Roles(...READ_ROLES)
+  @ApiOperation({ summary: 'Panel de compras con indicadores agregados' })
+  getPurchaseOrderDashboard() {
+    return this.suppliersService.getPurchaseOrderDashboard();
+  }
+
+  @Get('purchase-orders/:id')
+  @Roles(...READ_ROLES)
+  @ApiOperation({ summary: 'Detalle de una orden de compra con historial completo' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
+  findOnePurchaseOrder(@Param('id') id: string) {
+    return this.suppliersService.findOnePurchaseOrder(id);
+  }
+
   @Get('purchase-orders')
   @Roles(...READ_ROLES)
   @ApiOperation({ summary: 'Listar órdenes de compra (filtro status; incluye proveedor)' })
@@ -177,7 +234,12 @@ export class SuppliersController {
 
   @Patch('purchase-orders/:id/status')
   @Roles(...WRITE_ROLES)
-  @ApiOperation({ summary: 'Actualizar estado de una orden de compra' })
+  @ApiOperation({
+    summary:
+      'Actualizar estado de una orden de compra (matriz: solicitada→aprobada|cancelada, aprobada→en_transito|cancelada, en_transito→recibida|cancelada, recibida→cerrada)',
+  })
+  @ApiResponse({ status: 400, description: 'Transición inválida' })
+  @ApiResponse({ status: 403, description: 'Rol no autorizado para ese estado' })
   @ApiResponse({ status: 404, description: 'Orden no encontrada' })
   updatePurchaseOrderStatus(
     @Param('id') id: string,

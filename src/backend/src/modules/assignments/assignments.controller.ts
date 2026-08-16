@@ -16,6 +16,10 @@ import { AccessContext } from '../../common/acl/acl.service';
 export class AssignmentsController {
   constructor(private readonly assignmentsService: AssignmentsService) {}
 
+  private ctx(user: any): AccessContext {
+    return { userId: user?.sub ?? user?.id, roles: user?.roles ?? [] };
+  }
+
   @Get()
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Listar asignaciones (filtros: userId, resourceType)' })
@@ -24,8 +28,30 @@ export class AssignmentsController {
     @Query('userId') userId?: string,
     @Query('resourceType') resourceType?: string,
   ) {
-    const ctx: AccessContext = { userId: user?.sub ?? user?.id, roles: user?.roles ?? [] };
-    return this.assignmentsService.findAll({ userId, resourceType }, ctx);
+    return this.assignmentsService.findAll({ userId, resourceType }, this.ctx(user));
+  }
+
+  @Get('matrix')
+  @Roles('Super Admin', 'Admin Comercial')
+  @ApiOperation({ summary: 'Matriz de accesos por entidad (LISTA|PRODUCT)' })
+  @ApiResponse({ status: 200, description: 'Matriz de asignaciones y acciones del viewer' })
+  matrix(@CurrentUser() user: any, @Query('entity') entity: string) {
+    return this.assignmentsService.matrix(entity, this.ctx(user));
+  }
+
+  @Get('preview')
+  @Roles('Super Admin', 'Admin Comercial')
+  @ApiOperation({
+    summary: 'Vista previa de reglas efectivas de un usuario/rol sobre una entidad (no persiste)',
+  })
+  preview(
+    @CurrentUser() user: any,
+    @Query('userId') userId?: string,
+    @Query('roleName') roleName?: string,
+    @Query('entity') entity?: string,
+    @Query('entityId') entityId?: string,
+  ) {
+    return this.assignmentsService.preview({ userId, roleName, entity, entityId }, this.ctx(user));
   }
 
   @Post()
@@ -37,16 +63,14 @@ export class AssignmentsController {
   @ApiResponse({ status: 404, description: 'Usuario o recurso no existe' })
   @ApiResponse({ status: 409, description: 'Ya existe una asignación activa' })
   create(@CurrentUser() user: any, @Body() dto: CreateAssignmentDto) {
-    const ctx: AccessContext = { userId: user?.sub ?? user?.id, roles: user?.roles ?? [] };
-    return this.assignmentsService.create(dto, ctx);
+    return this.assignmentsService.create(dto, this.ctx(user));
   }
 
   @Patch(':id')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Actualizar level y/o isActive de una asignación' })
   update(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: UpdateAssignmentDto) {
-    const ctx: AccessContext = { userId: user?.sub ?? user?.id, roles: user?.roles ?? [] };
-    return this.assignmentsService.update(id, dto, ctx);
+    return this.assignmentsService.update(id, dto, this.ctx(user));
   }
 
   @Delete(':id')
@@ -55,7 +79,6 @@ export class AssignmentsController {
   @ApiOperation({ summary: 'Desactivar lógicamente una asignación' })
   @ApiResponse({ status: 204, description: 'Asignación desactivada' })
   async remove(@CurrentUser() user: any, @Param('id') id: string) {
-    const ctx: AccessContext = { userId: user?.sub ?? user?.id, roles: user?.roles ?? [] };
-    await this.assignmentsService.remove(id, ctx);
+    await this.assignmentsService.remove(id, this.ctx(user));
   }
 }

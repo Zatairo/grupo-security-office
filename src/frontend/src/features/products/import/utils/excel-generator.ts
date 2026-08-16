@@ -55,3 +55,45 @@ export async function exportImportSummary(
 
   XLSX.writeFile(wb, `${fileName.replace(/\.[^.]+$/, '')}_reporte.xlsx`);
 }
+
+/**
+ * Genera un log de importación en texto plano (.txt) descargable con fecha,
+ * archivo, lista destino, totales y errores por fila.
+ */
+export function exportImportLog(params: {
+  fileName: string;
+  listaLabel?: string;
+  totals: { total: number; created: number; updated: number; skipped: number; errors: number };
+  errors: Array<{ rowIndex?: number; sku?: string; error: string }>;
+}): void {
+  const lines: string[] = [];
+  lines.push('LOG DE IMPORTACION');
+  lines.push('=================');
+  lines.push(`Fecha: ${new Date().toLocaleString('es-CL')}`);
+  lines.push(`Archivo: ${params.fileName}`);
+  lines.push(`Lista destino: ${params.listaLabel || 'Sin lista'}`);
+  lines.push('');
+  lines.push('Totales:');
+  lines.push(`  - Total filas procesadas: ${params.totals.total}`);
+  lines.push(`  - Productos creados: ${params.totals.created}`);
+  lines.push(`  - Productos actualizados: ${params.totals.updated}`);
+  lines.push(`  - Filas omitidas: ${params.totals.skipped}`);
+  lines.push(`  - Filas con error: ${params.totals.errors}`);
+  if (params.errors.length > 0) {
+    lines.push('');
+    lines.push('Errores por fila:');
+    for (const e of params.errors) {
+      lines.push(`  - Fila ${e.rowIndex ?? '?'} | SKU ${e.sku || 'N/A'} | ${e.error}`);
+    }
+  }
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${params.fileName.replace(/\.[^.]+$/, '')}_log.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

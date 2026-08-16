@@ -395,15 +395,159 @@ describe('PricesService', () => {
     });
   });
 
+  // --- Solapamiento de vigencias (checklist 21) ---
+  describe('solapamiento de precios', () => {
+    function existingOverlapping(overrides: Record<string, any> = {}) {
+      return {
+        id: 'price-x',
+        productId: 'prod-1',
+        priceListId: 'pl-2',
+        listaId: 'lista-prod',
+        value: 1000,
+        currency: 'COP',
+        validFrom: new Date('2026-01-01'),
+        validUntil: new Date('2026-12-31'),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...overrides,
+      };
+    }
+
+    it('createPrice rechaza con 409 si la vigencia se solapa con otro precio de la misma Lista', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: 'lista-prod' });
+      mockPrisma.priceList.findUnique.mockResolvedValue({ id: 'pl-1' });
+      mockPrisma.price.findUnique.mockResolvedValue(null);
+      mockPrisma.price.findMany.mockResolvedValue([existingOverlapping()]);
+
+      const dto = {
+        productId: 'prod-1',
+        priceListId: 'pl-1',
+        value: 1500000,
+        validFrom: '2026-06-01',
+        validUntil: '2026-07-01',
+      };
+
+      await expect(service.createPrice(dto)).rejects.toThrow(ConflictException);
+      await expect(service.createPrice(dto)).rejects.toThrow('se solapa con la vigencia del precio price-x');
+      expect(mockPrisma.price.create).not.toHaveBeenCalled();
+    });
+
+    it('createPrice acepta cuando la vigencia no se solapa', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: 'lista-prod' });
+      mockPrisma.priceList.findUnique.mockResolvedValue({ id: 'pl-1' });
+      mockPrisma.price.findUnique.mockResolvedValue(null);
+      // Otro precio en 2027, sin solapamiento.
+      mockPrisma.price.findMany.mockResolvedValue([
+        existingOverlapping({ validFrom: new Date('2027-01-01'), validUntil: new Date('2027-12-31') }),
+      ]);
+      mockPrisma.price.create.mockResolvedValue(mockPriceWithRelations);
+
+      const dto = {
+        productId: 'prod-1',
+        priceListId: 'pl-1',
+        value: 1500000,
+        validFrom: '2026-06-01',
+        validUntil: '2026-07-01',
+      };
+
+      const result = await service.createPrice(dto as any);
+      expect(result.value).toBe(1500000);
+    });
+
+    it('createPrice rechaza solapamiento con vigencia abierta (validUntil null)', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: 'lista-prod' });
+      mockPrisma.priceList.findUnique.mockResolvedValue({ id: 'pl-1' });
+      mockPrisma.price.findUnique.mockResolvedValue(null);
+      mockPrisma.price.findMany.mockResolvedValue([
+        existingOverlapping({ validFrom: new Date('2026-01-01'), validUntil: null }),
+      ]);
+
+      const dto = {
+        productId: 'prod-1',
+        priceListId: 'pl-1',
+        value: 1500000,
+        validFrom: '2026-06-01',
+      };
+
+      await expect(service.createPrice(dto)).rejects.toThrow(ConflictException);
+      await expect(service.createPrice(dto)).rejects.toThrow('se solapa');
+    });
+
+    it('updatePrice rechaza con 409 si la nueva vigencia se solapa con otro precio', async () => {
+      mockPrisma.price.findUnique.mockResolvedValue(mockPrice);
+      mockPrisma.price.findMany.mockResolvedValue([
+        existingOverlapping({ id: 'price-y', priceListId: 'pl-1', validFrom: new Date('2026-05-01'), validUntil: new Date('2026-06-15') }),
+      ]);
+
+      const dto = { validFrom: '2026-06-01', validUntil: '2026-07-01' };
+
+      await expect(service.updatePrice('price-1', dto)).rejects.toThrow(ConflictException);
+      await expect(service.updatePrice('price-1', dto)).rejects.toThrow('se solapa con la vigencia del precio price-y');
+    });
+
+    it('updatePrice permite ampliar vigencia sin solapamiento', async () => {
+      mockPrisma.price.findUnique.mockResolvedValue(mockPrice);
+      mockPrisma.price.findMany.mockResolvedValue([]);
+      mockPrisma.price.update.mockResolvedValue({ ...mockPriceWithRelations, value: 1600000 });
+
+      const result = await service.updatePrice('price-1', { value: 1600000 });
+      expect(result.value).toBe(1600000);
+    });
+  });
+
+  // --- Historial inmutable de precios (checklist 22) ---
+  describe('historial inmutable de precios', () => {
+    it('updatePrice audita con oldValues completos y newValues con origin manual', async () => {
+      mockPrisma.price.findUnique.mockResolvedValue(mockPrice);
+      mockPrisma.price.findMany.mockResolvedValue([]);
+      mockPrisma.price.update.mockResolvedValue({ ...mockPriceWithRelations, value: 1600000 });
+
+      await service.updatePrice('price-1', { value: 1600000 }, { userId: 'admin-1' });
+
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'update',
+          entity: 'Price',
+          entityId: 'price-1',
+          oldValues: expect.objectContaining({
+            value: 1500000,
+            currency: 'COP',
+            validFrom: null,
+            validUntil: null,
+          }),
+          newValues: expect.objectContaining({
+            value: 1600000,
+            origin: 'manual',
+          }),
+        }),
+      );
+    });
+
+    it('no borra ni edita logs existentes: audit solo crea registros', async () => {
+      mockPrisma.price.findUnique.mockResolvedValue(mockPrice);
+      mockPrisma.price.findMany.mockResolvedValue([]);
+      mockPrisma.price.update.mockResolvedValue(mockPriceWithRelations);
+
+      await service.updatePrice('price-1', { value: 2000000 });
+
+      // El único touch a audit es create (log), nunca deleteMany/update.
+      expect(mockPrisma.auditLog.create).not.toHaveBeenCalled(); // se usa AuditService.log
+      expect(mockPrisma.auditLog.findMany).not.toHaveBeenCalled();
+      expect(mockAudit.log).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // --- ACL deny-by-default (AclService real) ---
   describe('ACL deny-by-default', () => {
     const LISTA_ID = 'list-1';
     const ADMIN = { userId: 'admin-1', roles: ['Super Admin'] };
     const VIEWER = { userId: 'pepito-1', roles: ['Operador'] }; // view sobre LISTA
+    const EDIT_PRICES = { userId: 'price-editor', roles: ['Admin Comercial'] }; // edit_prices sobre LISTA
     const NOAUTH = { userId: 'none-1', roles: ['Operador'] }; // sin assignments
 
     const listaAssignments: Record<string, { resourceId: string; level: string; isActive: boolean }[]> = {
       [VIEWER.userId]: [{ resourceId: LISTA_ID, level: 'view', isActive: true }],
+      [EDIT_PRICES.userId]: [{ resourceId: LISTA_ID, level: 'edit_prices', isActive: true }],
       [ADMIN.userId]: [],
       [NOAUTH.userId]: [],
     };
@@ -430,10 +574,15 @@ describe('PricesService', () => {
       mockPrisma.lista.findUnique.mockResolvedValue({ id: LISTA_ID, code: 'LISTA-GENERAL', isActive: true, archivedAt: null });
     });
 
-    it('findPricesByProduct: view ve precios de su Lista', async () => {
+    it('findPricesByProduct: view no ve precios (403, exige edit_prices)', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: LISTA_ID });
+      await expect(svc.findPricesByProduct('prod-1', VIEWER)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('findPricesByProduct: edit_prices ve precios de su Lista', async () => {
       mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: LISTA_ID });
       mockPrisma.price.findMany.mockResolvedValue([mockPriceWithRelations]);
-      const res = await svc.findPricesByProduct('prod-1', VIEWER);
+      const res = await svc.findPricesByProduct('prod-1', EDIT_PRICES);
       expect(res.data).toHaveLength(1);
     });
 

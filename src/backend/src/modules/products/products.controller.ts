@@ -5,6 +5,8 @@ import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
+import { PublishProductDto } from './dto/publish-product.dto';
+import { UnpublishProductDto } from './dto/unpublish-product.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AccessContext } from '../../common/acl/acl.service';
@@ -32,6 +34,18 @@ export class ProductsController {
     @Query('search') search?: string
   ) {
     return this.productsService.findTrending({ take, categoryId, search });
+  }
+
+  @Get('publish-scheduled')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
+  @ApiOperation({ summary: 'Listar productos programados para publicación' })
+  @ApiQuery({ name: 'from', required: false, type: String, description: 'Inicio del rango (ISO). Default: ahora.' })
+  @ApiQuery({ name: 'to', required: false, type: String, description: 'Fin del rango (ISO). Default: ahora + 7 días.' })
+  findPublishScheduled(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.productsService.findPublishScheduled(from, to);
   }
 
   @Get()
@@ -95,11 +109,38 @@ export class ProductsController {
     return this.productsService.toggleActive(id, this.ctx(user));
   }
 
+  @Patch(':id/publish')
+  @Roles('Super Admin', 'Admin Comercial')
+  @ApiOperation({ summary: 'Publicar o programar publicación de un producto' })
+  @ApiResponse({ status: 200, description: 'Producto publicado o programado' })
+  @ApiResponse({ status: 400, description: 'Requisitos previos a publicación no cumplidos (detalle)' })
+  @ApiResponse({ status: 409, description: 'El producto ya está publicado' })
+  publish(
+    @Param('id') id: string,
+    @Body() dto: PublishProductDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.productsService.publish(id, dto, this.ctx(user));
+  }
+
+  @Patch(':id/unpublish')
+  @Roles('Super Admin', 'Admin Comercial')
+  @ApiOperation({ summary: 'Despublicar un producto (pasa a borrador con razón)' })
+  @ApiResponse({ status: 200, description: 'Producto despublicado' })
+  @ApiResponse({ status: 400, description: 'Motivo inválido' })
+  unpublish(
+    @Param('id') id: string,
+    @Body() dto: UnpublishProductDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.productsService.unpublish(id, dto, this.ctx(user));
+  }
+
   @Delete(':id')
   @Roles('Super Admin')
   @ApiOperation({ summary: 'Eliminar producto' })
-  remove(@Param('id') id: string) {
-    return this.productsService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.productsService.remove(id, this.ctx(user));
   }
 
   @Post('import')
@@ -141,9 +182,10 @@ export class ProductsController {
   uploadImage(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: any,
     @Body('isPrimary') isPrimary?: string,
   ) {
-    return this.productsService.uploadImage(id, file, isPrimary === 'true');
+    return this.productsService.uploadImage(id, file, isPrimary === 'true', this.ctx(user));
   }
 
   @Delete('images/:imageId')
@@ -151,7 +193,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Eliminar imagen de producto' })
   @ApiResponse({ status: 200, description: 'Imagen eliminada' })
   @ApiResponse({ status: 404, description: 'Imagen no encontrada' })
-  removeImage(@Param('imageId') imageId: string) {
-    return this.productsService.deleteImage(imageId);
+  removeImage(@Param('imageId') imageId: string, @CurrentUser() user: any) {
+    return this.productsService.deleteImage(imageId, this.ctx(user));
   }
 }

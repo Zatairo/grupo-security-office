@@ -16,10 +16,13 @@ jest.mock('../../prisma/prisma.service', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService } from '../../common/acl/acl.service';
+import { AuditService } from '../audit/audit.service';
+
+const mockAudit = { log: jest.fn().mockResolvedValue(undefined) };
 
 const mockAcl = {
   isSuperAdmin: jest.fn().mockReturnValue(false),
@@ -42,6 +45,12 @@ const mockProduct = {
   technicalSpecs: { resolution: '4MP' },
   isActive: true,
   isVisible: true,
+  publishStatus: 'borrador',
+  publishedAt: null,
+  publishAt: null,
+  unpublishAt: null,
+  publishedById: null,
+  unpublishReason: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -70,6 +79,7 @@ describe('ProductsService', () => {
         ProductsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AclService, useValue: mockAcl },
+        { provide: AuditService, useValue: mockAudit },
       ],
     }).compile();
 
@@ -452,6 +462,202 @@ describe('ProductsService', () => {
     });
   });
 
+  // --- Publicación: estados, programación, validaciones y lazy unpublish ---
+  describe('publish', () => {
+    function readyProduct(overrides: Record<string, any> = {}) {
+      return {
+        id: 'p1',
+        sku: 'CAM-PUB',
+        name: 'Cámara Publicable',
+        categoryId: 'cat-1',
+        brandId: 'brand-1',
+        listaId: 'lista-1',
+        isActive: true,
+        isVisible: false,
+        publishStatus: 'borrador',
+        publishedAt: null,
+        publishAt: null,
+        unpublishAt: null,
+        publishedById: null,
+        unpublishReason: null,
+        ...overrides,
+      };
+    }
+
+    it('publica un producto que cumple todos los requisitos', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct());
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: null });
+      mockPrisma.price.count.mockResolvedValue(1);
+      mockPrisma.productImage.count.mockResolvedValue(1);
+      mockPrisma.stock.findUnique.mockResolvedValue(null);
+      mockPrisma.product.update.mockResolvedValue(readyProduct({ publishStatus: 'publicado' }));
+
+      const result = await service.publish('p1', {});
+
+      expect(result.publishStatus).toBe('publicado');
+      expect(mockPrisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            publishStatus: 'publicado',
+            publishAt: null,
+            publishedById: null,
+          }),
+        }),
+      );
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'publish', entity: 'Product', entityId: 'p1' }),
+      );
+    });
+
+    it('rechaza publicación con 400 listando TODOS los requisitos incumplidos', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct({ isActive: false }));
+      // Lista archivada y sin precios ni imágenes: fallan (a),(b),(c),(d).
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: new Date() });
+      mockPrisma.price.count.mockResolvedValue(0);
+      mockPrisma.productImage.count.mockResolvedValue(0);
+      mockPrisma.stock.findUnique.mockResolvedValue(null);
+
+      await expect(service.publish('p1', {})).rejects.toThrow(BadRequestException);
+      await expect(service.publish('p1', {})).rejects.toThrow(
+        /lista destino|no está activo|precio vigente|imagen/,
+      );
+      expect(mockPrisma.product.update).not.toHaveBeenCalled();
+    });
+
+    it('rechaza publicar un producto ya publicado con 409', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct({ publishStatus: 'publicado' }));
+
+      await expect(service.publish('p1', {})).rejects.toThrow(ConflictException);
+      await expect(service.publish('p1', {})).rejects.toThrow('ya está publicado');
+    });
+
+    it('no bloquea por stock cuando no existe registro de stock (decisión documentada)', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct());
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: null });
+      mockPrisma.price.count.mockResolvedValue(1);
+      mockPrisma.productImage.count.mockResolvedValue(1);
+      mockPrisma.stock.findUnique.mockResolvedValue(null);
+      mockPrisma.product.update.mockResolvedValue(readyProduct({ publishStatus: 'publicado' }));
+
+      const result = await service.publish('p1', {});
+      expect(result.publishStatus).toBe('publicado');
+    });
+
+    it('bloquea por stock cuando existe registro con availableQty <= 0', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct());
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: null });
+      mockPrisma.price.count.mockResolvedValue(1);
+      mockPrisma.productImage.count.mockResolvedValue(1);
+      mockPrisma.stock.findUnique.mockResolvedValue({ productId: 'p1', availableQty: 0, reservedQty: 0 });
+
+      await expect(service.publish('p1', {})).rejects.toThrow(BadRequestException);
+      await expect(service.publish('p1', {})).rejects.toThrow(/stock/);
+    });
+
+    it('programa publicación futura dejando el producto en listo', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct());
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: null });
+      mockPrisma.price.count.mockResolvedValue(1);
+      mockPrisma.productImage.count.mockResolvedValue(1);
+      mockPrisma.stock.findUnique.mockResolvedValue(null);
+      const future = new Date(Date.now() + 86400000).toISOString();
+      mockPrisma.product.update.mockResolvedValue(readyProduct({ publishStatus: 'listo' }));
+
+      const result = await service.publish('p1', { publishAt: future });
+
+      expect(result.publishStatus).toBe('listo');
+      expect(mockPrisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ publishStatus: 'listo', publishedAt: null }),
+        }),
+      );
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'schedule_publish', entity: 'Product' }),
+      );
+    });
+  });
+
+  describe('unpublish', () => {
+    it('despublica a borrador con razón y audita', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({
+        ...mockProduct,
+        id: 'p1',
+        listaId: 'lista-1',
+        publishStatus: 'publicado',
+      });
+      mockPrisma.product.update.mockResolvedValue({ ...mockProduct, id: 'p1', publishStatus: 'borrador' });
+
+      const result = await service.unpublish('p1', { reason: 'Campaña finalizada' });
+
+      expect(result.publishStatus).toBe('borrador');
+      expect(mockPrisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ publishStatus: 'borrador', unpublishReason: 'Campaña finalizada' }),
+        }),
+      );
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'unpublish',
+          entity: 'Product',
+          entityId: 'p1',
+          newValues: expect.objectContaining({ publishStatus: 'borrador', unpublishReason: 'Campaña finalizada' }),
+        }),
+      );
+    });
+
+    it('lanza 404 si el producto no existe', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(null);
+      await expect(service.unpublish('no-existe', {})).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('lazy unpublish (runtime, sin cron)', () => {
+    it('findOne despublica en runtime si unpublishAt ya venció', async () => {
+      const expired = { ...mockProduct, id: 'p1', listaId: 'lista-1', publishStatus: 'publicado', unpublishAt: new Date(Date.now() - 1000) };
+      mockPrisma.product.findUnique.mockResolvedValue(expired);
+      mockPrisma.product.update.mockResolvedValue({ ...expired, publishStatus: 'borrador', unpublishReason: 'auto' });
+
+      const result = await service.findOne('p1');
+
+      expect(result.publishStatus).toBe('borrador');
+      expect(result.unpublishReason).toBe('auto');
+      expect(mockPrisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ publishStatus: 'borrador', unpublishReason: 'auto' }) }),
+      );
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'unpublish', entity: 'Product', entityId: 'p1' }),
+      );
+    });
+
+    it('findOne no toca un producto publicado sin vencer', async () => {
+      const active = { ...mockProduct, id: 'p1', listaId: 'lista-1', publishStatus: 'publicado', unpublishAt: new Date(Date.now() + 86400000) };
+      mockPrisma.product.findUnique.mockResolvedValue(active);
+
+      const result = await service.findOne('p1');
+
+      expect(result.publishStatus).toBe('publicado');
+      expect(mockPrisma.product.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findPublishScheduled', () => {
+    it('lista productos programados entre from y to', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([
+        { id: 'p1', sku: 'CAM-001', name: 'Cámara', publishAt: new Date('2026-09-01'), unpublishAt: null, lista: { id: 'l1', name: 'Lista 1', code: 'L1' } },
+      ]);
+
+      const result = await service.findPublishScheduled('2026-08-01', '2026-10-01');
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toHaveProperty('sku', 'CAM-001');
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ publishStatus: 'listo' }),
+        }),
+      );
+    });
+  });
+
   // --- Regresión post-Catalog (entidad eliminada) ---
   describe('catálogo eliminado (regresión)', () => {
     it('findAll no filtra por catalogId', async () => {
@@ -696,7 +902,7 @@ describe('ProductsService', () => {
 
     beforeEach(() => {
       acl = new AclService(mockPrisma as any);
-      svc = new ProductsService(mockPrisma as any, acl);
+      svc = new ProductsService(mockPrisma as any, acl, mockAudit as any);
       mockPrisma.assignment.findMany.mockImplementation(async (args: any) => {
         const u = args?.where?.userId;
         const rt = args?.where?.resourceType;
@@ -762,6 +968,43 @@ describe('ProductsService', () => {
 
       const dto = { sku: 'NEW-1', name: 'X', categoryId: 'cat-1', brandId: 'brand-1', listaId: LISTA_ID };
       await expect(svc.create(dto as any, VIEWER)).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('stockStatus calculado (Tanda 1C)', () => {
+    it('findAll: in_stock con availableQty > 0', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([mockProductWithRelations]);
+      mockPrisma.product.count.mockResolvedValue(1);
+      mockPrisma.stock.findMany.mockResolvedValue([{ id: 's1', productId: 'prod-1', availableQty: 5 }]);
+
+      const res = await service.findAll({ skip: 0, take: 50 });
+      expect(res.data[0].stockStatus).toBe('in_stock');
+    });
+
+    it('findAll: out_of_stock con availableQty 0', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([mockProductWithRelations]);
+      mockPrisma.product.count.mockResolvedValue(1);
+      mockPrisma.stock.findMany.mockResolvedValue([{ id: 's1', productId: 'prod-1', availableQty: 0 }]);
+
+      const res = await service.findAll({ skip: 0, take: 50 });
+      expect(res.data[0].stockStatus).toBe('out_of_stock');
+    });
+
+    it('findAll: no_stock_data sin registro de stock', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([mockProductWithRelations]);
+      mockPrisma.product.count.mockResolvedValue(1);
+      mockPrisma.stock.findMany.mockResolvedValue([]);
+
+      const res = await service.findAll({ skip: 0, take: 50 });
+      expect(res.data[0].stockStatus).toBe('no_stock_data');
+    });
+
+    it('findOne: incluye stockStatus calculado', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(mockProductWithRelations);
+      mockPrisma.stock.findUnique.mockResolvedValue({ id: 's1', productId: 'prod-1', availableQty: 8 });
+
+      const res = await service.findOne('prod-1');
+      expect(res.stockStatus).toBe('in_stock');
     });
   });
 });

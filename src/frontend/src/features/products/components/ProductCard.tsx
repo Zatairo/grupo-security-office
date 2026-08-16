@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import type { Product } from '../types/product.types'
 import { ProductStatusBadge } from './ProductStatusBadge'
+import { StockBadge, PublishBadge } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
 import { formatCurrency } from '../../../lib/format'
 
@@ -50,6 +51,8 @@ export function ProductCard({ product, onEdit, onToggleActive, onDelete }: Produ
               className="px-2 py-0.5 bg-security-600 text-white text-[10px] font-semibold rounded"
             />
           )}
+          <StockBadge product={product} />
+          <PublishBadge product={product} />
         </div>
         {/* Actions */}
         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
