@@ -5,13 +5,14 @@ interface ImportStepperProps {
 }
 
 const STEPS: { key: ImportStep; label: string; number: number }[] = [
-  { key: 'upload', label: 'Subir', number: 1 },
-  { key: 'headers', label: 'Encabezados', number: 2 },
-  { key: 'mapping', label: 'Mapeo', number: 3 },
-  { key: 'validation', label: 'Validacion', number: 4 },
-  { key: 'confirm', label: 'Confirmar', number: 5 },
-  { key: 'execution', label: 'Ejecutando', number: 6 },
-  { key: 'result', label: 'Resultado', number: 7 },
+  { key: 'sections', label: 'Secciones', number: 1 },
+  { key: 'upload', label: 'Subir', number: 2 },
+  { key: 'headers', label: 'Encabezados', number: 3 },
+  { key: 'mapping', label: 'Mapeo', number: 4 },
+  { key: 'validation', label: 'Validacion', number: 5 },
+  { key: 'confirm', label: 'Confirmar', number: 6 },
+  { key: 'execution', label: 'Ejecutando', number: 7 },
+  { key: 'result', label: 'Resultado', number: 8 },
 ];
 
 const STEP_ORDER: ImportStep[] = STEPS.map((s) => s.key);

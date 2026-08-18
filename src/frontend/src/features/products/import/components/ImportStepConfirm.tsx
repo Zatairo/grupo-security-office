@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useImportStore } from '../store/import.store';
 import { useSaveImportMapping } from '../hooks/useImportMappings';
 import { usePriceComparison } from '../hooks/usePriceComparison';
+import { fetchListas } from '../../../../services/listas.service';
 import {
   PRICE_FIELD_LABELS,
   computeDeltaPercent,
@@ -151,6 +153,9 @@ export default function ImportStepConfirm() {
   const [presetName, setPresetName] = useState('');
 
   const saveMappingMutation = useSaveImportMapping();
+  const listaId = useImportStore((s) => s.listaId);
+  const { data: listas } = useQuery({ queryKey: ['listas'], queryFn: fetchListas });
+  const listaDestino = (listas ?? []).find((l) => l.id === listaId);
 
   const handleExecute = async () => {
     if (savePreset && presetName.trim()) {
@@ -204,6 +209,11 @@ export default function ImportStepConfirm() {
 
           <dt className="text-gray-500">Columnas mapeadas:</dt>
           <dd className="font-medium text-security-900">{columnMappings.length}</dd>
+
+          <dt className="text-gray-500">Lista destino:</dt>
+          <dd className="font-medium text-security-900">
+            {listaDestino ? `${listaDestino.name} (${listaDestino.code})` : 'Sin lista'}
+          </dd>
         </dl>
       </div>
 

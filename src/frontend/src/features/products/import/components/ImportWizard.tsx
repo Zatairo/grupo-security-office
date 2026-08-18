@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useImportStore } from '../store/import.store';
 import { Alert } from '../../../../components/ui';
 import ImportStepper from './ImportStepper';
+import ImportStepSections from './ImportStepSections';
 import ImportStepUpload from './ImportStepUpload';
 import ImportStepHeaders from './ImportStepHeaders';
 import ImportStepMapping from './ImportStepMapping';
@@ -11,6 +12,7 @@ import ImportStepExecution from './ImportStepExecution';
 import ImportStepResult from './ImportStepResult';
 
 const STEP_LABELS: Record<string, string> = {
+  sections: 'Secciones',
   upload: 'Carga de archivo',
   headers: 'Encabezados',
   mapping: 'Mapeo de columnas',
@@ -46,6 +48,8 @@ export default function ImportWizard({ onClose, onComplete, listaId }: ImportWiz
 
   const renderStep = () => {
     switch (currentStep) {
+      case 'sections':
+        return <ImportStepSections />;
       case 'upload':
         return <ImportStepUpload />;
       case 'headers':

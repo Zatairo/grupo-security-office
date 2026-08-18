@@ -53,7 +53,7 @@ export interface MappingPreset {
   isDefault: boolean;
 }
 
-export type ImportStep = 'upload' | 'headers' | 'mapping' | 'validation' | 'confirm' | 'execution' | 'result';
+export type ImportStep = 'sections' | 'upload' | 'headers' | 'mapping' | 'validation' | 'confirm' | 'execution' | 'result';
 
 export interface ImportWizardState {
   currentStep: ImportStep;

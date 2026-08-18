@@ -10,7 +10,7 @@ export function hasPersistedImportState(): boolean {
     if (!raw) return false;
     const parsed = JSON.parse(raw);
     const step = parsed?.state?.currentStep;
-    return typeof step === 'string' && step !== 'upload' && step !== 'execution' && step !== 'result';
+    return typeof step === 'string' && step !== 'sections' && step !== 'upload' && step !== 'execution' && step !== 'result';
   } catch {
     return false;
   }
@@ -35,10 +35,10 @@ interface ImportStore extends ImportWizardState {
   dismissRestored: () => void;
 }
 
-const STEPS: ImportStep[] = ['upload', 'headers', 'mapping', 'validation', 'confirm', 'execution', 'result'];
+const STEPS: ImportStep[] = ['sections', 'upload', 'headers', 'mapping', 'validation', 'confirm', 'execution', 'result'];
 
 const initialState: ImportWizardState = {
-  currentStep: 'upload',
+  currentStep: 'sections',
   file: null,
   fileBuffer: null,
   fileName: '',
@@ -110,7 +110,7 @@ export const useImportStore = create<ImportStore>()(
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Record<string, unknown> | undefined;
         if (!persisted) return currentState;
-        if (persisted.currentStep === 'execution' || persisted.currentStep === 'result') {
+        if (persisted.currentStep === 'sections' || persisted.currentStep === 'execution' || persisted.currentStep === 'result') {
           return currentState;
         }
         if (persisted.currentStep === 'upload' && !persisted.fileName) {
