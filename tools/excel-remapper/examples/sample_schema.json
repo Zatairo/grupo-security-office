@@ -1,58 +1,87 @@
 {
-  "name": "productos_schema",
-  "version": "1.0",
-  "description": "Schema destino de ejemplo para productos/servicios",
+  "name": "productos_schema_grupo_security",
+  "version": "2.0",
+  "description": "Schema canonico REAL de la web Grupo Security (Colombia). Extraido del SystemField del pipeline de importacion de productos (src/backend/src/modules/products/import/interfaces/column-mapping.ts). Moneda fija COP gestionada por el backend (NO es columna mapeable). Sin unidad_medida ni estado: el importador no los acepta.",
   "fields": [
     {
-      "name": "codigo",
+      "name": "sku",
       "type": "string",
       "required": true,
-      "description": "Código único del producto"
+      "description": "Identificador unico del producto (max. 100 caracteres, sin espacios). Campo requerido por el importador."
     },
     {
-      "name": "nombre",
+      "name": "name",
       "type": "string",
       "required": true,
-      "description": "Nombre del producto"
+      "description": "Nombre comercial del producto (max. 500 caracteres). Campo requerido por el importador."
     },
     {
-      "name": "descripcion",
+      "name": "description",
       "type": "string",
       "required": false,
-      "description": "Descripción del producto"
+      "description": "Descripcion del producto. Opcional."
     },
     {
-      "name": "categoria",
+      "name": "category",
       "type": "string",
-      "required": true,
-      "description": "Categoría o familia del producto"
+      "required": false,
+      "default": "Sin categoría",
+      "description": "Categoria del producto. Si queda vacia, el backend asigna 'Sin categoría'."
     },
     {
-      "name": "precio",
+      "name": "brand",
+      "type": "string",
+      "required": false,
+      "default": "Sin marca",
+      "description": "Marca del producto. Si queda vacia, el backend asigna 'Sin marca'."
+    },
+    {
+      "name": "technicalSpecs",
+      "type": "json",
+      "required": false,
+      "description": "Especificaciones tecnicas (objeto JSON o string JSON valido). Opcional."
+    },
+    {
+      "name": "price_instalador_iva",
       "type": "number",
       "required": false,
-      "description": "Precio unitario"
+      "description": "Precio instalador con IVA -> lista de precios INSTALADOR_IVA. Moneda fija COP."
     },
     {
-      "name": "moneda",
-      "type": "string",
+      "name": "price_tienda_iva",
+      "type": "number",
       "required": false,
-      "description": "Moneda del precio",
-      "default": "CLP"
+      "description": "Precio tienda con IVA -> lista de precios TIENDA_IVA. Moneda fija COP."
     },
     {
-      "name": "estado",
-      "type": "string",
+      "name": "price_dpp_oro_iva",
+      "type": "number",
       "required": false,
-      "description": "Estado del producto (activo/inactivo)",
-      "default": "activo"
+      "description": "Precio DPP Oro con IVA -> lista de precios DPP_ORO_IVA. Moneda fija COP."
     },
     {
-      "name": "unidad_medida",
-      "type": "string",
+      "name": "price_dpp_platino_iva",
+      "type": "number",
       "required": false,
-      "description": "Unidad de medida",
-      "default": "unidad"
+      "description": "Precio DPP Platino con IVA -> lista de precios DPP_PLATINO_IVA. Moneda fija COP."
+    },
+    {
+      "name": "price_cliente_final_iva",
+      "type": "number",
+      "required": false,
+      "description": "Precio cliente final con IVA -> lista de precios CLIENTE_FINAL_IVA. Moneda fija COP."
+    },
+    {
+      "name": "price_oro_sin_iva",
+      "type": "number",
+      "required": false,
+      "description": "Precio Oro sin IVA -> lista de precios ORO_SIN_IVA. Moneda fija COP."
+    },
+    {
+      "name": "price_installer_sin_iva",
+      "type": "number",
+      "required": false,
+      "description": "Precio installer sin IVA -> lista de precios INSTALLER_SIN_IVA. Moneda fija COP."
     }
   ]
 }

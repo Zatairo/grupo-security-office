@@ -9,6 +9,7 @@ import {
   BatchError,
   ImportContext,
 } from '../interfaces/import-context';
+import { generateSlug } from '../helpers/text-normalizer';
 
 /**
  * Configuración de batch execution.
@@ -27,6 +28,9 @@ const DEFAULT_BATCH_CONFIG: BatchConfig = {
   maxRetries: 2,
   delayBetweenBatches: 100,
 };
+
+/** Decisión de sección del wizard, normalizada por sourceValue (slug). */
+type SectionDecisionMap = NonNullable<ImportContext['sectionDecisions']>;
 
 /**
  * Servicio de ejecución en batch.
@@ -201,6 +205,7 @@ export class BatchExecutorService {
             row.categoryInferredSlug,
             categoryMap,
             batchResult.defaults,
+            ctx.sectionDecisions,
           );
 
           // Resolver marca (siempre retorna un ID — default "Sin marca" si vacío)
@@ -310,6 +315,12 @@ export class BatchExecutorService {
    *
    * Si viene un slug inferido, solo se usa la categoría EXISTENTE por slug;
    * si no existe, se cae al default y se cuenta como "default por falta de inferencia".
+   *
+   * Si el contexto trae decisiones de secciones del wizard (sectionDecisions) y el
+   * valor fuente de la fila está mapeado:
+   * - skip → default "Sin categoría"
+   * - create/reuse → find-or-create por targetName (nunca duplica)
+   * El valor fuente NO mapeado conserva el comportamiento original.
    */
   private async resolveCategory(
     tx: any,
@@ -317,8 +328,26 @@ export class BatchExecutorService {
     inferredSlug: string | undefined,
     categoryMap: Map<string, { id: string; name: string; slug: string }>,
     defaults: { category: number; brand: number },
+    sectionDecisions?: SectionDecisionMap,
   ): Promise<{ id: string }> {
     const normalizedName = name?.toLowerCase().trim() ?? '';
+
+    // WIZARD: aplicar decisión de sección si el valor fuente está mapeado.
+    // La clave del mapping se normalizó con generateSlug al construir
+    // sectionDecisions (import.service) — aquí se compara con la misma normalización.
+    if (sectionDecisions && normalizedName) {
+      const sourceSlug = generateSlug(name);
+      const decision = sourceSlug ? sectionDecisions[sourceSlug] : undefined;
+
+      if (decision) {
+        if (decision.action === 'skip') {
+          defaults.category++;
+          return this.resolveDefaultCategory(tx, categoryMap);
+        }
+        // create/reuse: find-or-create por targetName (nunca duplicar en BD)
+        return this.findOrCreateCategory(tx, decision.targetName ?? name, categoryMap);
+      }
+    }
 
     // Inferencia: solo usar categoría existente por slug
     if (inferredSlug) {
@@ -352,6 +381,40 @@ export class BatchExecutorService {
 
     categoryMap.set(normalizedName, newCategory);
     return newCategory;
+  }
+
+  /**
+   * Find-or-create de categoría por targetName (decisión del wizard).
+   * Busca por nombre (case-insensitive) en el mapa precargado; si no está,
+   * cae a búsqueda por slug en BD (cubre variantes de acentos/caso) y solo
+   * crea si no existe. La diferencia create/reuse es semántica para el frontend.
+   */
+  private async findOrCreateCategory(
+    tx: any,
+    targetName: string,
+    categoryMap: Map<string, { id: string; name: string; slug: string }>,
+  ): Promise<{ id: string }> {
+    const trimmed = targetName?.trim();
+    if (!trimmed) {
+      return this.resolveDefaultCategory(tx, categoryMap);
+    }
+
+    const key = trimmed.toLowerCase();
+    const existing = categoryMap.get(key);
+    if (existing) return existing;
+
+    const slug = generateSlug(trimmed);
+    const foundBySlug = await tx.category.findFirst({ where: { slug } });
+    if (foundBySlug) {
+      categoryMap.set(foundBySlug.name.toLowerCase(), foundBySlug);
+      return foundBySlug;
+    }
+
+    const created = await tx.category.create({
+      data: { name: trimmed, slug, isActive: true },
+    });
+    categoryMap.set(key, created);
+    return created;
   }
 
   /**

@@ -4,6 +4,7 @@ import { useImportStore } from '../store/import.store';
 import { useSaveImportMapping } from '../hooks/useImportMappings';
 import { usePriceComparison } from '../hooks/usePriceComparison';
 import { fetchListas } from '../../../../services/listas.service';
+import { fetchSuppliers } from '../../../../services/suppliers.service';
 import {
   PRICE_FIELD_LABELS,
   computeDeltaPercent,
@@ -154,8 +155,14 @@ export default function ImportStepConfirm() {
 
   const saveMappingMutation = useSaveImportMapping();
   const listaId = useImportStore((s) => s.listaId);
+  const supplierId = useImportStore((s) => s.supplierId);
+  const supplierName = useImportStore((s) => s.supplierName);
   const { data: listas } = useQuery({ queryKey: ['listas'], queryFn: fetchListas });
+  const { data: suppliers } = useQuery({ queryKey: ['suppliers'], queryFn: () => fetchSuppliers() });
   const listaDestino = (listas ?? []).find((l) => l.id === listaId);
+  const proveedor = supplierId
+    ? (suppliers ?? []).find((s) => s.id === supplierId) ?? (supplierName ? { id: supplierId, name: supplierName } : undefined)
+    : undefined;
 
   const handleExecute = async () => {
     if (savePreset && presetName.trim()) {
@@ -213,6 +220,11 @@ export default function ImportStepConfirm() {
           <dt className="text-gray-500">Lista destino:</dt>
           <dd className="font-medium text-security-900">
             {listaDestino ? `${listaDestino.name} (${listaDestino.code})` : 'Sin lista'}
+          </dd>
+
+          <dt className="text-gray-500">Proveedor:</dt>
+          <dd className="font-medium text-security-900">
+            {proveedor ? (proveedor as { name: string }).name : 'Sin proveedor'}
           </dd>
         </dl>
       </div>

@@ -6,16 +6,18 @@ import ImportStepSections from './ImportStepSections';
 import ImportStepUpload from './ImportStepUpload';
 import ImportStepHeaders from './ImportStepHeaders';
 import ImportStepMapping from './ImportStepMapping';
+import ImportStepDocumentar from './ImportStepDocumentar';
 import ImportStepValidation from './ImportStepValidation';
 import ImportStepConfirm from './ImportStepConfirm';
 import ImportStepExecution from './ImportStepExecution';
 import ImportStepResult from './ImportStepResult';
 
 const STEP_LABELS: Record<string, string> = {
-  sections: 'Secciones',
   upload: 'Carga de archivo',
   headers: 'Encabezados',
   mapping: 'Mapeo de columnas',
+  sections: 'Secciones',
+  documentar: 'Documentar',
   validation: 'Validacion',
   confirm: 'Confirmacion',
   execution: 'Ejecucion',
@@ -56,6 +58,8 @@ export default function ImportWizard({ onClose, onComplete, listaId }: ImportWiz
         return <ImportStepHeaders />;
       case 'mapping':
         return <ImportStepMapping />;
+      case 'documentar':
+        return <ImportStepDocumentar />;
       case 'validation':
         return <ImportStepValidation />;
       case 'confirm':
@@ -101,7 +105,9 @@ export default function ImportWizard({ onClose, onComplete, listaId }: ImportWiz
 
         <div className="mx-6 mt-4">
           <Alert variant="info">
-            <strong>Importación automática:</strong> las categorías y marcas que no existan se crearán automáticamente durante la importación. Puedes gestionarlas desde Configuración.
+            <strong>Importación automática:</strong> las categorías (secciones) y marcas que no
+            existan se crearán automáticamente durante la importación. Puedes gestionarlas desde la
+            pestaña "Configuración" de la Lista.
           </Alert>
         </div>
 

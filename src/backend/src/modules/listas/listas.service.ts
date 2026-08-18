@@ -225,12 +225,22 @@ export class ListasService {
     });
     if (existing) throw new ConflictException('Ya existe una Lista con ese código');
 
+    if (dto.codigo) {
+      const dupCodigo = await this.prisma.lista.findUnique({
+        where: { codigo: dto.codigo },
+        select: { id: true },
+      });
+      if (dupCodigo) throw new ConflictException('Ya existe una Lista con ese código de identificación');
+    }
+
     await this.validateResponsible(dto.responsibleId);
+    await this.validateSupplier(dto.supplierId);
     this.assertCoherentValidity(dto.validFrom, dto.validUntil);
 
     const created = await this.prisma.lista.create({
       data: {
         code: dto.code,
+        codigo: dto.codigo ?? null,
         name: dto.name,
         description: dto.description ?? null,
         currency: dto.currency ?? 'COP',
@@ -238,6 +248,7 @@ export class ListasService {
         type: dto.type ?? null,
         defaultVisibility: dto.defaultVisibility ?? false,
         responsibleId: dto.responsibleId ?? null,
+        supplierId: dto.supplierId ?? null,
         validFrom: dto.validFrom ? new Date(dto.validFrom) : null,
         validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
       },
@@ -250,12 +261,14 @@ export class ListasService {
       entityId: created.id,
       newValues: {
         code: created.code,
+        codigo: created.codigo,
         name: created.name,
         currency: created.currency,
         isActive: created.isActive,
         type: created.type,
         defaultVisibility: created.defaultVisibility,
         responsibleId: created.responsibleId,
+        supplierId: created.supplierId,
         validFrom: created.validFrom,
         validUntil: created.validUntil,
       },
@@ -299,6 +312,7 @@ export class ListasService {
         validFrom: source.validFrom,
         validUntil: source.validUntil,
         responsibleId: source.responsibleId,
+        supplierId: source.supplierId,
         isActive: false,
         createdById: ctx.userId ?? null,
         updatedById: ctx.userId ?? null,
@@ -349,6 +363,7 @@ export class ListasService {
     const oldValues = {
       name: lista.name,
       code: lista.code,
+      codigo: lista.codigo,
       description: lista.description,
       currency: lista.currency,
       isActive: lista.isActive,
@@ -356,6 +371,7 @@ export class ListasService {
       type: lista.type,
       defaultVisibility: lista.defaultVisibility,
       responsibleId: lista.responsibleId,
+      supplierId: lista.supplierId,
       validFrom: lista.validFrom,
       validUntil: lista.validUntil,
     };
@@ -376,12 +392,23 @@ export class ListasService {
       if (dup) throw new ConflictException('Ya existe una Lista con ese código');
     }
 
+    if (dto.codigo !== undefined && dto.codigo !== lista.codigo) {
+      if (dto.codigo) {
+        const dup = await this.prisma.lista.findUnique({ where: { codigo: dto.codigo }, select: { id: true } });
+        if (dup) throw new ConflictException('Ya existe una Lista con ese código de identificación');
+      }
+    }
+
     await this.validateResponsible(dto.responsibleId);
+    if (dto.supplierId !== undefined) {
+      await this.validateSupplier(dto.supplierId);
+    }
     this.assertCoherentValidity(dto.validFrom, dto.validUntil);
 
     const data: Record<string, unknown> = {};
     if (dto.name) data.name = dto.name;
     if (dto.code) data.code = dto.code;
+    if (dto.codigo !== undefined) data.codigo = dto.codigo ?? null;
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.currency) data.currency = dto.currency;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
@@ -392,6 +419,7 @@ export class ListasService {
     if (dto.type !== undefined) data.type = dto.type;
     if (dto.defaultVisibility !== undefined) data.defaultVisibility = dto.defaultVisibility;
     if (dto.responsibleId !== undefined) data.responsibleId = dto.responsibleId ?? null;
+    if (dto.supplierId !== undefined) data.supplierId = dto.supplierId ?? null;
     if (dto.validFrom !== undefined) data.validFrom = dto.validFrom ? new Date(dto.validFrom) : null;
     if (dto.validUntil !== undefined) data.validUntil = dto.validUntil ? new Date(dto.validUntil) : null;
 
@@ -556,6 +584,18 @@ export class ListasService {
       select: { id: true },
     });
     if (!responsible) throw new NotFoundException('Usuario responsable no encontrado');
+  }
+
+  /**
+   * Valida que el proveedor exista cuando se envía supplierId (no aplica a null).
+   */
+  private async validateSupplier(supplierId?: string | null): Promise<void> {
+    if (!supplierId) return;
+    const supplier = await this.prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: { id: true },
+    });
+    if (!supplier) throw new NotFoundException('Proveedor no encontrado');
   }
 
   /**

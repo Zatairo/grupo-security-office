@@ -1,6 +1,37 @@
-import { IsOptional, IsString, IsNumber, Min, Max, IsArray, ValidateNested, IsEnum, IsUUID } from 'class-validator';
+import { IsOptional, IsString, IsNumber, Min, Max, IsArray, ValidateNested, IsEnum, IsUUID, MinLength, MaxLength, ValidateIf } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+
+/**
+ * Decisión de sección/categoría confirmada en el wizard de importación.
+ * Conecta el valor fuente de la columna categoría del archivo con el nombre
+ * final de la sección decidido por el usuario.
+ */
+export class SectionDecisionDto {
+  @ApiProperty({
+    description: 'Valor tal cual viene en la columna categoría del archivo (ej: "cctv")',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  sourceValue: string;
+
+  @ApiPropertyOptional({
+    description: 'Nombre final de la sección decidido por el usuario (renombrado/fusionado). Requerido si action != skip',
+  })
+  @ValidateIf((o: SectionDecisionDto) => o.action !== 'skip')
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  targetName?: string;
+
+  @ApiProperty({
+    description: 'Acción sobre la sección',
+    enum: ['create', 'reuse', 'skip'],
+  })
+  @IsEnum(['create', 'reuse', 'skip'])
+  action: 'create' | 'reuse' | 'skip';
+}
 
 /**
  * DTO para un mapping individual de columna.
@@ -108,4 +139,14 @@ export class ExecuteImportDto {
   @IsOptional()
   @IsUUID()
   listaId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Decisiones de secciones/categorías confirmadas en el wizard',
+    type: [SectionDecisionDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SectionDecisionDto)
+  sections?: SectionDecisionDto[];
 }

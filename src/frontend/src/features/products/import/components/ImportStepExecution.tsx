@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useImportStore } from '../store/import.store';
 import { useImportExecution } from '../hooks/useImportExecution';
+import { buildImportSectionDecisions } from '../utils/section-detection';
 
 interface ImportStepExecutionProps {
   onComplete: () => void;
@@ -11,6 +12,7 @@ export default function ImportStepExecution({ onComplete }: ImportStepExecutionP
   const columnMappings = useImportStore((s) => s.columnMappings);
   const ivaMode = useImportStore((s) => s.ivaMode);
   const listaId = useImportStore((s) => s.listaId);
+  const sections = useImportStore((s) => s.sections);
   const setExecutionResult = useImportStore((s) => s.setExecutionResult);
   const setStep = useImportStore((s) => s.setStep);
   const nextStep = useImportStore((s) => s.nextStep);
@@ -30,6 +32,7 @@ export default function ImportStepExecution({ onComplete }: ImportStepExecutionP
         })),
         ivaMode,
         listaId: listaId ?? undefined,
+        sections: buildImportSectionDecisions(sections),
       },
       {
         onSuccess: (result) => {

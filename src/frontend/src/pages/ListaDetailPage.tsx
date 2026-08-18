@@ -2,9 +2,11 @@ import { useState, useMemo, type FormEvent } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import api from '../services/api'
-import { fetchListaById, fetchListaProducts, fetchListaPrices, fetchListaAssignments, fetchListaAudit, downloadListaTemplateCsv } from '../services/listas.service'
+import { fetchListaById, fetchListaProducts, fetchListaPrices, fetchListaAssignments, fetchListaAudit, updateLista, archiveLista, restoreLista, downloadListaTemplateCsv } from '../services/listas.service'
 import { fetchPriceLists, createPrice, updatePrice, deletePrice } from '../services/prices.service'
 import type { Price, PricePayload, UpdatePricePayload } from '../services/prices.service'
+import { fetchCategories, createCategory, type Category as SettingsCategory, type CategoryPayload } from '../services/settings.service'
+import { fetchSuppliers, type Supplier } from '../services/suppliers.service'
 import { canManageListas, hasPermission, hasRole } from '../lib/rbac'
 import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
@@ -13,11 +15,12 @@ import { Button, Modal } from '../components/ui'
 import ProductFormModal from '../features/products/components/ProductFormModal'
 import { MoveCategoryModal, type MoveCategoryTarget } from '../features/products/components/MoveCategoryModal'
 import ImportWizard from '../features/products/import/components/ImportWizard'
+import SupplierModal from '../features/products/import/components/SupplierModal'
 import { hasPersistedImportState } from '../features/products/import/store/import.store'
 import type { Category, Brand, Product } from '../features/products/types/product.types'
 import { ProductIndicators } from '../features/products/components/ProductIndicators'
 
-type Tab = 'products' | 'prices' | 'access' | 'audit'
+type Tab = 'products' | 'prices' | 'access' | 'audit' | 'settings'
 
 function StatusBadge({ isActive }: { isActive: boolean }) {
   return (
@@ -56,7 +59,7 @@ export default function ListaDetailPage() {
   const { data: products } = useQuery({
     queryKey: ['lista-products', id],
     queryFn: () => fetchListaProducts(id!),
-    enabled: !!id && (tab === 'products' || tab === 'prices'),
+    enabled: !!id && (tab === 'products' || tab === 'prices' || tab === 'settings'),
     retry: false,
   })
 
@@ -165,6 +168,7 @@ export default function ListaDetailPage() {
             { key: 'prices', label: 'Precios' },
             { key: 'access', label: 'Accesos' },
             { key: 'audit', label: 'Auditoría' },
+            { key: 'settings', label: 'Configuración' },
           ] as { key: Tab; label: string }[]).map((t) => (
             <button
               key={t.key}
@@ -189,6 +193,14 @@ export default function ListaDetailPage() {
       )}
       {tab === 'access' && <AccesosTab assignments={assignments ?? []} />}
       {tab === 'audit' && <AuditoriaTab logs={auditLogs ?? []} />}
+      {tab === 'settings' && (
+        <ConfiguracionTab
+          lista={lista}
+          products={products ?? []}
+          listaId={id ?? ''}
+          canEdit={canManageListas() || hasPermission('products:write')}
+        />
+      )}
 
       {showImportModal && (
         <ImportWizard
@@ -1004,5 +1016,424 @@ function AuditoriaTab({ logs }: { logs: any[] }) {
         </table>
       </div>
     </div>
+  )
+}
+
+const FIELD_CLASS =
+  'w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm'
+
+const CONFIG_CURRENCIES = ['COP', 'USD', 'EUR']
+
+function ConfiguracionTab({
+  lista,
+  products,
+  listaId,
+  canEdit,
+}: {
+  lista: any
+  products: any[]
+  listaId: string
+  canEdit: boolean
+}) {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({
+    name: lista?.name ?? '',
+    codigo: lista?.codigo ?? '',
+    currency: lista?.currency ?? 'COP',
+    validFrom: toDateInputValue(lista?.validFrom),
+    validUntil: toDateInputValue(lista?.validUntil),
+    isActive: lista?.isActive ?? true,
+    description: lista?.description ?? '',
+    supplierId: lista?.supplierId ?? '',
+  })
+  const [formError, setFormError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [showSupplierModal, setShowSupplierModal] = useState(false)
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
+
+  const archived = Boolean(lista?.archivedAt)
+
+  const { data: suppliers = [] } = useQuery({ queryKey: ['suppliers'], queryFn: () => fetchSuppliers() })
+  const { data: categories = [] } = useQuery({ queryKey: ['categories'], queryFn: fetchCategories })
+
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of products) {
+      const cid = (p as any)?.category?.id as string | undefined
+      if (cid) counts.set(cid, (counts.get(cid) ?? 0) + 1)
+    }
+    return counts
+  }, [products])
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['lista', listaId] })
+    queryClient.invalidateQueries({ queryKey: ['listas'] })
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      updateLista(listaId, {
+        name: form.name.trim(),
+        codigo: form.codigo.trim() || null,
+        currency: form.currency,
+        validFrom: form.validFrom || null,
+        validUntil: form.validUntil || null,
+        isActive: form.isActive,
+        description: form.description.trim() || null,
+        supplierId: form.supplierId || null,
+      }),
+    onSuccess: () => {
+      invalidate()
+      setSaved(true)
+      window.setTimeout(() => setSaved(false), 3000)
+    },
+    onError: (err) => setFormError(getApiErrorMessage(err, 'No se pudo guardar la configuración')),
+  })
+
+  const archiveMutation = useMutation({
+    mutationFn: () => (archived ? restoreLista(listaId) : archiveLista(listaId)),
+    onSuccess: () => {
+      invalidate()
+      setSaved(true)
+      window.setTimeout(() => setSaved(false), 3000)
+    },
+    onError: (err) => setFormError(getApiErrorMessage(err, 'No se pudo cambiar el estado de la Lista')),
+  })
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    setFormError(null)
+    if (form.name.trim().length < 2) {
+      setFormError('El nombre debe tener al menos 2 caracteres')
+      return
+    }
+    if (form.validFrom && form.validUntil && form.validFrom > form.validUntil) {
+      setFormError('La fecha de inicio de vigencia no puede ser posterior a la de fin')
+      return
+    }
+    saveMutation.mutate()
+  }
+
+  return (
+    <div className="space-y-6">
+      {!canEdit && (
+        <div className="p-3 rounded-lg border text-sm bg-neutral-50 border-neutral-200 text-neutral-600">
+          No tienes permisos de edición sobre esta Lista. La configuración se muestra en modo solo
+          lectura.
+        </div>
+      )}
+
+      <form onSubmit={submit} className="space-y-4">
+        <div className="bg-white rounded-xl border border-neutral-200 p-5 space-y-4">
+          <h3 className="text-sm font-condensed font-semibold text-neutral-700 uppercase tracking-wide">
+            Informacion general
+          </h3>
+
+          {formError && (
+            <div className="p-3 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
+              {formError}
+            </div>
+          )}
+          {saved && (
+            <div className="p-3 rounded-lg border text-sm bg-emerald-50 border-emerald-200 text-emerald-800" role="status">
+              Configuración guardada correctamente.
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="cfg-name" className="block text-sm font-medium text-neutral-800 mb-1.5">
+                Nombre
+              </label>
+              <input
+                id="cfg-name"
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className={FIELD_CLASS}
+                disabled={!canEdit || archived}
+                minLength={2}
+              />
+            </div>
+            <div>
+              <label htmlFor="cfg-codigo" className="block text-sm font-medium text-neutral-800 mb-1.5">
+                Codigo de identificacion
+              </label>
+              <input
+                id="cfg-codigo"
+                type="text"
+                value={form.codigo}
+                onChange={(e) => setForm({ ...form, codigo: e.target.value })}
+                className={FIELD_CLASS}
+                disabled={!canEdit || archived}
+                placeholder="Identificador de negocio (opcional)"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="cfg-currency" className="block text-sm font-medium text-neutral-800 mb-1.5">
+                Moneda
+              </label>
+              <select
+                id="cfg-currency"
+                value={form.currency}
+                onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                className={FIELD_CLASS}
+                disabled={!canEdit || archived}
+              >
+                {CONFIG_CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="cfg-status" className="block text-sm font-medium text-neutral-800 mb-1.5">
+                Estado
+              </label>
+              <select
+                id="cfg-status"
+                value={form.isActive ? 'active' : 'inactive'}
+                onChange={(e) => setForm({ ...form, isActive: e.target.value === 'active' })}
+                className={FIELD_CLASS}
+                disabled={!canEdit || archived}
+              >
+                <option value="active">Activa</option>
+                <option value="inactive">Inactiva</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="cfg-valid-from" className="block text-sm font-medium text-neutral-800 mb-1.5">
+                Vigencia desde
+              </label>
+              <input
+                id="cfg-valid-from"
+                type="date"
+                value={form.validFrom}
+                onChange={(e) => setForm({ ...form, validFrom: e.target.value })}
+                className={FIELD_CLASS}
+                disabled={!canEdit || archived}
+              />
+            </div>
+            <div>
+              <label htmlFor="cfg-valid-until" className="block text-sm font-medium text-neutral-800 mb-1.5">
+                Vigencia hasta
+              </label>
+              <input
+                id="cfg-valid-until"
+                type="date"
+                value={form.validUntil}
+                onChange={(e) => setForm({ ...form, validUntil: e.target.value })}
+                className={FIELD_CLASS}
+                disabled={!canEdit || archived}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="cfg-description" className="block text-sm font-medium text-neutral-800 mb-1.5">
+              Notas / descripcion
+            </label>
+            <textarea
+              id="cfg-description"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={2}
+              className={FIELD_CLASS}
+              disabled={!canEdit || archived}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label htmlFor="cfg-supplier" className="block text-sm font-medium text-neutral-800 mb-1.5">
+                Proveedor
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  id="cfg-supplier"
+                  value={form.supplierId}
+                  onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
+                  className={FIELD_CLASS}
+                  disabled={!canEdit || archived}
+                >
+                  <option value="">Sin proveedor</option>
+                  {suppliers.map((s: Supplier) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.nit ? `(${s.nit})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {canEdit && (
+                  <Button variant="secondary" onClick={() => setShowSupplierModal(true)} disabled={archived}>
+                    Crear
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="flex items-end gap-3">
+              {archived ? (
+                <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                  Archivada
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">
+                  Activa
+                </span>
+              )}
+              {canEdit && (
+                <Button
+                  variant="secondary"
+                  loading={archiveMutation.isPending}
+                  disabled={saveMutation.isPending}
+                  onClick={() => archiveMutation.mutate()}
+                >
+                  {archived ? 'Restaurar' : 'Archivar'}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {canEdit && (
+            <div className="flex justify-end pt-2">
+              <Button type="submit" loading={saveMutation.isPending}>
+                Guardar cambios
+              </Button>
+            </div>
+          )}
+        </div>
+      </form>
+
+      <div className="bg-white rounded-xl border border-neutral-200 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-condensed font-semibold text-neutral-700 uppercase tracking-wide">
+              Secciones / Categorias
+            </h3>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Categorías del catálogo y conteo de productos de esta Lista por sección.
+            </p>
+          </div>
+          {canEdit && (
+            <Button variant="secondary" onClick={() => setShowCategoryModal(true)} disabled={archived}>
+              Crear seccion
+            </Button>
+          )}
+        </div>
+
+        {categories.length === 0 ? (
+          <p className="text-sm text-neutral-500">No hay categorías creadas.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {categories.map((c: SettingsCategory) => {
+              const count = categoryCounts.get(c.id) ?? 0
+              return (
+                <div
+                  key={c.id}
+                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm ${
+                    count > 0
+                      ? 'border-[var(--color-primary-border)] bg-[var(--color-primary-bg-subtle)]'
+                      : 'border-neutral-200 bg-neutral-50'
+                  }`}
+                >
+                  <span className="font-medium text-neutral-800 truncate">{c.name}</span>
+                  <span className={`text-xs whitespace-nowrap ${count > 0 ? 'text-[var(--color-primary)]' : 'text-neutral-400'}`}>
+                    {count} en esta Lista
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showSupplierModal && (
+        <SupplierModal
+          onClose={() => setShowSupplierModal(false)}
+          onSaved={(created: Supplier) => {
+            setShowSupplierModal(false)
+            setForm({ ...form, supplierId: created.id })
+            queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+          }}
+        />
+      )}
+
+      {showCategoryModal && <CategoryCreateModal onClose={() => setShowCategoryModal(false)} />}
+    </div>
+  )
+}
+
+function CategoryCreateModal({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const mutation = useMutation({
+    mutationFn: (payload: CategoryPayload) => createCategory(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      onClose()
+    },
+    onError: (err) => setFormError(getApiErrorMessage(err, 'No se pudo crear la sección')),
+  })
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    setFormError(null)
+    const trimmed = name.trim()
+    if (trimmed.length < 2) {
+      setFormError('El nombre debe tener al menos 2 caracteres')
+      return
+    }
+    mutation.mutate({
+      name: trimmed,
+      slug: trimmed
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, ''),
+    })
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Nueva seccion / categoria"
+      size="sm"
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" form="create-section-form" loading={mutation.isPending}>Crear</Button>
+        </>
+      }
+    >
+      <form id="create-section-form" onSubmit={submit} className="space-y-4">
+        {formError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2.5 text-sm" role="alert">
+            {formError}
+          </div>
+        )}
+        <div>
+          <label htmlFor="section-name" className="block text-sm font-medium text-neutral-800 mb-1.5">Nombre</label>
+          <input
+            id="section-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className={FIELD_CLASS}
+            required
+            minLength={2}
+            placeholder="Ej: Camaras IP"
+          />
+        </div>
+        <p className="text-xs text-gray-400">El slug se genera automáticamente a partir del nombre.</p>
+      </form>
+    </Modal>
   )
 }

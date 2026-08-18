@@ -18,6 +18,23 @@ export class CreateListaDto {
   @MinLength(2)
   code: string;
 
+  @ApiPropertyOptional({
+    example: 'HIKV-2026',
+    description: 'Código de identificación de la lista (único si viene, nullable)',
+  })
+  @IsString()
+  @MaxLength(60)
+  @IsOptional()
+  codigo?: string;
+
+  @ApiPropertyOptional({
+    example: 'b1a2c3d4-...',
+    description: 'Proveedor asociado a la Lista (UUID, nullable)',
+  })
+  @IsUUID()
+  @IsOptional()
+  supplierId?: string;
+
   @ApiProperty({ example: 'Lista Hikvision Video' })
   @IsString()
   @MinLength(2)

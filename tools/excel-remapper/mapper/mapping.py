@@ -160,6 +160,108 @@ def _word_overlap_score(source: str, target: str) -> float:
     return len(intersection) / len(union) if union else 0.0
 
 
+# Sinónimos por campo del schema canónico de Grupo Security.
+# Alineados con FIELD_SYNONYMS del backend:
+# src/backend/src/modules/products/import/pipeline/header-detector.service.ts
+# "precio distribuidor" se agrega localmente como alias del canal instalador.
+SYNONYM_RULES: dict[str, list[str]] = {
+    "sku": [
+        "sku", "codigo", "referencia", "ref", "code", "item",
+        "part number", "part_number", "cod producto",
+    ],
+    "name": [
+        "nombre", "name", "descripcion", "description",
+        "producto", "producto/servicio",
+    ],
+    "description": [
+        "detalle", "observacion", "obs", "notas", "details", "specs",
+    ],
+    "category": [
+        "categoria", "category", "tipo", "grupo", "family", "familia",
+    ],
+    "brand": [
+        "marca", "brand", "fabricante", "manufacturer", "proveedor",
+    ],
+    "technicalSpecs": [
+        "especificaciones", "specs", "caracteristicas", "tech specs",
+    ],
+    "price_instalador_iva": [
+        "precio instalador con iva", "precio instalador",
+        "instalador con iva", "instalador iva", "instalador",
+        "installer iva", "installer", "precio installer con iva",
+        "precio distribuidor", "distribuidor",
+    ],
+    "price_tienda_iva": [
+        "precio tienda con iva", "precio tienda",
+        "tienda con iva", "tienda iva", "tienda", "retail iva", "retail",
+    ],
+    "price_dpp_oro_iva": [
+        "precio dpp oro con iva", "dpp oro con iva", "dpp oro",
+        "dpp gold", "oro iva", "preci dpp oro con iva", "preci dpp oro",
+    ],
+    "price_dpp_platino_iva": [
+        "precio dpp platino con iva", "dpp platino con iva",
+        "dpp platino", "dpp platinum", "platino iva",
+    ],
+    "price_cliente_final_iva": [
+        "precio cliente final con iva", "cliente final con iva",
+        "cliente final", "precio final", "final iva",
+        "consumer iva", "consumer", "precio publico", "publico",
+    ],
+    "price_oro_sin_iva": [
+        "oro sin iva", "oro s/iva", "oro", "gold sin iva", "gold",
+    ],
+    "price_installer_sin_iva": [
+        "installer sin iva", "installer s/iva",
+        "instalador sin iva", "instalador s/iva",
+    ],
+}
+
+
+def _match_field_by_synonym(
+    normalized_col: str,
+    schema_fields: list[str],
+) -> str:
+    """Match a normalized source column against field synonyms.
+
+    Sigue el contrato del header-detector del backend (FIELD_SYNONYMS).
+    Prioridad:
+    1. Sinónimo exacto.
+    2. Sinónimo contenido en la columna: gana el sinónimo más largo
+       (el más específico evita que "installer" robe "installer sin iva").
+    3. Columna contenida en el sinónimo: gana el sinónimo más corto.
+    """
+    # 1. Match exacto de sinónimo
+    for field_name in schema_fields:
+        for synonym in SYNONYM_RULES.get(field_name, []):
+            norm_syn = _normalize_for_match(synonym)
+            if norm_syn and normalized_col == norm_syn:
+                return field_name
+
+    # 2. La columna contiene el sinónimo (el más largo gana)
+    best_field = ""
+    best_len = 0
+    for field_name in schema_fields:
+        for synonym in SYNONYM_RULES.get(field_name, []):
+            norm_syn = _normalize_for_match(synonym)
+            if norm_syn and norm_syn in normalized_col and len(norm_syn) > best_len:
+                best_field = field_name
+                best_len = len(norm_syn)
+    if best_field:
+        return best_field
+
+    # 3. El sinónimo contiene la columna (el más corto gana)
+    best_field = ""
+    best_len = 10**9
+    for field_name in schema_fields:
+        for synonym in SYNONYM_RULES.get(field_name, []):
+            norm_syn = _normalize_for_match(synonym)
+            if norm_syn and normalized_col in norm_syn and len(norm_syn) < best_len:
+                best_field = field_name
+                best_len = len(norm_syn)
+    return best_field
+
+
 def build_mapping_from_analysis(
     source_columns: list[str],
     schema_fields: list[str],
@@ -188,11 +290,16 @@ def build_mapping_from_analysis(
         col_normalized = _normalize_for_match(col)
         matched_field = ""
 
+        # 0. Match por sinónimos del contrato (FIELD_SYNONYMS del backend)
+        if not matched_field:
+            matched_field = _match_field_by_synonym(col_normalized, schema_fields)
+
         # 1. Try exact match (case-insensitive, normalized)
-        for field_name in schema_fields:
-            if col_normalized == _normalize_for_match(field_name):
-                matched_field = field_name
-                break
+        if not matched_field:
+            for field_name in schema_fields:
+                if col_normalized == _normalize_for_match(field_name):
+                    matched_field = field_name
+                    break
 
         # 2. Try partial/substring match if no exact match
         if not matched_field:

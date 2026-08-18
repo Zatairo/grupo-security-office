@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { ImportWizardState, ImportStep, ImportPreviewResult, ImportExecutionResult, SystemField } from '../types/import.types';
+import type { ImportWizardState, ImportStep, ImportPreviewResult, ImportExecutionResult, SystemField, ImportSection, ImportListaMetadata } from '../types/import.types';
 
 export const IMPORT_WIZARD_STORAGE_KEY = 'gs-import-wizard';
+
+/** Pasos que nunca se restauran a medias (no son un punto seguro de reanudación). */
+const NON_RESTORABLE_STEPS: ImportStep[] = ['upload', 'sections', 'documentar', 'execution', 'result'];
 
 export function hasPersistedImportState(): boolean {
   try {
@@ -10,7 +13,8 @@ export function hasPersistedImportState(): boolean {
     if (!raw) return false;
     const parsed = JSON.parse(raw);
     const step = parsed?.state?.currentStep;
-    return typeof step === 'string' && step !== 'sections' && step !== 'upload' && step !== 'execution' && step !== 'result';
+    if (typeof step !== 'string' || NON_RESTORABLE_STEPS.includes(step as ImportStep)) return false;
+    return true;
   } catch {
     return false;
   }
@@ -28,6 +32,11 @@ interface ImportStore extends ImportWizardState {
   updateMapping: (sourceColumn: string, targetField: SystemField) => void;
   setIvaMode: (mode: 'with_iva' | 'without_iva' | 'mixed') => void;
   setListaId: (listaId: string | null) => void;
+  setSupplier: (supplierId: string | null, supplierName?: string | null) => void;
+  setSections: (sections: ImportSection[]) => void;
+  updateSection: (key: string, patch: Partial<ImportSection>) => void;
+  mergeSections: (keys: string[], merged: ImportSection) => void;
+  setListaMetadata: (metadata: Partial<ImportListaMetadata>) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;
@@ -35,10 +44,23 @@ interface ImportStore extends ImportWizardState {
   dismissRestored: () => void;
 }
 
-const STEPS: ImportStep[] = ['sections', 'upload', 'headers', 'mapping', 'validation', 'confirm', 'execution', 'result'];
+const STEPS: ImportStep[] = ['upload', 'headers', 'mapping', 'sections', 'documentar', 'validation', 'confirm', 'execution', 'result'];
+
+const initialMetadata: ImportListaMetadata = {
+  mode: 'create',
+  listaId: null,
+  supplierId: null,
+  supplierName: null,
+  name: '',
+  codigo: '',
+  currency: 'COP',
+  validFrom: '',
+  validUntil: '',
+  notes: '',
+};
 
 const initialState: ImportWizardState = {
-  currentStep: 'sections',
+  currentStep: 'upload',
   file: null,
   fileBuffer: null,
   fileName: '',
@@ -47,6 +69,10 @@ const initialState: ImportWizardState = {
   columnMappings: [],
   ivaMode: 'with_iva',
   listaId: null,
+  supplierId: null,
+  supplierName: null,
+  sections: [],
+  listaMetadata: initialMetadata,
   isLoading: false,
   error: null,
 };
@@ -62,17 +88,17 @@ export const useImportStore = create<ImportStore>()(
       nextStep: () => {
         const { currentStep } = get();
         const idx = STEPS.indexOf(currentStep);
-        if (idx < STEPS.length - 1) set({ currentStep: STEPS[idx + 1] });
+        if (idx < STEPS.length - 1 && STEPS[idx + 1]) set({ currentStep: STEPS[idx + 1] });
       },
 
       prevStep: () => {
         const { currentStep } = get();
         const idx = STEPS.indexOf(currentStep);
-        if (idx > 0) set({ currentStep: STEPS[idx - 1] });
+        if (idx > 0 && STEPS[idx - 1]) set({ currentStep: STEPS[idx - 1] });
       },
 
       setFile: (file, buffer) => set({ file, fileBuffer: buffer, fileName: file.name }),
-      clearFile: () => set({ file: null, fileBuffer: null, fileName: '', preview: null, executionResult: null }),
+      clearFile: () => set({ file: null, fileBuffer: null, fileName: '', preview: null, executionResult: null, sections: [] }),
 
       setPreview: (preview) => set({ preview }),
       setExecutionResult: (result) => set({ executionResult: result }),
@@ -88,7 +114,19 @@ export const useImportStore = create<ImportStore>()(
         }
       },
       setIvaMode: (mode) => set({ ivaMode: mode }),
-      setListaId: (listaId) => set({ listaId }),
+      setListaId: (listaId) => set({ listaId, listaMetadata: { ...get().listaMetadata, listaId } }),
+      setSupplier: (supplierId, supplierName = null) =>
+        set({ supplierId, supplierName, listaMetadata: { ...get().listaMetadata, supplierId, supplierName } }),
+      setSections: (sections) => set({ sections }),
+      updateSection: (key, patch) => {
+        const { sections } = get();
+        set({ sections: sections.map((s) => (s.key === key ? { ...s, ...patch } : s)) });
+      },
+      mergeSections: (keys, merged) => {
+        const { sections } = get();
+        set({ sections: [...sections.filter((s) => !keys.includes(s.key)), merged] });
+      },
+      setListaMetadata: (metadata) => set({ listaMetadata: { ...get().listaMetadata, ...metadata } }),
 
       setLoading: (loading) => set({ isLoading: loading }),
       setError: (error) => set({ error }),
@@ -100,20 +138,29 @@ export const useImportStore = create<ImportStore>()(
     {
       name: 'gs-import-wizard',
       storage: createJSONStorage(() => sessionStorage),
-      partialize: (state) => ({
-        currentStep: state.currentStep,
-        fileName: state.fileName,
-        columnMappings: state.columnMappings,
-        ivaMode: state.ivaMode,
-        preview: state.preview,
-      }),
+      partialize: (state) => {
+        const persisted: Record<string, unknown> = {
+          currentStep: state.currentStep,
+          fileName: state.fileName,
+          columnMappings: state.columnMappings,
+          ivaMode: state.ivaMode,
+          preview: state.preview,
+        };
+        if (state.listaId) persisted.listaId = state.listaId;
+        if (state.supplierId) {
+          persisted.supplierId = state.supplierId;
+          persisted.supplierName = state.supplierName;
+        }
+        return persisted;
+      },
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Record<string, unknown> | undefined;
         if (!persisted) return currentState;
-        if (persisted.currentStep === 'sections' || persisted.currentStep === 'execution' || persisted.currentStep === 'result') {
+        const step = persisted.currentStep as ImportStep;
+        if (NON_RESTORABLE_STEPS.includes(step) || !step) {
           return currentState;
         }
-        if (persisted.currentStep === 'upload' && !persisted.fileName) {
+        if (step === 'upload' && !persisted.fileName) {
           return currentState;
         }
         return { ...currentState, ...persisted, isRestored: true };

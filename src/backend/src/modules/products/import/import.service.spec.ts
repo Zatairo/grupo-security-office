@@ -118,6 +118,55 @@ describe('ImportService — Lista destino (listaId)', () => {
       const ctx = batchExecutor.execute.mock.calls[0][1];
       expect(ctx.listaId).toBeUndefined();
     });
+
+    it('incluye distinctValuesByColumn por columna con {value,count} top-50', async () => {
+      const preview = await runPreview();
+
+      expect(preview.distinctValuesByColumn).toBeDefined();
+      expect(preview.distinctValuesByColumn).toEqual({
+        REFERENCIA: [{ value: 'SKU-1', count: 1 }],
+        DESCRIPCION: [{ value: 'Prod 1', count: 1 }],
+      });
+      // No rompe el contrato existente
+      expect(preview.importId).toBeDefined();
+      expect(preview.detectedHeaders).toEqual(['REFERENCIA', 'DESCRIPCION']);
+      expect(preview.totalRows).toBe(1);
+    });
+
+    it('agrega conteos y descarta celdas vacías en distinctValuesByColumn', async () => {
+      const excelAdapterRich = {
+        parse: jest.fn().mockReturnValue({
+          headers: ['CATEGORIA'],
+          rows: [
+            { CATEGORIA: 'Video' },
+            { CATEGORIA: 'Video' },
+            { CATEGORIA: 'Control de Acceso' },
+            { CATEGORIA: null },
+            { CATEGORIA: '  Video  ' },
+          ],
+          fileSize: 1024,
+          totalRows: 5,
+        }),
+      };
+
+      const richService = new ImportService(
+        mockPrisma as unknown as PrismaService,
+        { log: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService,
+        excelAdapterRich as unknown as ExcelAdapter,
+        { detect: jest.fn().mockReturnValue(detection) } as unknown as HeaderDetectorService,
+        { createFromDetection: jest.fn().mockReturnValue(mapping), confirmMapping: jest.fn() } as unknown as ColumnMapperService,
+        { validateAll: jest.fn().mockImplementation((ctx: any) => ctx.validatedRows) } as unknown as RowValidatorService,
+        { normalizeAll: jest.fn().mockImplementation((ctx: any) => ctx.normalizedRows) } as unknown as RowNormalizerService,
+        { execute: jest.fn() } as unknown as BatchExecutorService,
+      );
+
+      const preview = await richService.preview(Buffer.from('file'), 'test.xlsx', 'user-1', {});
+
+      expect(preview.distinctValuesByColumn.CATEGORIA).toEqual([
+        { value: 'Video', count: 3 },
+        { value: 'Control de Acceso', count: 1 },
+      ]);
+    });
   });
 
   describe('execute', () => {
@@ -148,6 +197,28 @@ describe('ImportService — Lista destino (listaId)', () => {
         expect.any(Array),
         expect.objectContaining({ listaId: 'lista-x', importId: preview.importId }),
       );
+    });
+
+    it('transporta las decisiones de secciones al contexto del batch executor (normalizadas por slug)', async () => {
+      const preview = await runPreview();
+
+      await service.execute(
+        preview.importId,
+        {
+          columnMappings: [],
+          sections: [
+            { sourceValue: 'cctv', targetName: 'CCTV', action: 'create' },
+            { sourceValue: 'DVR', action: 'skip' },
+          ],
+        },
+        'user-1',
+      );
+
+      const ctx = batchExecutor.execute.mock.calls[0][1];
+      expect(ctx.sectionDecisions).toEqual({
+        cctv: { targetName: 'CCTV', action: 'create' },
+        dvr: { action: 'skip' },
+      });
     });
   });
 });

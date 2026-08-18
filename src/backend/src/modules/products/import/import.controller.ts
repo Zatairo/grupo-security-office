@@ -108,6 +108,7 @@ export class ImportController {
         headerRowIndex: dto.headerRowIndex,
         presetName: dto.presetName,
         listaId: dto.listaId,
+        sections: dto.sections,
       },
       req.user.id,
     );

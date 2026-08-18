@@ -39,6 +39,12 @@ export interface ImportPreviewResult {
   /** Headers detectados */
   detectedHeaders: string[];
 
+  /**
+   * Valores únicos por columna (top 50 por frecuencia desc), para que el wizard
+   * detecte las secciones/categorías que trae el archivo. Clave = header de columna.
+   */
+  distinctValuesByColumn: Record<string, Array<{ value: string; count: number }>>;
+
   /** Etapa del pipeline donde se detuvo */
   completedStage: PipelineStage;
 }

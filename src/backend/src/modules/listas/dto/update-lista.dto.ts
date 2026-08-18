@@ -53,6 +53,23 @@ export class UpdateListaDto extends PartialType(CreateListaDto) {
   responsibleId?: string;
 
   @ApiPropertyOptional({
+    example: 'HIKV-2026',
+    description: 'Código de identificación de la lista (único si viene). null para limpiar.',
+  })
+  @IsString()
+  @MaxLength(60)
+  @IsOptional()
+  codigo?: string;
+
+  @ApiPropertyOptional({
+    example: 'b1a2c3d4-...',
+    description: 'Proveedor asociado a la Lista (UUID). null para limpiar.',
+  })
+  @IsUUID()
+  @IsOptional()
+  supplierId?: string;
+
+  @ApiPropertyOptional({
     example: '2026-01-01T00:00:00Z',
     description: 'Inicio de vigencia (ISO 8601). null para limpiar.',
   })

@@ -14,6 +14,7 @@ from tkinter import (
     END,
     filedialog,
     messagebox,
+    simpledialog,
     StringVar,
     Tk,
     Toplevel,
@@ -52,6 +53,9 @@ from exporter.export import export_data
 
 logger = logging.getLogger(__name__)
 
+# Carpeta de perfiles de mapeo por proveedor (junto a la herramienta)
+PROFILES_DIR = Path(__file__).resolve().parent.parent / "profiles"
+
 
 class RemapperApp:
     """Ventana principal de la aplicación Remapper Excel/CSV."""
@@ -71,6 +75,10 @@ class RemapperApp:
         self.mapping_config = MappingConfig()
         self.mapping_rows: list[dict[str, Any]] = []
 
+        # Estado de perfiles de proveedor
+        self.profile_var: StringVar = StringVar(value="")
+        self.profile_combo: ttk.Combobox | None = None
+
         # Elementos UI para refresh
         self.sheet_combo: ttk.Combobox | None = None
         self.mapping_frame: Frame | None = None
@@ -78,6 +86,9 @@ class RemapperApp:
         self.status_var: StringVar = StringVar(value="Listo")
 
         self._build_ui()
+
+        # Al iniciar: crear profiles/ si no existe y listar perfiles disponibles
+        self._refresh_profiles()
 
     # ------------------------------------------------------------------
     # Construcción de la interfaz
@@ -89,6 +100,7 @@ class RemapperApp:
         main_frame.pack(fill=BOTH, expand=YES)
 
         self._build_file_section(main_frame)
+        self._build_profile_section(main_frame)
         self._build_notebook(main_frame)
         self._build_status_bar(main_frame)
 
@@ -120,6 +132,41 @@ class RemapperApp:
         Button(row2, text="Examinar...", command=self._on_browse_schema).pack(
             side=LEFT, padx=(0, 4)
         )
+
+    def _build_profile_section(self, parent: Frame) -> None:
+        """Construir la sección de perfiles de proveedor.
+
+        Permite guardar/cargar el MappingConfig actual como un perfil
+        reutilizable por proveedor (archivo JSON en profiles/<nombre>.json).
+        """
+        profile_frame = LabelFrame(parent, text=" Perfil de Proveedor ", padx=8, pady=6)
+        profile_frame.pack(fill=X, pady=(0, 8))
+
+        row = Frame(profile_frame)
+        row.pack(fill=X)
+
+        Label(row, text="Perfil:").pack(side=LEFT)
+        self.profile_combo = ttk.Combobox(
+            row, textvariable=self.profile_var, state="readonly", width=30
+        )
+        self.profile_combo.pack(side=LEFT, padx=(8, 0))
+        Button(row, text="Guardar Perfil", command=self._on_save_profile).pack(
+            side=LEFT, padx=(6, 4)
+        )
+        Button(row, text="Cargar Perfil", command=self._on_load_profile).pack(
+            side=LEFT, padx=(0, 4)
+        )
+        Button(row, text="Refrescar", command=self._refresh_profiles).pack(
+            side=LEFT, padx=(0, 4)
+        )
+
+        hint = Label(
+            profile_frame,
+            text="Guardar Perfil: guarda el mapeo actual por proveedor para reutilizarlo "
+            "cada mes sin re-mapear.",
+            anchor=W,
+        )
+        hint.pack(fill=X, pady=(4, 0))
 
     def _build_notebook(self, parent: Frame) -> None:
         """Construir el notebook con pestañas."""
@@ -452,6 +499,113 @@ class RemapperApp:
                 messagebox.showinfo("Guardado", f"Mapping guardado en:\n{out}")
             except Exception as e:
                 messagebox.showerror("Error", str(e))
+
+    # ------------------------------------------------------------------
+    # Perfiles de proveedor
+    # ------------------------------------------------------------------
+
+    def _refresh_profiles(self) -> list[str]:
+        """Refrescar la lista de perfiles disponibles en el combobox.
+
+        Crea la carpeta profiles/ si no existe y lista los archivos JSON.
+        """
+        PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+        profiles = sorted(p.stem for p in PROFILES_DIR.glob("*.json"))
+        if self.profile_combo:
+            self.profile_combo["values"] = profiles
+        self.status_var.set(
+            f"{len(profiles)} perfil(es) de proveedor disponible(s)"
+        )
+        return profiles
+
+    def _sanitize_profile_name(self, name: str) -> str:
+        """Normalizar un nombre de perfil a un slug seguro para nombre de archivo.
+
+        Ejemplo: "Hikvision Colombia" -> "hikvision-colombia".
+        """
+        import unicodedata
+
+        nfkd = unicodedata.normalize("NFKD", name)
+        ascii_text = "".join(c for c in nfkd if not unicodedata.combining(c))
+        cleaned = "".join(
+            c for c in ascii_text if c.isalnum() or c in "-_ " or c.isspace()
+        ).strip().lower()
+        # Espacios y otros separadores -> guiones, colapsando duplicados
+        cleaned = "-".join(part for part in cleaned.replace(" ", "-").split("-") if part)
+        if not cleaned:
+            raise ValueError("El nombre del perfil no puede estar vacío.")
+        return cleaned
+
+    def _on_save_profile(self) -> None:
+        """Guardar el mapping actual como perfil de proveedor en profiles/."""
+        name = self.profile_var.get().strip()
+        if not name:
+            name = simpledialog.askstring(
+                "Guardar Perfil",
+                "Nombre del perfil (proveedor):",
+                parent=self.root,
+            )
+        if not name:
+            return
+
+        try:
+            name = self._sanitize_profile_name(name)
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+            return
+
+        target = PROFILES_DIR / f"{name}.json"
+        if target.exists():
+            if not messagebox.askyesno(
+                "Confirmar",
+                f"El perfil '{name}' ya existe. ¿Desea sobrescribirlo?",
+            ):
+                return
+
+        try:
+            self.mapping_config.source_file = self.file_path.get()
+            self.mapping_config.sheet_name = self.sheet_var.get()
+            out = save_mapping(self.mapping_config, target)
+            self._refresh_profiles()
+            self.profile_var.set(name)
+            self.status_var.set(f"Perfil guardado: {name}")
+            messagebox.showinfo(
+                "Perfil Guardado",
+                f"Perfil '{name}' guardado en:\n{out}",
+            )
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar el perfil:\n{e}")
+
+    def _on_load_profile(self) -> None:
+        """Cargar un perfil de proveedor y aplicar su mapping en la UI."""
+        name = self.profile_var.get().strip()
+        if not name:
+            messagebox.showwarning("Sin Perfil", "Seleccione un perfil del listado.")
+            return
+
+        path = PROFILES_DIR / f"{name}.json"
+        if not path.exists():
+            messagebox.showerror("Error", f"No existe el perfil:\n{path}")
+            return
+
+        try:
+            config = load_mapping(path)
+            self.mapping_config = config
+            # Si el perfil referencia un archivo origen que aún existe, cargarlo.
+            if config.source_file and Path(config.source_file).exists():
+                self.file_path.set(config.source_file)
+                self._analyze_file(config.source_file)
+            self.sheet_var.set(config.sheet_name)
+            self._refresh_mapping_tree()
+            self.status_var.set(
+                f"Perfil '{name}' cargado ({len(config.mappings)} mapeos)"
+            )
+            messagebox.showinfo(
+                "Perfil Cargado",
+                f"Perfil '{name}' aplicado:\n{len(config.mappings)} mapeos",
+            )
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo cargar el perfil:\n{e}")
 
     # ------------------------------------------------------------------
     # Helpers de datos

@@ -3,6 +3,10 @@ import api from './api'
 export interface Lista {
   id: string
   code: string
+  /** Código de identificación de negocio (contrato nuevo; opcional). */
+  codigo?: string | null
+  /** Proveedor asociado (contrato nuevo; opcional). */
+  supplierId?: string | null
   name: string
   description: string | null
   currency: string
@@ -24,6 +28,8 @@ export interface Lista {
 export interface ListaPayload {
   name: string
   code: string
+  codigo?: string | null
+  supplierId?: string | null
   description?: string | null
   currency?: string
   isActive?: boolean
@@ -50,14 +56,50 @@ export const fetchListaById = async (id: string): Promise<Lista> => {
   return res.data as Lista
 }
 
+/**
+ * Defensivo: el backend usa ValidationPipe con forbidNonWhitelisted=true.
+ * Si el runtime aún no acepta codigo/supplierId (campos nuevos en desarrollo),
+ * reintenta sin ellos en lugar de fallar.
+ */
+function isNonWhitelistedError(err: unknown, fields: string[]): boolean {
+  const status = (err as { response?: { status?: number } })?.response?.status
+  if (status !== 400) return false
+  const data = JSON.stringify((err as { response?: { data?: unknown } })?.response?.data ?? '')
+  return fields.some((f) => data.includes(f))
+}
+
 export const createLista = async (payload: ListaPayload): Promise<Lista> => {
-  const res = await api.post('/listas', payload)
-  return res.data as Lista
+  try {
+    const res = await api.post('/listas', payload)
+    return res.data as Lista
+  } catch (err) {
+    if (
+      isNonWhitelistedError(err, ['codigo', 'supplierId']) &&
+      (payload.codigo !== undefined || payload.supplierId !== undefined)
+    ) {
+      const { codigo, supplierId, ...rest } = payload
+      const res = await api.post('/listas', rest)
+      return res.data as Lista
+    }
+    throw err
+  }
 }
 
 export const updateLista = async (id: string, payload: Partial<ListaPayload>): Promise<Lista> => {
-  const res = await api.patch(`/listas/${id}`, payload)
-  return res.data as Lista
+  try {
+    const res = await api.patch(`/listas/${id}`, payload)
+    return res.data as Lista
+  } catch (err) {
+    if (
+      isNonWhitelistedError(err, ['codigo', 'supplierId']) &&
+      (payload.codigo !== undefined || payload.supplierId !== undefined)
+    ) {
+      const { codigo, supplierId, ...rest } = payload
+      const res = await api.patch(`/listas/${id}`, rest)
+      return res.data as Lista
+    }
+    throw err
+  }
 }
 
 export const toggleListaActive = async (id: string, isActive: boolean): Promise<Lista> => {

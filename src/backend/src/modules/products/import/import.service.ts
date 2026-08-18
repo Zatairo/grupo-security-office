@@ -14,6 +14,7 @@ import {
   ValidatedRow,
   IvaMode,
 } from './interfaces/import-context';
+import { RawRow } from './interfaces/import-source.adapter';
 import {
   ImportPreviewResult,
   ImportExecutionResult,
@@ -25,7 +26,8 @@ import {
   MappingPreset,
   SystemField,
 } from './interfaces/column-mapping';
-import { ColumnMappingDto } from './dto/preview-import.dto';
+import { ColumnMappingDto, SectionDecisionDto } from './dto/preview-import.dto';
+import { generateSlug } from './helpers/text-normalizer';
 
 /**
  * Servicio orquestador del pipeline de importación.
@@ -191,6 +193,7 @@ export class ImportService {
         columnMapping.entries.map((e) => [e.sourceColumn, e.targetField]),
       ),
       detectedHeaders: detection.headers,
+      distinctValuesByColumn: this.computeDistinctValues(parseResult.rows, parseResult.headers),
       completedStage: 'validation',
     };
   }
@@ -207,6 +210,7 @@ export class ImportService {
       headerRowIndex?: number;
       presetName?: string;
       listaId?: string;
+      sections?: SectionDecisionDto[];
     },
     userId: string,
   ): Promise<ImportExecutionResult> {
@@ -226,6 +230,20 @@ export class ImportService {
     // si no se envía, se conserva la del preview (o cae a LISTA-GENERAL en batch).
     if (dto.listaId !== undefined) {
       ctx.listaId = dto.listaId;
+    }
+
+    // Decisiones de secciones del wizard: mapear sourceValue normalizado → decisión.
+    // La clave se normaliza con generateSlug para comparar de forma consistente
+    // con resolveCategory en batch execution.
+    if (dto.sections && dto.sections.length > 0) {
+      const decisions: NonNullable<ImportContext['sectionDecisions']> = {};
+      for (const section of dto.sections) {
+        const key = generateSlug(section.sourceValue);
+        if (key) {
+          decisions[key] = { targetName: section.targetName, action: section.action };
+        }
+      }
+      ctx.sectionDecisions = decisions;
     }
 
     // Actualizar mapping si se proporcionó uno nuevo
@@ -451,6 +469,34 @@ export class ImportService {
     if (!skuEntry) return 'N/A';
     const val = validatedRow.rawData[skuEntry.sourceColumn];
     return val ? String(val).trim() : 'N/A';
+  }
+
+  /**
+   * Valores únicos por columna (top 50 por frecuencia desc) para que el wizard
+   * detecte las secciones/categorías que trae el archivo. Excluye celdas vacías.
+   */
+  private computeDistinctValues(
+    rows: RawRow[],
+    headers: string[],
+  ): Record<string, Array<{ value: string; count: number }>> {
+    const out: Record<string, Array<{ value: string; count: number }>> = {};
+
+    for (const header of headers) {
+      const counts = new Map<string, number>();
+      for (const row of rows) {
+        const raw = row[header];
+        if (raw === null || raw === undefined) continue;
+        const value = String(raw).trim();
+        if (!value) continue;
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+      }
+      out[header] = [...counts.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
+        .slice(0, 50);
+    }
+
+    return out;
   }
 
   private calculateProgress(ctx: ImportContext): number {

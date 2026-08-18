@@ -48,6 +48,10 @@ export interface ImportContext {
   /** ID de la Lista destino (opcional). Si falta, se resuelve LISTA-GENERAL en batch execution */
   listaId?: string;
 
+  /** Decisiones de secciones del wizard, keyed por sourceValue normalizado (slug).
+   *  key ej: 'cctv' → decisión. Solo se aplica si el valor fuente coincide. */
+  sectionDecisions?: Record<string, { targetName?: string; action: 'create' | 'reuse' | 'skip' }>;
+
   /** Resultados de validación por fila */
   validatedRows: ValidatedRow[];
 
