@@ -5,6 +5,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -19,6 +20,7 @@ import {
   ApiBearerAuth,
   ApiConsumes,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { ImportService } from './import.service';
 import { PreviewImportDto, ExecuteImportDto } from './dto/preview-import.dto';
@@ -32,6 +34,15 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ImportController {
   constructor(private readonly importService: ImportService) {}
+
+  /**
+   * La estrategia JWT del proyecto entrega `sub` (nunca `id`). Helper único para
+   * resolver el userId del actor en cualquier handler (mismo patrón que el resto
+   * de controllers: `user?.sub ?? user?.id`).
+   */
+  private userId(req: any): string {
+    return req.user?.sub ?? req.user?.id;
+  }
 
   /**
    * FASE 1: Preview — Analiza el archivo sin modificar la BD.
@@ -81,7 +92,7 @@ export class ImportController {
     return this.importService.preview(
       file.buffer,
       file.originalname,
-      req.user.id,
+      this.userId(req),
       dto,
     );
   }
@@ -109,8 +120,9 @@ export class ImportController {
         presetName: dto.presetName,
         listaId: dto.listaId,
         sections: dto.sections,
+        fixedValues: dto.fixedValues,
       },
-      req.user.id,
+      this.userId(req),
     );
   }
 
@@ -127,11 +139,35 @@ export class ImportController {
 
   // === Presets de Mapping ===
 
+  /**
+   * Precio vigente por SKU para el wizard de importación (comparación
+   * "precio actual vs nuevo"). Se resuelve por SKU exacto (case-insensitive)
+   * dentro de la lista destino (listaId opcional). Accesible a los 5 roles:
+   * la lectura de precio por SKU no exige ACL por lista — el usuario ya tiene
+   * acceso al módulo de importación. El interceptor global envuelve en `{ data }`.
+   * Se declara ANTES de cualquier ruta con segmento dinámico.
+   */
+  @Get('current-price')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
+  @ApiOperation({ summary: 'Precio vigente por SKU (wizard de importación)' })
+  @ApiQuery({ name: 'sku', required: true, description: 'SKU exacto (case-insensitive)' })
+  @ApiQuery({ name: 'listaId', required: false, description: 'Lista destino de la importación' })
+  @ApiResponse({
+    status: 200,
+    description: '{ data: { sku, productId, name, price, currency, validUntil, exists } | null }',
+  })
+  getCurrentPrice(
+    @Query('sku') sku: string,
+    @Query('listaId') listaId?: string,
+  ) {
+    return this.importService.getCurrentPriceBySku(sku, listaId);
+  }
+
   @Get('mappings')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Listar presets de mapping del usuario' })
   async listPresets(@Req() req: any) {
-    return this.importService.listPresets(req.user.id);
+    return this.importService.listPresets(this.userId(req));
   }
 
   @Post('mappings')
@@ -145,7 +181,7 @@ export class ImportController {
     return this.importService.savePreset(
       body.mapping,
       body.name,
-      req.user.id,
+      this.userId(req),
       body.isDefault,
     );
   }
@@ -158,6 +194,6 @@ export class ImportController {
     @Param('id') id: string,
     @Req() req: any,
   ) {
-    await this.importService.deletePreset(id, req.user.id);
+    await this.importService.deletePreset(id, this.userId(req));
   }
 }

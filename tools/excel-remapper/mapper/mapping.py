@@ -15,6 +15,42 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Plantilla canónica de salida (Grupo Security).
+# Pares (campo destino del mapping -> header exacto en el archivo de salida).
+# El OUTPUT siempre lleva estas 13 columnas en este orden exacto; si el perfil
+# no mapea alguna, la columna se exporta vacía.
+# ---------------------------------------------------------------------------
+CANONICAL_OUTPUT_COLUMNS: list[tuple[str, str]] = [
+    ("sku", "REFERENCIA"),
+    ("name", "NOMBRE"),
+    ("description", "DESCRIPCION"),
+    ("brand", "MARCA"),
+    ("category", "CATEGORIA"),
+    ("price_instalador_iva", "PRECIO INSTALADOR (CON IVA)"),
+    ("price_tienda_iva", "PRECIO TIENDA (CON IVA)"),
+    ("price_dpp_oro_iva", "PRECIO DPP ORO (CON IVA)"),
+    ("price_dpp_platino_iva", "PRECIO DPP PLATINO (CON IVA)"),
+    ("price_cliente_final_iva", "PRECIO CLIENTE FINAL (CON IVA)"),
+    ("price_oro_sin_iva", "PRECIO ORO (SIN IVA)"),
+    ("price_installer_sin_iva", "PRECIO INSTALLER (SIN IVA)"),
+    ("technicalSpecs", "TECNICOS"),
+]
+
+# Campos de precio: se redondean a 2 decimales en la salida.
+PRICE_FIELDS: set[str] = {
+    "price_instalador_iva",
+    "price_tienda_iva",
+    "price_dpp_oro_iva",
+    "price_dpp_platino_iva",
+    "price_cliente_final_iva",
+    "price_oro_sin_iva",
+    "price_installer_sin_iva",
+}
+
+# Headers de salida (solo para referencia rápida en UI/CLI).
+CANONICAL_HEADERS: list[str] = [header for _, header in CANONICAL_OUTPUT_COLUMNS]
+
 
 @dataclass
 class ColumnMapping:

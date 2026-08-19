@@ -62,6 +62,7 @@ export const createPrismaMock = () => ({
     update: jest.fn(),
     delete: jest.fn(),
     deleteMany: jest.fn(),
+    upsert: jest.fn(),
     count: jest.fn(),
   },
   brand: {

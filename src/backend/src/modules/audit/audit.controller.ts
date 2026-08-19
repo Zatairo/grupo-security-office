@@ -2,6 +2,7 @@ import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
@@ -13,7 +14,7 @@ export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   @Get()
-  @Roles('Super Admin', 'Supervisor')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial')
   @ApiOperation({ summary: 'Listar logs de auditoría' })
   @ApiQuery({ name: 'skip', required: false, type: Number })
   @ApiQuery({ name: 'take', required: false, type: Number })
@@ -28,24 +29,31 @@ export class AuditController {
     @Query('entityId') entityId?: string,
     @Query('userId') userId?: string,
     @Query('action') action?: string,
+    @CurrentUser() user?: any,
   ) {
-    return this.auditService.findAll({
-      skip: skip ? parseInt(skip) : 0,
-      take: take ? parseInt(take) : 50,
-      entity,
-      entityId,
-      userId,
-      action,
-    });
+    return this.auditService.findAll(
+      {
+        skip: skip ? parseInt(skip) : 0,
+        take: take ? parseInt(take) : 50,
+        entity,
+        entityId,
+        userId,
+        action,
+      },
+      { roles: user?.roles ?? [] },
+    );
   }
 
   @Get(':entity/:entityId')
-  @Roles('Super Admin', 'Supervisor')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial')
   @ApiOperation({ summary: 'Obtener auditoría de una entidad específica' })
   findByEntity(
     @Param('entity') entity: string,
     @Param('entityId') entityId: string,
+    @CurrentUser() user?: any,
   ) {
-    return this.auditService.findByEntity(entity, entityId);
+    return this.auditService.findByEntity(entity, entityId, {
+      roles: user?.roles ?? [],
+    });
   }
 }

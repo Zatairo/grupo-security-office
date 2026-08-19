@@ -104,11 +104,11 @@ export class ListasController {
   }
 
   @Post()
-  @Roles('Super Admin')
+  @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Crear Lista (Super Admin)' })
+  @ApiOperation({ summary: 'Crear Lista' })
   @ApiResponse({ status: 201, description: 'Lista creada' })
-  @ApiResponse({ status: 403, description: 'Solo Super Admin crea Listas' })
+  @ApiResponse({ status: 403, description: 'Sin permiso para crear Listas' })
   @ApiResponse({ status: 409, description: 'Código duplicado' })
   create(@Body() dto: CreateListaDto, @CurrentUser() user: any) {
     return this.listasService.create(dto, this.ctx(user));
@@ -154,7 +154,7 @@ export class ListasController {
   }
 
   @Delete(':id')
-  @Roles('Super Admin')
+  @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Eliminar Lista físicamente (bloqueada si tiene productos, precios, accesos o historial)',

@@ -15,8 +15,8 @@ import { RawRow } from '../interfaces/import-source.adapter';
  */
 const FIELD_SYNONYMS: Record<SystemField, string[]> = {
   sku: ['sku', 'codigo', 'referencia', 'ref', 'code', 'item', 'part number', 'part_number'],
-  name: ['nombre', 'name', 'descripcion', 'description', 'producto', 'producto/servicio'],
-  description: ['detalle', 'observacion', 'obs', 'notas', 'details', 'specs'],
+  name: ['nombre', 'name', 'producto', 'producto/servicio'],
+  description: ['detalle', 'observacion', 'obs', 'notas', 'details', 'specs', 'descripcion', 'description'],
   category: ['categoria', 'category', 'tipo', 'grupo', 'family', 'familia'],
   brand: ['marca', 'brand', 'fabricante', 'manufacturer', 'proveedor'],
   technicalSpecs: ['especificaciones', 'specs', 'caracteristicas', 'tech specs'],

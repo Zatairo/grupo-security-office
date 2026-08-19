@@ -8,7 +8,7 @@ interface MappingLineProps {
   onChange: (sourceColumn: string, targetField: SystemField) => void;
 }
 
-const SYSTEM_FIELD_LABELS: Record<SystemField, string> = {
+export const SYSTEM_FIELD_LABELS: Record<SystemField, string> = {
   sku: 'SKU',
   name: 'Nombre',
   description: 'Descripcion',

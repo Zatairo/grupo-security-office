@@ -16,11 +16,15 @@ type AnyMock = ReturnType<typeof createPrismaMock>;
 
 const ADMIN = { userId: 'admin-1', roles: ['Super Admin'] };
 const VIEWER = { userId: 'pepito-1', roles: ['Operador'] }; // view sobre LISTA-GENERAL
-const EDITER = { userId: 'editer-1', roles: ['Admin Comercial'] }; // edit sobre LISTA-GENERAL
-const EDIT_PRICES = { userId: 'price-editor', roles: ['Admin Comercial'] }; // edit_prices sobre LISTA-GENERAL
-const MANAGER = { userId: 'manager-1', roles: ['Admin Comercial'] }; // manage sobre LISTA-GENERAL
-const MANAGE_ACCESS = { userId: 'access-mgr', roles: ['Admin Comercial'] }; // manage_access sobre LISTA-GENERAL
+// Fixtures de NIVEL: rol no-admin (deny-by-default de la política nueva), el nivel lo
+// dan los assignments del map. La política Admin Comercial se testea en su propio describe.
+const EDITER = { userId: 'editer-1', roles: ['Operador'] }; // edit sobre LISTA-GENERAL
+const EDIT_PRICES = { userId: 'price-editor', roles: ['Operador'] }; // edit_prices sobre LISTA-GENERAL
+const MANAGER = { userId: 'manager-1', roles: ['Operador'] }; // manage sobre LISTA-GENERAL
+const MANAGE_ACCESS = { userId: 'access-mgr', roles: ['Operador'] }; // manage_access sobre LISTA-GENERAL
 const NOAUTH = { userId: 'none-1', roles: ['Operador'] }; // sin assignments
+// Admin Comercial: "Super Admin del área comercial" (isListasAdmin).
+const COMERCIAL = { userId: 'admin-comercial-1', roles: ['Admin Comercial'] };
 
 const LISTA_ID = 'list-1';
 const OTHER_LISTA_ID = 'list-other';
@@ -161,6 +165,70 @@ describe('ListasService — ACL (T1–T20)', () => {
   // T7:Usuario view no puede crear Lista
   it('T7 - usuario view no crea Lista (403)', async () => {
     await expect(service.create({ code: 'X', name: 'X' }, VIEWER)).rejects.toThrow(ForbiddenException);
+  });
+
+  // T7b: Admin Comercial puede crear Lista y queda auto-asignado (manage_access)
+  it('T7b - Admin Comercial crea Lista (persiste createdById y auto-asigna manage_access)', async () => {
+    const res = await service.create(
+      { code: 'COMERCIAL-NUEVA', name: 'Lista Comercial', currency: 'COP', isActive: true },
+      COMERCIAL,
+    );
+    expect(res.code).toBe('COMERCIAL-NUEVA');
+    expect(res.name).toBe('Lista Comercial');
+    expect(mockPrisma.lista.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ createdById: COMERCIAL.userId }),
+      }),
+    );
+    expect(mockPrisma.assignment.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId_resourceType_resourceId: expect.objectContaining({
+            userId: COMERCIAL.userId,
+            resourceType: 'LISTA',
+          }),
+        }),
+        create: expect.objectContaining({
+          userId: COMERCIAL.userId,
+          resourceType: 'LISTA',
+          resourceId: res.id,
+          level: 'manage_access',
+          isActive: true,
+        }),
+      }),
+    );
+    expect(mockAudit.log).toHaveBeenCalled();
+  });
+
+  // T7c: el creador queda con assignment manage_access sobre la lista creada
+  it('T7c - el creador queda con assignment manage_access sobre la lista creada', async () => {
+    const res = await service.create(
+      { code: 'CREATOR-OWN', name: 'Lista del Creador', currency: 'COP', isActive: true },
+      COMERCIAL,
+    );
+
+    expect(mockPrisma.assignment.upsert).toHaveBeenCalledWith({
+      where: {
+        userId_resourceType_resourceId: {
+          userId: COMERCIAL.userId,
+          resourceType: 'LISTA',
+          resourceId: res.id,
+        },
+      },
+      create: {
+        userId: COMERCIAL.userId,
+        resourceType: 'LISTA',
+        resourceId: res.id,
+        level: 'manage_access',
+        isActive: true,
+      },
+      update: { level: 'manage_access', isActive: true },
+    });
+    expect(mockPrisma.lista.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ createdById: COMERCIAL.userId }),
+      }),
+    );
   });
 
   // T8: usuario view no edita Lista (403)
@@ -718,6 +786,7 @@ describe('ListasService — ACL (T1–T20)', () => {
       expect(mockPrisma.price.upsert).not.toHaveBeenCalled();
       expect(mockPrisma.product.create).not.toHaveBeenCalled();
       expect(mockPrisma.assignment.create).not.toHaveBeenCalled();
+      expect(mockPrisma.assignment.upsert).not.toHaveBeenCalled();
     });
 
     it('audita la acción duplicate', async () => {
@@ -858,6 +927,124 @@ describe('ListasService — ACL (T1–T20)', () => {
       mockPrisma.auditLog.count.mockResolvedValueOnce(0);
       await expect(service.removeLista(LISTA_ID, MANAGER)).rejects.toThrow(ForbiddenException);
       expect(mockPrisma.lista.delete).not.toHaveBeenCalled();
+    });
+
+    it('excluye la auto-asignación del actor (NOT userId) y las assignments inactivas (isActive) del conteo bloqueante', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      mockPrisma.product.count.mockResolvedValueOnce(0);
+      mockPrisma.price.count.mockResolvedValueOnce(0);
+      mockPrisma.assignment.count.mockResolvedValueOnce(0); // solo auto-asignación → 0 accesos de terceros
+      mockPrisma.auditLog.count.mockResolvedValueOnce(0);
+
+      const res = await service.removeLista(LISTA_ID, ADMIN);
+
+      expect(res.message).toBe('Lista eliminada exitosamente');
+      expect(mockPrisma.assignment.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            resourceType: 'LISTA',
+            resourceId: LISTA_ID,
+            isActive: true,
+            NOT: { userId: ADMIN.userId },
+          }),
+        }),
+      );
+      expect(mockPrisma.lista.delete).toHaveBeenCalled();
+    });
+
+    it('Fix H9 - assignment inactivo (soft-deleted) NO bloquea el borrado (200)', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      mockPrisma.product.count.mockResolvedValueOnce(0);
+      mockPrisma.price.count.mockResolvedValueOnce(0);
+      mockPrisma.assignment.count.mockResolvedValueOnce(0); // las inactivas quedan filtradas por isActive: true
+      mockPrisma.auditLog.count.mockResolvedValueOnce(0);
+
+      const res = await service.removeLista(LISTA_ID, ADMIN);
+
+      expect(res.message).toBe('Lista eliminada exitosamente');
+      expect(mockPrisma.lista.delete).toHaveBeenCalledWith({ where: { id: LISTA_ID } });
+    });
+
+    it('Fix H9 - assignment activo de terceros SÍ bloquea el borrado (409)', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      mockPrisma.product.count.mockResolvedValueOnce(0);
+      mockPrisma.price.count.mockResolvedValueOnce(0);
+      mockPrisma.assignment.count.mockResolvedValueOnce(1); // tercero con acceso activo
+      mockPrisma.auditLog.count.mockResolvedValueOnce(0);
+
+      const promise = service.removeLista(LISTA_ID, ADMIN);
+      await expect(promise).rejects.toThrow(ConflictException);
+      await expect(promise).rejects.toThrow('La Lista tiene 1 accesos. Archívela o elimine los datos asociados primero.');
+      expect(mockPrisma.lista.delete).not.toHaveBeenCalled();
+    });
+
+    it('Fix H9 - al borrar la Lista se hace hard-delete de TODAS sus assignments (sin huérfanos)', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      mockPrisma.product.count.mockResolvedValueOnce(0);
+      mockPrisma.price.count.mockResolvedValueOnce(0);
+      mockPrisma.assignment.count.mockResolvedValueOnce(0);
+      mockPrisma.auditLog.count.mockResolvedValueOnce(0);
+
+      const res = await service.removeLista(LISTA_ID, ADMIN);
+
+      expect(res.message).toBe('Lista eliminada exitosamente');
+      expect(mockPrisma.assignment.deleteMany).toHaveBeenCalledWith({
+        where: { resourceType: 'LISTA', resourceId: LISTA_ID },
+      });
+      expect(mockPrisma.lista.delete).toHaveBeenCalled();
+    });
+  });
+
+  describe('Admin Comercial — contenedor de compras (isListasAdmin)', () => {
+    it('findAll ve TODAS las listas (getAllowedListaIds → null, sin filtro de id)', async () => {
+      mockPrisma.lista.findMany.mockResolvedValue([mockLista, mockOtherLista]);
+      const res = await service.findAll(COMERCIAL);
+      expect(res.data).toHaveLength(2);
+      expect(mockPrisma.assignment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('findOne accede a una Lista ajena (sin assignment previo) — no 404', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockOtherLista);
+      const res = await service.findOne(OTHER_LISTA_ID, COMERCIAL);
+      expect(res.id).toBe(OTHER_LISTA_ID);
+    });
+
+    it('puede archivar y restaurar cualquier Lista (manage implícito)', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      const archived = await service.archive(LISTA_ID, COMERCIAL);
+      expect(archived.archivedAt).toBeDefined();
+
+      mockPrisma.lista.findUnique.mockResolvedValueOnce({ ...mockLista, archivedAt: new Date() });
+      const restored = await service.restore(LISTA_ID, COMERCIAL);
+      expect(restored.archivedAt).toBeNull();
+    });
+
+    it('puede ver accesos (findAssignments) de cualquier Lista (manage_access implícito)', async () => {
+      const res = await service.findAssignments(LISTA_ID, COMERCIAL);
+      expect(Array.isArray(res.data)).toBe(true);
+    });
+
+    it('puede eliminar físicamente una Lista vacía (DELETE → 200) y audita', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
+      mockPrisma.product.count.mockResolvedValueOnce(0);
+      mockPrisma.price.count.mockResolvedValueOnce(0);
+      mockPrisma.assignment.count.mockResolvedValueOnce(0);
+      mockPrisma.auditLog.count.mockResolvedValueOnce(0);
+
+      const res = await service.removeLista(LISTA_ID, COMERCIAL);
+
+      expect(res.message).toBe('Lista eliminada exitosamente');
+      expect(mockPrisma.lista.delete).toHaveBeenCalledWith({ where: { id: LISTA_ID } });
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'delete', entity: 'LISTA', entityId: LISTA_ID }),
+      );
+    });
+
+    it('ve precios en findProducts (userCanSeePrices implícito)', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([{ id: 'prod-1' }]);
+      await service.findProducts(LISTA_ID, COMERCIAL);
+      const call = mockPrisma.product.findMany.mock.calls[0][0];
+      expect(call.include.prices).toBeDefined();
     });
   });
 });

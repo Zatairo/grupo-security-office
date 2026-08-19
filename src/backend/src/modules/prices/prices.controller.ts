@@ -63,7 +63,7 @@ export class PricesController {
   }
 
   @Delete('lists/:id')
-  @Roles('Super Admin')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Eliminar lista de precios (tarifa)' })
   removePriceList(@Param('id') id: string, @CurrentUser() user: any) {
     return this.pricesService.removePriceList(id, user?.sub ?? user?.id);
@@ -99,7 +99,7 @@ export class PricesController {
   }
 
   @Delete(':id')
-  @Roles('Super Admin')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Eliminar precio' })
   removePrice(@Param('id') id: string, @CurrentUser() user: any) {
     return this.pricesService.removePrice(id, this.ctx(user));

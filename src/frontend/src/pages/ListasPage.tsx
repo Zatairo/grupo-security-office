@@ -18,17 +18,18 @@ import {
   type Lista,
   type ListaPayload,
 } from '../services/listas.service'
-import { canCreateLista, canManageListas, hasPermission, hasRole } from '../lib/rbac'
-import { ROLES } from '../lib/roles'
+import { canCreateLista, canDeleteLista, canManageListas, hasPermission } from '../lib/rbac'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatDate } from '../lib/format'
 import { Button } from '../components/ui'
+import { ProductPagination } from '../components/ProductPagination'
 import { fetchUsers, type UserListItem } from '../services/users.service'
 import ImportWizard from '../features/products/import/components/ImportWizard'
 import { hasPersistedImportState } from '../features/products/import/store/import.store'
 
 const CURRENCIES = ['COP', 'USD', 'EUR'] as const
 const LISTA_TYPES = ['mayorista', 'detalle', 'oro', 'platino', 'instalador', 'tienda'] as const
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 
 type ProductCountFilter = 'all' | 'zero' | 'low' | 'mid' | 'high'
 type UpdateFilter = 'all' | '7d' | '30d' | 'older'
@@ -109,6 +110,8 @@ export default function ListasPage() {
   const [actionNotice, setActionNotice] = useState<string | null>(null)
   const [deleteImpactIds, setDeleteImpactIds] = useState<string[]>([])
   const selectAllRef = useRef<HTMLInputElement>(null)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['listas'] })
 
@@ -189,6 +192,14 @@ export default function ListasPage() {
   }, [baseFiltered, indicatorFilter, productsByLista])
 
   const filteredCount = filtered.length
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, activeFilter, expiryFilter, typeFilter, indicatorFilter, productCountFilter, updateFilter, expiryDateFilter])
 
   const toggleMutation = useMutation({
     mutationFn: (lista: Lista) => toggleListaActive(lista.id, !lista.isActive),
@@ -557,7 +568,7 @@ export default function ListasPage() {
                 <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('restore', 'Restaurar')}>
                   Restaurar
                 </Button>
-                {hasRole(ROLES.SUPER_ADMIN) && (
+                {canDeleteLista() && (
                   <Button variant="danger" disabled={deleteMutation.isPending} onClick={runBatchDelete}>
                     Eliminar
                   </Button>
@@ -590,11 +601,13 @@ export default function ListasPage() {
               <p className="text-neutral-400 text-sm mt-1">
                 {search || activeFilter !== 'all'
                   ? 'Intenta ajustar los filtros de búsqueda.'
-                  : 'No tienes permisos para ver ninguna Lista. Contacta al administrador.'}
+                  : canManageListas()
+                    ? 'No tienes permisos para ver ninguna Lista. Contacta al administrador.'
+                    : 'No tienes listas asignadas. Solicita acceso a tu administrador.'}
               </p>
             </div>
           ) : (
-            filtered.map((lista) => (
+            paged.map((lista) => (
               <div
                 key={lista.id}
                 className="bg-white rounded-xl border border-neutral-200 p-5 hover:shadow-lg transition-shadow"
@@ -748,6 +761,21 @@ export default function ListasPage() {
             ))
           )}
       </div>
+
+      {filtered.length > 0 && (
+        <ProductPagination
+          page={currentPage}
+          totalPages={totalPages}
+          total={filtered.length}
+          pageSize={pageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
+        />
+      )}
 
       {(showCreateModal || editingLista) && (
         <ListasFormModal

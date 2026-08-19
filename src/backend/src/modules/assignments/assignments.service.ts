@@ -28,14 +28,16 @@ export class AssignmentsService {
   /**
    * Lista asignaciones.
    * - Super Admin (o ctx ausente: legacy/test) → todas.
-   * - Admin Comercial → solo sobre las Listas que administra (level manage o superior).
-   * - Resto → deny (lista vacía).
+   * - Admin Comercial (isListasAdmin) → todas: ve/administra TODAS las Listas,
+   *   así que su scope de assignments es el mismo que el de Super Admin (solo lectura
+   *   sobre grants por rol, cuya administración sigue siendo exclusiva de Super Admin).
+   * - Resto → solo sobre las Listas que administra (level manage o superior), o deny.
    */
   async findAll(
     filters: { userId?: string; resourceType?: string } = {},
     ctx?: AccessContext,
   ) {
-    if (!ctx || !ctx.userId || this.acl.isSuperAdmin(ctx.roles)) {
+    if (!ctx || !ctx.userId || this.acl.isListasAdmin(ctx.roles)) {
       const where: { userId?: string; resourceType?: string } = {};
       if (filters.userId) where.userId = filters.userId;
       if (filters.resourceType) where.resourceType = filters.resourceType;
@@ -221,14 +223,15 @@ export class AssignmentsService {
 
   /**
    * GET /api/assignments/matrix?entity=LISTA|PRODUCT
-   * Super Admin → todos los recursos; resto → solo los que administra (manage_access).
+   * Super Admin y Admin Comercial (isListasAdmin) → todos los recursos; resto → solo
+   * los que administra (manage_access).
    */
   async matrix(entity: string, ctx: AccessContext) {
     if (!entity || !['LISTA', 'PRODUCT'].includes(entity)) {
       throw new BadRequestException('entity debe ser LISTA o PRODUCT');
     }
 
-    const isAdmin = this.acl.isSuperAdmin(ctx.roles);
+    const isAdmin = this.acl.isListasAdmin(ctx.roles);
 
     // Recursos visibles en la matriz.
     let resources: { id: string; name: string }[] = [];
@@ -327,8 +330,9 @@ export class AssignmentsService {
       throw new BadRequestException('Proporciona solo uno de userId o roleName');
     }
 
-    // Autorización del viewer.
-    const authed = this.acl.isSuperAdmin(ctx.roles)
+    // Autorización del viewer. Admin Comercial queda autorizado vía isListasAdmin
+    // (canManageAccessOnLista/Product ya devuelven true por el ACL).
+    const authed = this.acl.isListasAdmin(ctx.roles)
       ? true
       : entity === 'LISTA'
         ? await this.acl.canManageAccessOnLista(entityId, ctx)
@@ -449,7 +453,7 @@ export class AssignmentsService {
     resourceId: string,
     ctx: AccessContext,
   ): Promise<string | null> {
-    if (this.acl.isSuperAdmin(ctx.roles)) return 'manage_access';
+    if (this.acl.isListasAdmin(ctx.roles)) return 'manage_access';
     if (entity === 'LISTA') {
       return this.acl.getUserLevel(ctx.userId!, resourceId, ctx.roles);
     }
@@ -466,10 +470,11 @@ export class AssignmentsService {
    * Autoriza mutaciones sobre una asignación según su tipo de recurso + anti-escalada.
    *
    * - LISTA / PRODUCT → el asignador debe tener `manage` o superior sobre la Lista
-   *   destino (Super Admin exento). La anti-escalada (checklist 34) acota el nivel
-   *   que puede otorgar: nunca mayor al suyo, y manage_access solo lo otorgan quienes
-   *   tienen manage_access.
-   * - Grants por rol ('ROLE:{rol}') → exclusivo Super Admin.
+   *   destino (Super Admin exento; Admin Comercial exento por isListasAdmin, con
+   *   nivel efectivo 'manage_access' para la anti-escalada). La anti-escalada
+   *   (checklist 34) acota el nivel que puede otorgar: nunca mayor al suyo, y
+   *   manage_access solo lo otorgan quienes tienen manage_access.
+   * - Grants por rol ('ROLE:{rol}') → exclusivo Super Admin (Admin Comercial NO).
    * - Tipos legacy (PRICE_LIST/CATEGORY) → Super Admin exclusivamente.
    * - ctx ausente (legacy/tests) → permitir (la capa de RolesGuard controla acceso).
    */
@@ -508,9 +513,13 @@ export class AssignmentsService {
       throw new ForbiddenException('No tienes permisos de administración sobre la Lista destino');
     }
 
-    // Anti-escalada (checklist 34).
+    // Anti-escalada (checklist 34). El Admin Comercial (isListasAdmin) tiene
+    // manage_access IMPLÍCITO sobre todas las Listas: su nivel efectivo para la
+    // anti-escalada es 'manage_access' (puede otorgar hasta manage_access, nunca más).
     if (grantedLevel) {
-      const assignerLevel = await this.acl.getUserLevel(ctx.userId, listaId, ctx.roles);
+      const assignerLevel = this.acl.isListasAdmin(ctx.roles)
+        ? 'manage_access'
+        : await this.acl.getUserLevel(ctx.userId, listaId, ctx.roles);
       this.assertNoEscalation(assignerLevel, grantedLevel);
     }
   }

@@ -1,5 +1,5 @@
 import { RawRow } from './import-source.adapter';
-import { ColumnMapping } from './column-mapping';
+import { ColumnMapping, SystemField } from './column-mapping';
 
 /**
  * Modo de manejo de IVA para precios importados.
@@ -51,6 +51,10 @@ export interface ImportContext {
   /** Decisiones de secciones del wizard, keyed por sourceValue normalizado (slug).
    *  key ej: 'cctv' → decisión. Solo se aplica si el valor fuente coincide. */
   sectionDecisions?: Record<string, { targetName?: string; action: 'create' | 'reuse' | 'skip' }>;
+
+  /** Valores fijos por campo del sistema aplicados a todas las filas cuando la
+   *  columna no existe o viene vacía (ej: { brand: 'Hikvision', category: 'CCTV' }). */
+  fixedValues?: Partial<Record<SystemField, string>>;
 
   /** Resultados de validación por fila */
   validatedRows: ValidatedRow[];

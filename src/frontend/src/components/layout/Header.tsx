@@ -2,13 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '../../stores/auth.store'
 import { useNavigate, NavLink, useLocation } from 'react-router-dom'
 import api from '../../services/api'
-import { hasRole, hasPermission } from '../../lib/rbac'
-import { ROLES } from '../../lib/roles'
+import { canManageListaAccess, canViewAudit, canViewUsers } from '../../lib/rbac'
 
 const COMMERCIAL_ITEMS = [
   { to: '/commercial/products', label: 'Productos' },
   { to: '/commercial/lists', label: 'Listas' },
-  { to: '/commercial/assignments', label: 'Asignaciones' },
+  { to: '/commercial/assignments', label: 'Asignaciones', manageAccess: true },
   { to: '/commercial/settings', label: 'Configuración' },
 ]
 
@@ -209,12 +208,12 @@ export default function Header() {
                 </button>
               </div>
             </div>
-            {(hasRole(ROLES.SUPER_ADMIN) || hasPermission('users:read')) && (
+            {canViewUsers() && (
               <div className="flex-shrink-0">
                 <NavItem to="/users" label="Usuarios" />
               </div>
             )}
-            {(hasRole(ROLES.SUPER_ADMIN) || hasPermission('audit:read')) && (
+            {canViewAudit() && (
               <div className="flex-shrink-0">
                 <NavItem to="/audit" label="Auditoría" />
               </div>
@@ -231,7 +230,9 @@ export default function Header() {
             style={{ left: menuLeft }}
             className="absolute top-full z-[60] mt-1 min-w-[180px] py-1 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg shadow-lg"
           >
-            {COMMERCIAL_ITEMS.map((item) => (
+            {COMMERCIAL_ITEMS.filter(
+              (item) => !item.manageAccess || canManageListaAccess()
+            ).map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}

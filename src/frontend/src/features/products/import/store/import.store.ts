@@ -30,6 +30,7 @@ interface ImportStore extends ImportWizardState {
   setExecutionResult: (result: ImportExecutionResult) => void;
   setColumnMappings: (mappings: Array<{ sourceColumn: string; targetField: SystemField }>) => void;
   updateMapping: (sourceColumn: string, targetField: SystemField) => void;
+  setFixedValue: (field: SystemField, value: string) => void;
   setIvaMode: (mode: 'with_iva' | 'without_iva' | 'mixed') => void;
   setListaId: (listaId: string | null) => void;
   setSupplier: (supplierId: string | null, supplierName?: string | null) => void;
@@ -67,6 +68,7 @@ const initialState: ImportWizardState = {
   preview: null,
   executionResult: null,
   columnMappings: [],
+  fixedValues: {},
   ivaMode: 'with_iva',
   listaId: null,
   supplierId: null,
@@ -113,6 +115,16 @@ export const useImportStore = create<ImportStore>()(
           set({ columnMappings: [...columnMappings, { sourceColumn, targetField }] });
         }
       },
+      setFixedValue: (field, value) => {
+        const { fixedValues } = get();
+        const next = { ...fixedValues };
+        if (value.trim() === '') {
+          delete next[field];
+        } else {
+          next[field] = value;
+        }
+        set({ fixedValues: next });
+      },
       setIvaMode: (mode) => set({ ivaMode: mode }),
       setListaId: (listaId) => set({ listaId, listaMetadata: { ...get().listaMetadata, listaId } }),
       setSupplier: (supplierId, supplierName = null) =>
@@ -143,6 +155,7 @@ export const useImportStore = create<ImportStore>()(
           currentStep: state.currentStep,
           fileName: state.fileName,
           columnMappings: state.columnMappings,
+          fixedValues: state.fixedValues,
           ivaMode: state.ivaMode,
           preview: state.preview,
         };

@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../services/api'
-import { hasRole, hasPermission } from '../lib/rbac'
-import { ROLES } from '../lib/roles'
+import { canViewAudit } from '../lib/rbac'
 
 function formatAuditTimestamp(value: string | Date): string {
   const date = new Date(value)
@@ -25,7 +24,7 @@ export default function AuditPage() {
     },
   })
 
-  if (!hasRole(ROLES.SUPER_ADMIN) && !hasPermission('audit:read')) {
+  if (!canViewAudit()) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
         <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

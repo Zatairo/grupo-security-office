@@ -1,6 +1,7 @@
-import { IsOptional, IsString, IsNumber, Min, Max, IsArray, ValidateNested, IsEnum, IsUUID, MinLength, MaxLength, ValidateIf } from 'class-validator';
+import { IsOptional, IsString, IsNumber, Min, Max, IsArray, ValidateNested, IsEnum, IsUUID, MinLength, MaxLength, ValidateIf, IsObject } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { SystemField } from '../interfaces/column-mapping';
 
 /**
  * Decisión de sección/categoría confirmada en el wizard de importación.
@@ -149,4 +150,14 @@ export class ExecuteImportDto {
   @ValidateNested({ each: true })
   @Type(() => SectionDecisionDto)
   sections?: SectionDecisionDto[];
+
+  @ApiPropertyOptional({
+    description:
+      'Valores fijos por campo del sistema aplicados a todas las filas cuando la columna no existe o viene vacía (ej: { brand: "Hikvision", category: "CCTV" })',
+    type: Object,
+    example: { brand: 'Hikvision', category: 'CCTV' },
+  })
+  @IsOptional()
+  @IsObject()
+  fixedValues?: Partial<Record<SystemField, string>>;
 }

@@ -7,8 +7,7 @@ import { usePriceLists } from '../features/products/hooks/usePriceLists'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatCurrency, formatDate, formatBytes } from '../lib/format'
 import { useProductMutations } from '../features/products/hooks/useProductMutations'
-import { hasPermission, hasRole } from '../lib/rbac'
-import { ROLES } from '../lib/roles'
+import { canManageListaAccess, canViewAudit, hasPermission } from '../lib/rbac'
 import { Button, Modal, Badge, Alert } from '../components/ui'
 import {
   fetchProductStock,
@@ -71,6 +70,10 @@ const PRICE_LIST_ORDER = [
 
 const inputClass =
   'w-full px-3 py-2.5 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm'
+
+/** Fecha futura usada por el PATCH /products/:id/publish para dejar el producto en estado 'listo'
+ *  (el DTO no acepta publishStatus directo: un publishAt futuro queda 'listo' sin auto-publicar). */
+const READY_PUBLISH_AT = '2099-12-31T23:59:59.000Z'
 
 function findPrice(product: Product, priceListId: string) {
   return product.prices?.find((p) => p.priceList.id === priceListId)
@@ -1390,10 +1393,21 @@ function SuppliersTab({ product }: { product: Product }) {
   return (
     <div className="overflow-x-auto border border-neutral-200 rounded-lg">
       <table className="min-w-full divide-y divide-neutral-200 text-sm">
+        <thead className="bg-neutral-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Proveedor</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">NIT</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Última orden</th>
+          </tr>
+        </thead>
         <tbody className="divide-y divide-neutral-100">
           {data.map((s, idx) => (
-            <tr key={idx}>
-              <td className="px-4 py-3 text-neutral-700">{String(s)}</td>
+            <tr key={s.id ?? idx} className="hover:bg-neutral-50">
+              <td className="px-4 py-3 font-medium text-neutral-800">{s.name}</td>
+              <td className="px-4 py-3 text-xs font-mono text-neutral-500">{s.nit ?? '—'}</td>
+              <td className="px-4 py-3 text-neutral-500 text-xs">
+                {s.lastOrderAt ? formatDate(s.lastOrderAt) : '—'}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -1405,6 +1419,7 @@ function SuppliersTab({ product }: { product: Product }) {
 // ------------------------------ Accesos ------------------------------
 function AccessTab({ product }: { product: Product }) {
   const [open, setOpen] = useState(false)
+  const canManageAccess = canManageListaAccess()
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-neutral-200 p-4">
@@ -1414,10 +1429,16 @@ function AccessTab({ product }: { product: Product }) {
           sobre este producto. La asignación se registra vía{' '}
           <code className="text-xs">/api/assignments</code>.
         </p>
-        <Button onClick={() => setOpen(true)}>Gestionar accesos</Button>
+        {canManageAccess ? (
+          <Button onClick={() => setOpen(true)}>Gestionar accesos</Button>
+        ) : (
+          <p className="text-sm text-neutral-400">
+            No tienes permisos para gestionar accesos por producto.
+          </p>
+        )}
       </div>
 
-      {open && (
+      {open && canManageAccess && (
         <ProductAccessModal
           productId={product.id}
           productName={product.name}
@@ -1474,7 +1495,7 @@ function PublishTab({ product }: { product: Product }) {
   })
 
   const markReady = useMutation({
-    mutationFn: () => api.put(`/products/${product.id}`, { publishStatus: 'listo' }),
+    mutationFn: () => publishProduct(product.id, { publishAt: READY_PUBLISH_AT }),
     onError: (err) => {
       if (isNotImplemented(err)) setNotAvailable(true)
     },
@@ -1632,7 +1653,7 @@ function ScheduleModal({
 
 // ------------------------------ Auditoría ------------------------------
 function AuditTab({ product }: { product: Product }) {
-  const canView = hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.SUPERVISOR)
+  const canView = canViewAudit()
 
   const { data: logs = [], isLoading, error } = useQuery({
     queryKey: ['product-audit', product.id],
@@ -1735,6 +1756,11 @@ export default function ProductDetailPage() {
   const { priceLists } = usePriceLists()
   const { toggleActive, toggleVisibility } = useProductMutations()
   const canEdit = hasPermission('products:write')
+
+  // El tab Precios exige ACL edit_prices en el backend (Super Admin + Admin Comercial);
+  // para el resto de roles se oculta para no disparar 403/404.
+  const visibleTabs = TABS.filter((t) => t.id !== 'prices' || canEdit)
+  const effectiveTab: DetailTab = visibleTabs.some((t) => t.id === tab) ? tab : 'info'
 
   if (isLoading) {
     return (
@@ -1942,12 +1968,12 @@ export default function ProductDetailPage() {
 
       <div className="border border-neutral-200 rounded-xl bg-white">
         <div className="px-6 pt-4 border-b border-neutral-200 flex gap-1 overflow-x-auto">
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               className={`px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors whitespace-nowrap ${
-                tab === t.id
+                effectiveTab === t.id
                   ? 'border-security-600 text-security-700'
                   : 'border-transparent text-neutral-500 hover:text-neutral-700'
               }`}
@@ -1958,15 +1984,15 @@ export default function ProductDetailPage() {
         </div>
 
         <div className="p-6">
-          {tab === 'info' && <InfoTab product={product} categories={categories} brands={brands} />}
-          {tab === 'specs' && <AtributosTab product={product} />}
-          {tab === 'images' && <ImagesTab product={product} />}
-          {tab === 'prices' && <PricesTab product={product} />}
-          {tab === 'stock' && <StockTab product={product} />}
-          {tab === 'suppliers' && <SuppliersTab product={product} />}
-          {tab === 'access' && <AccessTab product={product} />}
-          {tab === 'publish' && <PublishTab product={product} />}
-          {tab === 'audit' && <AuditTab product={product} />}
+          {effectiveTab === 'info' && <InfoTab product={product} categories={categories} brands={brands} />}
+          {effectiveTab === 'specs' && <AtributosTab product={product} />}
+          {effectiveTab === 'images' && <ImagesTab product={product} />}
+          {effectiveTab === 'prices' && <PricesTab product={product} />}
+          {effectiveTab === 'stock' && <StockTab product={product} />}
+          {effectiveTab === 'suppliers' && <SuppliersTab product={product} />}
+          {effectiveTab === 'access' && <AccessTab product={product} />}
+          {effectiveTab === 'publish' && <PublishTab product={product} />}
+          {effectiveTab === 'audit' && <AuditTab product={product} />}
         </div>
       </div>
     </div>

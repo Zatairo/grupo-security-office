@@ -16,7 +16,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles('Super Admin')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Listar usuarios' })
   @ApiQuery({ name: 'skip', required: false, type: Number })
   @ApiQuery({ name: 'take', required: false, type: Number })

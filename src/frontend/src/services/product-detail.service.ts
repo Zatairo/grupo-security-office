@@ -64,9 +64,17 @@ export const fetchProductAudit = async (
 }
 
 // ------------------------------ Proveedores (defensivo) ------------------------------
-export const fetchProductSuppliers = async (productId: string): Promise<unknown[]> => {
+export interface ProductSupplier {
+  id: string
+  name: string
+  nit: string | null
+  category: string | null
+  lastOrderAt?: string | null
+}
+
+export const fetchProductSuppliers = async (productId: string): Promise<ProductSupplier[]> => {
   const res = await api.get(`/products/${productId}/suppliers`)
-  return asList(res.data)
+  return asList(res.data) as ProductSupplier[]
 }
 
 // ------------------------------ Publicación (defensivo) ------------------------------

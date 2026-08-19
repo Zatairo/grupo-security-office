@@ -24,6 +24,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'categories:read', 'categories:write',
     'brands:read', 'brands:write',
     'prices:read', 'prices:write',
+    'users:read',
+    'audit:read',
     'publish:manage',
   ],
   'Operador': [
@@ -43,7 +45,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   'Super Admin': 'Acceso total al sistema y gestión de usuarios y auditoría',
   'Supervisor': 'Supervisión comercial, publicación de productos y auditoría',
-  'Admin Comercial': 'Gestión comercial del catálogo, precios y publicación',
+  'Admin Comercial': 'Gestión comercial del catálogo, precios, publicación, acceso a usuarios (solo lectura) y auditoría comercial',
   'Operador': 'Consulta del catálogo y precios',
   'Consulta': 'Solo lectura de catálogo y precios',
 };
@@ -127,7 +129,7 @@ async function main() {
 
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@gruposecurity.co' },
-    update: {},
+    update: { password: hashedPassword, name: 'Administrador', isActive: true },
     create: {
       email: 'admin@gruposecurity.co',
       name: 'Administrador',
@@ -149,7 +151,7 @@ async function main() {
 
   const comprasUser = await prisma.user.upsert({
     where: { email: 'compras@gruposecurity.co' },
-    update: {},
+    update: { password: comprasPassword, name: 'Compras Security', isActive: true },
     create: {
       email: 'compras@gruposecurity.co',
       name: 'Compras Security',

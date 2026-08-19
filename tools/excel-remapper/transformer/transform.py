@@ -1,21 +1,44 @@
 """
 transformer/transform.py
--------------------------
+------------------------
 Module responsible for applying mappings to actual data,
 producing a clean DataFrame ready for export.
+
+Reglas aplicadas sobre el resultado de mapear:
+- El output SIEMPRE tiene las 13 columnas de la plantilla canónica de Grupo
+  Security en el orden exacto (CANONICAL_OUTPUT_COLUMNS); si el perfil no mapea
+  alguna, la columna sale vacía.
+- Se descartan filas de sección: SKU vacío o SKU con patrón de título
+  ("1. VARIADORES DE FRECUENCIA.", "15.1 TRANSFORMADORES.") -> regex
+  `^\\d+(\\.\\d+)*\\.?\\s` (numeral + opcional sub-numeración + espacio).
+- NOMBRE se rellena desde la columna de descripción/nombre del origen si el
+  campo name queda vacío.
+- Los precios se redondean a 2 decimales.
+- Se emite un warning (no bloqueante) si hay SKUs duplicados con valores
+  distintos.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
 
-from mapper.mapping import ColumnMapping, MappingConfig
+from mapper.mapping import (
+    CANONICAL_OUTPUT_COLUMNS,
+    MappingConfig,
+    PRICE_FIELDS,
+)
 
 logger = logging.getLogger(__name__)
+
+# Patrón de títulos/subtítulos de sección tipo "1. VARIADORES DE FRECUENCIA."
+# o "15.1 TRANSFORMADORES." (numeral con sub-numeración opcional).
+# Cubre tanto "N. TÍTULO" como "N.N. SUBTÍTULO" / "N.N. TÍTULO".
+SECTION_SKU_RE = re.compile(r"^\d+(\.\d+)*\.?\s")
 
 
 @dataclass
@@ -124,10 +147,78 @@ def _read_source_data(
         raise RuntimeError(f"Failed to read source data: {e}") from e
 
 
+def _is_empty_value(value: Any) -> bool:
+    """Return True if a value is empty (None, NaN, or blank string)."""
+    if value is None:
+        return True
+    if isinstance(value, float) and pd.isna(value):
+        return True
+    text = str(value).strip()
+    return text == "" or text.lower() == "nan"
+
+
+def _is_section_row(sku_value: Any) -> bool:
+    """Detect a section-row: empty SKU or a numbered title like '1. VARIADORES'.
+
+    Estas filas no son productos (no tienen precios) y se descartan.
+    """
+    if _is_empty_value(sku_value):
+        return True
+    text = str(sku_value).strip()
+    return bool(SECTION_SKU_RE.match(text))
+
+
+def _round_prices(df: pd.DataFrame) -> None:
+    """Round all numeric price columns to 2 decimal places, in place."""
+    for price_field in PRICE_FIELDS:
+        if price_field in df.columns:
+            numeric = pd.to_numeric(df[price_field], errors="coerce")
+            df[price_field] = numeric.round(2)
+
+
+def _detect_duplicate_skus(df: pd.DataFrame) -> list[str]:
+    """Detect duplicated SKUs and return warning messages.
+
+    A warning is raised for each SKU that appears more than once with
+    different values in any other column (duplicate with identical values
+    is reported as informational).
+    """
+    if "sku" not in df.columns:
+        return []
+
+    skus = df["sku"].astype(str).str.strip()
+    valid = skus[skus.ne("") & skus.ne("nan")]
+    counts = valid.value_counts()
+
+    warnings: list[str] = []
+    for sku, count in counts[counts > 1].items():
+        rows = df[skus == sku]
+        others = rows.drop(columns=["sku"])
+        # Fingerprint robusto ante tipos mixtos (float/str/NaN)
+        fingerprints = others.apply(
+            lambda r: tuple(str(x) for x in r.tolist()), axis=1
+        )
+        distinct = fingerprints.nunique()
+        if distinct > 1:
+            warnings.append(
+                f"SKU duplicado '{sku}' ({int(count)} ocurrencias) "
+                f"con valores distintos entre sí."
+            )
+        else:
+            warnings.append(
+                f"SKU duplicado '{sku}' ({int(count)} ocurrencias) "
+                f"con valores idénticos."
+            )
+    return warnings
+
+
 def apply_mapping(
     config: MappingConfig,
 ) -> TransformResult:
     """Apply a mapping configuration to source data and produce clean output.
+
+    El output es un DataFrame con las 13 columnas canónicas en orden exacto,
+    precios redondeados a 2 decimales y sin filas de sección.
 
     Args:
         config: MappingConfig with source file, sheet, header info and mappings.
@@ -189,7 +280,47 @@ def apply_mapping(
         result.errors.append("No output columns produced from mapping.")
         return result
 
-    df_output = pd.DataFrame(output_data)
+    # --- Filtro de filas de sección (SKU vacío o patrón 'N. Título') ---
+    if "sku" in output_data:
+        mask = [not _is_section_row(v) for v in output_data["sku"]]
+        dropped = len(mask) - sum(mask)
+        if dropped:
+            result.warnings.append(
+                f"{dropped} fila(s) de sección descartadas "
+                f"(SKU vacío o título tipo 'N. Sección')."
+            )
+        for key in list(output_data.keys()):
+            output_data[key] = [
+                v for v, keep in zip(output_data[key], mask) if keep
+            ]
+
+    rows = len(next(iter(output_data.values())))
+
+    # --- NOMBRE: si el campo name quedó vacío, rellenar desde description ---
+    if "name" in output_data and "description" in output_data:
+        filled = [
+            d if _is_empty_value(n) else n
+            for n, d in zip(output_data["name"], output_data["description"])
+        ]
+        output_data["name"] = filled
+
+    # --- Construcción del DataFrame con las 13 columnas canónicas en orden ---
+    canonical_data: dict[str, list[Any]] = {}
+    for dest_field, _header in CANONICAL_OUTPUT_COLUMNS:
+        canonical_data[dest_field] = output_data.get(dest_field, [None] * rows)
+
+    df_output = pd.DataFrame(canonical_data)
+
+    # --- Redondeo de precios a 2 decimales ---
+    _round_prices(df_output)
+
+    # --- Warning de SKUs duplicados (antes de renombrar a headers canónicos) ---
+    result.warnings.extend(_detect_duplicate_skus(df_output))
+
+    # --- Renombrar a headers canónicos exactos (orden preservado) ---
+    rename_map = {dest: header for dest, header in CANONICAL_OUTPUT_COLUMNS}
+    df_output = df_output.rename(columns=rename_map)
+
     result.dataframe = df_output
     result.rows_output = len(df_output)
     result.success = True

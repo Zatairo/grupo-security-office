@@ -1,0 +1,139 @@
+{
+  "source_file": "C:/Users/sopor/OneDrive/Documentos/Esnaider/WEB GRUPOSECURITY/listas/LISTA HIKVISION TURBO GRUPO.xlsx",
+  "sheet_name": "HIKVISION TURBO",
+  "header_row": 1,
+  "mappings": [
+    {
+      "source_column": "REFERENCIA",
+      "destination_field": "sku",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "DESCRIPCIÓN",
+      "destination_field": "name",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO  INSTALADOR\n( CON  IVA)",
+      "destination_field": "price_instalador_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO TIENDA ( CON  IVA)",
+      "destination_field": "price_tienda_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECI DPP ORO ( CON  IVA)",
+      "destination_field": "price_dpp_oro_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO DPP PLATINO ( CON  IVA)",
+      "destination_field": "price_dpp_platino_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO CLIENTE FINAL ( CON  IVA)",
+      "destination_field": "price_cliente_final_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "ORO SIN IVA",
+      "destination_field": "price_oro_sin_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "INSTALLER SIN IVA",
+      "destination_field": "price_installer_sin_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "",
+      "destination_field": "brand",
+      "default_value": "Hikvision",
+      "ignored": false
+    },
+    {
+      "source_column": "",
+      "destination_field": "category",
+      "default_value": "Camaras Turbo",
+      "ignored": false
+    },
+    {
+      "source_column": "ORO",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "PLATINO",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "PRECIO SUGERIDO INSTALADOR\n( CON  IVA)",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "PRECIO SUGERIDO INSTALADOR2",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "DPP ORO2",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "DPP PLATINO2",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna1",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna3",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna4",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna6",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna8",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    }
+  ]
+}

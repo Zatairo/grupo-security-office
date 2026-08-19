@@ -6,7 +6,7 @@ import {
   ImportContext,
   IvaMode,
 } from '../interfaces/import-context';
-import { SystemField } from '../interfaces/column-mapping';
+import { SystemField, ColumnMapping } from '../interfaces/column-mapping';
 import { RawRow } from '../interfaces/import-source.adapter';
 import {
   normalizeSku,
@@ -60,20 +60,29 @@ export class RowNormalizerService {
   normalizeRow(validatedRow: ValidatedRow, ctx: ImportContext): NormalizedRow {
     const raw = validatedRow.rawData;
     const mapping = ctx.columnMapping;
+    const fixedValues = ctx.fixedValues;
 
-    // Extraer valores mapeados
-    const getValue = (field: SystemField): unknown => {
-      const entry = mapping.entries.find((e) => e.targetField === field);
-      if (!entry) return null;
-      return raw[entry.sourceColumn] ?? null;
-    };
+    // Extraer valores mapeados.
+    // Prioridad: valor de columna mapeada (no vacío) > fixedValue > null.
+    const getValue = (field: SystemField): unknown =>
+      this.resolveFieldValue(raw, mapping, fixedValues, field).value;
 
     // Normalizar campos de texto
     const sku = normalizeSku(getValue('sku'));
     const name = normalizeProductName(getValue('name'));
     const description = normalizeDescription(getValue('description'));
-    const categoryName = normalizeCategoryName(getValue('category'));
-    const brandName = normalizeBrandName(getValue('brand'));
+
+    // brand/category: si el valor proviene de fixedValues se aplica tal cual
+    // (es un valor final del usuario y no debe re-capitalizarse con capitalizeFirst,
+    // que degradaría acrónimos como "CCTV" → "Cctv").
+    const categoryValue = this.resolveFieldValue(raw, mapping, fixedValues, 'category');
+    const brandValue = this.resolveFieldValue(raw, mapping, fixedValues, 'brand');
+    const categoryName = categoryValue.fromFixed
+      ? String(categoryValue.value).trim()
+      : normalizeCategoryName(categoryValue.value);
+    const brandName = brandValue.fromFixed
+      ? String(brandValue.value).trim()
+      : normalizeBrandName(brandValue.value);
 
     // Inferir marca/categoría cuando no vienen mapeadas en columnas
     const inference = this.inferCategoryAndBrand({
@@ -111,6 +120,35 @@ export class RowNormalizerService {
       isUpdate,
       existingProductId,
     };
+  }
+
+  /**
+   * Resuelve el valor efectivo de un campo para una fila.
+   *
+   * Prioridad: valor de columna mapeada (no vacío) > fixedValue > null.
+   * `fromFixed: true` indica que el valor proviene de `ctx.fixedValues` y debe
+   * tratarse como un valor final del usuario (sin re-normalización destructiva).
+   */
+  private resolveFieldValue(
+    raw: RawRow,
+    mapping: ColumnMapping,
+    fixedValues: ImportContext['fixedValues'],
+    field: SystemField,
+  ): { value: unknown; fromFixed: boolean } {
+    const entry = mapping.entries.find((e) => e.targetField === field);
+    const rawValue = entry ? raw[entry.sourceColumn] : null;
+
+    const isEmpty =
+      rawValue === null || rawValue === undefined || rawValue === '';
+
+    if (isEmpty) {
+      const fixed = fixedValues?.[field];
+      if (fixed !== undefined) {
+        return { value: fixed, fromFixed: true };
+      }
+    }
+
+    return { value: rawValue, fromFixed: false };
   }
 
   /**

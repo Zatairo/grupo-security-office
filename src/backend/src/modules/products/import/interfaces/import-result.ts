@@ -132,3 +132,24 @@ export interface ImportProgressResult {
   /** Resultado final (solo si status es 'completed' o 'failed') */
   result?: ImportExecutionResult;
 }
+
+/**
+ * Resultado del endpoint `GET /api/products/import/current-price`.
+ * El interceptor global envuelve esta respuesta en `{ data }`.
+ */
+export interface CurrentPriceResult {
+  /** SKU consultado (tal como se guarda en el producto) */
+  sku: string;
+  /** ID del producto encontrado */
+  productId: string;
+  /** Nombre del producto */
+  name: string;
+  /** Valor del precio vigente (null si el producto no tiene precio vigente) */
+  price: number | null;
+  /** Moneda del precio vigente (null sin precio vigente) */
+  currency: string | null;
+  /** Fin de vigencia del precio (null si es abierto o sin precio vigente) */
+  validUntil: Date | null;
+  /** true si existe un precio vigente hoy para comparar */
+  exists: boolean;
+}

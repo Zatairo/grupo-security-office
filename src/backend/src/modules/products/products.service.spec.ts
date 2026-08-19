@@ -617,6 +617,46 @@ describe('ProductsService', () => {
         expect.objectContaining({ action: 'schedule_publish', entity: 'Product' }),
       );
     });
+
+    it('publica con precio importado (listaId null) usando el fallback global de precio vigente', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct());
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: null });
+      // Sin precio con el listaId de la lista → fallback sin filtro → 1 vigente.
+      mockPrisma.price.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+      mockPrisma.productImage.count.mockResolvedValue(1);
+      mockPrisma.stock.findUnique.mockResolvedValue(null);
+      mockPrisma.product.update.mockResolvedValue(readyProduct({ publishStatus: 'publicado' }));
+
+      const result = await service.publish('p1', {});
+
+      expect(result.publishStatus).toBe('publicado');
+      expect(mockPrisma.price.count).toHaveBeenCalledTimes(2);
+    });
+
+    it('publica con precio explícito en la lista (listaId) sin fallback', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct());
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: null });
+      mockPrisma.price.count.mockResolvedValueOnce(1);
+      mockPrisma.productImage.count.mockResolvedValue(1);
+      mockPrisma.stock.findUnique.mockResolvedValue(null);
+      mockPrisma.product.update.mockResolvedValue(readyProduct({ publishStatus: 'publicado' }));
+
+      const result = await service.publish('p1', {});
+
+      expect(result.publishStatus).toBe('publicado');
+      expect(mockPrisma.price.count).toHaveBeenCalledTimes(1);
+    });
+
+    it('sigue bloqueando (400) cuando no hay precio vigente ni con listaId ni global', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct());
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: null });
+      mockPrisma.price.count.mockResolvedValue(0);
+      mockPrisma.productImage.count.mockResolvedValue(1);
+      mockPrisma.stock.findUnique.mockResolvedValue(null);
+
+      await expect(service.publish('p1', {})).rejects.toThrow(BadRequestException);
+      await expect(service.publish('p1', {})).rejects.toThrow(/precio vigente/);
+    });
   });
 
   describe('unpublish', () => {

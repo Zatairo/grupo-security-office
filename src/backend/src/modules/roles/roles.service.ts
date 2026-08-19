@@ -76,6 +76,8 @@ export class RolesService {
   async update(id: string, dto: UpdateRoleDto) {
     const role = await this.prisma.role.findUnique({ where: { id } });
     if (!role) throw new NotFoundException('Rol no encontrado');
+    if (role.name === 'Super Admin')
+      throw new ConflictException('No se puede modificar el rol Super Admin');
 
     if (dto.name && dto.name !== role.name) {
       const existing = await this.prisma.role.findUnique({
@@ -114,6 +116,8 @@ export class RolesService {
     });
 
     if (!role) throw new NotFoundException('Rol no encontrado');
+    if (role.name === 'Super Admin')
+      throw new ConflictException('No se puede eliminar el rol Super Admin');
     if (role.users.length > 0) {
       throw new ConflictException('No se puede eliminar un rol asignado a usuarios');
     }

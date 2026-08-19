@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../../../services/api';
 import type { Product } from '../../types/product.types';
 import { useImportStore } from '../store/import.store';
-import { useCurrentPrices } from '../hooks/useCurrentPrices';
+import { fetchCurrentPrices } from '../hooks/useCurrentPrices';
 import {
   parsePriceRows,
   PriceComparisonRowField,
@@ -17,6 +17,7 @@ export function usePriceComparison() {
   const fileBuffer = useImportStore((s) => s.fileBuffer);
   const fileName = useImportStore((s) => s.fileName);
   const columnMappings = useImportStore((s) => s.columnMappings);
+  const listaId = useImportStore((s) => s.listaId ?? s.listaMetadata.listaId);
 
   const productsQuery = useQuery({
     queryKey: ['all-products-for-price-comparison'],
@@ -51,7 +52,7 @@ export function usePriceComparison() {
   });
 
   const comparisonQuery = useQuery({
-    queryKey: ['price-comparison', fileName, columnMappings],
+    queryKey: ['price-comparison', fileName, columnMappings, listaId],
     queryFn: async (): Promise<PriceComparisonResult> => {
       if (!fileBuffer) {
         return { rows: [], totalRowsWithPrices: 0, truncated: false };
@@ -71,8 +72,8 @@ export function usePriceComparison() {
       // Collect unique SKUs from limited rows
       const uniqueSkus = [...new Set(limitedRows.map((row) => row.sku).filter(Boolean))];
 
-      // Fetch current prices using the memoization hook
-      const priceDataMap = useCurrentPrices(uniqueSkus);
+      // Fetch current prices using the new endpoint by SKU + listaId
+      const priceDataMap = await fetchCurrentPrices(uniqueSkus, listaId);
 
       // Build a map of SKU -> price info from the fetched data
       const skuPriceMap = new Map<string, { value: number; currency: string; code: string }>();

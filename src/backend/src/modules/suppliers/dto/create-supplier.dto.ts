@@ -45,10 +45,10 @@ export class CreateSupplierDto {
   @IsOptional()
   status?: string;
 
-  @ApiPropertyOptional({ example: 4.5, description: 'Calificación (0 a 9.99, columna DECIMAL(3,2))' })
+  @ApiPropertyOptional({ example: 80, description: 'Calificación (0 a 100, escala UI)' })
   @IsNumber()
   @Min(0)
-  @Max(9.99)
+  @Max(100)
   @IsOptional()
   rating?: number;
 }

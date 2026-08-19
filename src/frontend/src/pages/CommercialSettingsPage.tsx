@@ -25,7 +25,14 @@ import {
   type PriceList,
   type PriceListPayload,
 } from '../services/prices.service'
-import { hasPermission, hasRole } from '../lib/rbac'
+import {
+  canDeleteBrands,
+  canDeleteCategories,
+  canDeletePrices,
+  canViewAudit,
+  hasPermission,
+  hasRole,
+} from '../lib/rbac'
 import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
 import { Button } from '../components/ui'
@@ -178,7 +185,7 @@ function CategoriesTab() {
   const [editing, setEditing] = useState<Category | null>(null)
 
   const canEdit = hasPermission('categories:write')
-  const canDelete = hasRole(ROLES.SUPER_ADMIN)
+  const canDelete = canDeleteCategories()
 
   const { data: categories, isLoading } = useQuery({
     queryKey: ['categories'],
@@ -447,7 +454,7 @@ function BrandsTab() {
   const [editing, setEditing] = useState<Brand | null>(null)
 
   const canEdit = hasPermission('brands:write')
-  const canDelete = hasRole(ROLES.SUPER_ADMIN)
+  const canDelete = canDeleteBrands()
 
   const { data: brands, isLoading } = useQuery({
     queryKey: ['brands'],
@@ -742,7 +749,7 @@ function PriceListsTab() {
   const [editing, setEditing] = useState<PriceList | null>(null)
 
   const canEdit = hasPermission('prices:write')
-  const canDelete = hasRole(ROLES.SUPER_ADMIN)
+  const canDelete = canDeletePrices()
 
   const { data: priceLists, isLoading } = useQuery({
     queryKey: ['price-lists'],
@@ -1102,7 +1109,7 @@ function HistoryTab() {
   const [userId, setUserId] = useState('')
   const [page, setPage] = useState(1)
 
-  const canReadAudit = hasRole(ROLES.SUPER_ADMIN) || hasPermission('audit:read')
+  const canReadAudit = canViewAudit()
   const isSuperAdmin = hasRole(ROLES.SUPER_ADMIN)
 
   const usersQuery = useQuery({
@@ -1136,7 +1143,7 @@ function HistoryTab() {
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <p className="text-neutral-500 font-medium">Sin acceso al historial de auditoría</p>
-        <p className="text-neutral-400 text-sm mt-1">Solo Super Admin y Supervisor pueden consultarlo.</p>
+        <p className="text-neutral-400 text-sm mt-1">Solo Super Admin, Supervisor y Admin Comercial pueden consultarlo.</p>
       </div>
     )
   }

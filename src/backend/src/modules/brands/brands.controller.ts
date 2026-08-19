@@ -73,7 +73,7 @@ export class BrandsController {
   }
 
   @Delete(':id')
-  @Roles('Super Admin')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Eliminar marca' })
   remove(@Param('id') id: string) {
     return this.brandsService.remove(id);

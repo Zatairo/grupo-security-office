@@ -17,6 +17,10 @@ const mockAudit = { log: jest.fn().mockResolvedValue(undefined) };
 
 const mockAcl = {
   isSuperAdmin: jest.fn().mockReturnValue(false),
+  isListasAdmin: jest.fn().mockImplementation((roles) =>
+    Array.isArray(roles) &&
+    (roles.includes('Super Admin') || roles.includes('Admin Comercial')),
+  ),
   levelsAtLeast: jest.fn().mockReturnValue([]),
   getAllowedListaIds: jest.fn().mockResolvedValue([]),
   getUserLevel: jest.fn().mockResolvedValue(null),
@@ -42,6 +46,13 @@ describe('AssignmentsService', () => {
 
   beforeEach(async () => {
     jest.resetAllMocks();
+
+    // resetAllMocks borra implementaciones: se re-establece isListasAdmin (misma
+    // semántica que AclService) para que SUPER/MANAGER sean tratados como listas-admin.
+    mockAcl.isListasAdmin.mockImplementation((roles) =>
+      Array.isArray(roles) &&
+      (roles.includes('Super Admin') || roles.includes('Admin Comercial')),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -243,6 +254,7 @@ describe('AssignmentsService', () => {
     const SUPER = { userId: 'admin-1', roles: ['Super Admin'] };
     const MANAGER = { userId: 'assigner-1', roles: ['Admin Comercial'] };
     const TARGET = { userId: 'target-1', roles: ['Operador'] };
+    const OPERATOR = { userId: 'operator-1', roles: ['Operador'] };
 
     it('crear asignación de PRODUCT con Super Admin', async () => {
       mockAcl.isSuperAdmin.mockReturnValue(true);
@@ -310,7 +322,7 @@ describe('AssignmentsService', () => {
       await expect(
         service.create(
           { userId: TARGET.userId, resourceType: 'LISTA', resourceId: 'lista-1', level: 'manage_access' },
-          MANAGER,
+          OPERATOR,
         ),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -339,7 +351,7 @@ describe('AssignmentsService', () => {
       mockAcl.canAdministerAccessOnLista.mockResolvedValue(true);
       mockAcl.getUserLevel.mockResolvedValue('edit');
 
-      await expect(service.update('assign-1', { level: 'manage' }, MANAGER)).rejects.toThrow(
+      await expect(service.update('assign-1', { level: 'manage' }, OPERATOR)).rejects.toThrow(
         ForbiddenException,
       );
     });
@@ -394,7 +406,7 @@ describe('AssignmentsService', () => {
       mockAcl.canManageAccessOnLista.mockResolvedValue(false);
 
       await expect(
-        service.preview({ userId: TARGET.userId, entity: 'LISTA', entityId: 'lista-1' }, MANAGER),
+        service.preview({ userId: TARGET.userId, entity: 'LISTA', entityId: 'lista-1' }, OPERATOR),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -402,6 +414,60 @@ describe('AssignmentsService', () => {
       await expect(service.preview({ userId: TARGET.userId, entity: 'LISTA' }, SUPER)).rejects.toThrow(
         BadRequestException,
       );
+    });
+
+    it('Admin Comercial puede otorgar manage_access (nivel implícito por isListasAdmin)', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(false);
+      mockPrisma.user.findUnique.mockResolvedValue({ id: TARGET.userId });
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1' });
+      mockAcl.canAdministerAccessOnLista.mockResolvedValue(true);
+      mockPrisma.assignment.findUnique.mockResolvedValue(null);
+      mockPrisma.assignment.create.mockResolvedValue({
+        ...mockAssignment,
+        userId: TARGET.userId,
+        level: 'manage_access',
+      });
+
+      const result = await service.create(
+        { userId: TARGET.userId, resourceType: 'LISTA', resourceId: 'lista-1', level: 'manage_access' },
+        MANAGER,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.level).toBe('manage_access');
+    });
+
+    it('Admin Comercial autorizado en preview (isListasAdmin) sin consultar manage_access', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(false);
+      mockAcl.canManageAccessOnLista.mockResolvedValue(false); // no se usa para AC
+      mockAcl.getUserLevel.mockResolvedValue('view');
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', name: 'General' });
+      mockPrisma.userRole.findMany.mockResolvedValue([]);
+      mockPrisma.product.findMany.mockResolvedValue([]);
+      mockPrisma.assignment.findMany.mockResolvedValue([]);
+
+      const res = await service.preview(
+        { userId: TARGET.userId, entity: 'LISTA', entityId: 'lista-1' },
+        MANAGER,
+      );
+
+      expect(res.data.entity).toBe('LISTA');
+      expect(mockAcl.canManageAccessOnLista).not.toHaveBeenCalled();
+    });
+
+    it('matrix con Admin Comercial ve TODOS los recursos (isListasAdmin)', async () => {
+      mockAcl.isSuperAdmin.mockReturnValue(false);
+      mockAcl.actionsForLevel.mockReturnValue(['ver']);
+      mockPrisma.lista.findMany.mockResolvedValue([
+        { id: 'lista-1', name: 'General' },
+        { id: 'lista-2', name: 'Otra' },
+      ]);
+      mockPrisma.assignment.findMany.mockResolvedValue([]);
+
+      const res = await service.matrix('LISTA', MANAGER);
+
+      expect(res.data).toHaveLength(2);
+      expect(mockPrisma.lista.findMany).toHaveBeenCalledWith({ select: { id: true, name: true } });
     });
   });
 });

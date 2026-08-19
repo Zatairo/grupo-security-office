@@ -46,8 +46,9 @@ export default function ImportStepSections() {
     setIsDetecting(true);
 
     const run = async () => {
+      const distinctByColumn = preview?.distinctValuesByColumn?.[categorySourceColumn];
       const columnInfo = preview?.columnValues?.[categorySourceColumn];
-      const values = await detectSectionValues(fileBuffer, categorySourceColumn, columnInfo);
+      const values = await detectSectionValues(fileBuffer, categorySourceColumn, columnInfo, distinctByColumn);
       if (cancelled) return;
       setSections(buildSectionsFromValues(values, categories));
       setDetectedForColumn(categorySourceColumn);

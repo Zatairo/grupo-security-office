@@ -2,8 +2,8 @@ import type { SystemField } from '../types/import.types';
 
 const FIELD_SYNONYMS: Record<SystemField, string[]> = {
   sku: ['sku', 'código', 'codigo', 'referencia', 'ref', 'code', 'item'],
-  name: ['nombre', 'name', 'descripción', 'descripcion', 'description', 'producto'],
-  description: ['detalle', 'observación', 'observacion', 'obs', 'notas', 'details'],
+  name: ['nombre', 'name', 'producto'],
+  description: ['detalle', 'observación', 'observacion', 'obs', 'notas', 'details', 'descripción', 'descripcion', 'description'],
   category: ['categoría', 'categoria', 'category', 'tipo', 'grupo', 'family', 'familia'],
   brand: ['marca', 'brand', 'fabricante', 'manufacturer', 'proveedor'],
   technicalSpecs: ['especificaciones', 'specs', 'características', 'caracteristicas'],
@@ -25,6 +25,16 @@ interface HeaderMatch {
   isRequired: boolean;
 }
 
+/** Normaliza un header o sinónimo: minúsculas, sin acentos y con espacios/saltos colapsados. */
+function normalizeHeader(raw: string): string {
+  return raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function detectHeaderMappings(headers: string[]): {
   suggestedMappings: HeaderMatch[];
   unmappedHeaders: string[];
@@ -33,13 +43,13 @@ export function detectHeaderMappings(headers: string[]): {
   const unmappedHeaders: string[] = [];
 
   for (const header of headers) {
-    const normalizedHeader = header.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const normalizedHeader = normalizeHeader(header);
 
     let bestMatch: { field: SystemField; confidence: number } | null = null;
 
     for (const [field, synonyms] of Object.entries(FIELD_SYNONYMS)) {
       for (const synonym of synonyms) {
-        const normalizedSynonym = synonym.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        const normalizedSynonym = normalizeHeader(synonym);
 
         let confidence = 0;
         if (normalizedHeader === normalizedSynonym) confidence = 1.0;
@@ -61,6 +71,21 @@ export function detectHeaderMappings(headers: string[]): {
       });
     } else {
       unmappedHeaders.push(header);
+    }
+  }
+
+  // Fallback de negocio: si no hay columna mapeada a "name" pero existe una mapeada a
+  // "description" cuyo header (normalizado, sin acentos) contiene "descripcion"/"desc",
+  // esa columna es el nombre del producto (ej: archivos Hikvision con columna DESCRIPCIÓN).
+  const hasNameMapping = suggestedMappings.some((m) => m.targetField === 'name');
+  if (!hasNameMapping) {
+    const descriptionMapping = suggestedMappings.find((m) => {
+      if (m.targetField !== 'description') return false;
+      return /(descripcion|desc)/.test(normalizeHeader(m.sourceColumn));
+    });
+    if (descriptionMapping) {
+      descriptionMapping.targetField = 'name';
+      descriptionMapping.isRequired = true;
     }
   }
 

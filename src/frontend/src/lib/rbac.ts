@@ -24,7 +24,7 @@ export function hasAnyPermission(permissions: string[]): boolean {
 // --- Listas: visibilidad basada en rol (el nivel granular view/edit/manage
 //     por Lista se enerva server-side en AclService; el frontend reacciona a 403/404). ---
 export function canCreateLista(): boolean {
-  return hasRole(ROLES.SUPER_ADMIN)
+  return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
 }
 
 export function canManageListas(): boolean {
@@ -39,5 +39,50 @@ export function canViewListas(): boolean {
     ROLES.OPERADOR,
     ROLES.CONSULTA,
   ])
+}
+
+export function canDeleteLista(): boolean {
+  return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
+}
+
+export function canDeleteCategories(): boolean {
+  return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
+}
+
+export function canDeleteBrands(): boolean {
+  return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
+}
+
+export function canDeletePrices(): boolean {
+  return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
+}
+
+export function canDeleteSuppliers(): boolean {
+  return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
+}
+
+export function canDeletePurchaseOrders(): boolean {
+  return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
+}
+
+export function canManageListaAccess(): boolean {
+  return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
+}
+
+export function canViewUsers(): boolean {
+  return (
+    hasRole(ROLES.SUPER_ADMIN) ||
+    hasRole(ROLES.ADMIN_COMERCIAL) ||
+    hasPermission('users:read')
+  )
+}
+
+export function canViewAudit(): boolean {
+  return (
+    hasRole(ROLES.SUPER_ADMIN) ||
+    hasRole(ROLES.SUPERVISOR) ||
+    hasRole(ROLES.ADMIN_COMERCIAL) ||
+    hasPermission('audit:read')
+  )
 }
 

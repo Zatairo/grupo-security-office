@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import api from '../../../../services/api';
+import { useImportStore } from '../store/import.store';
 import type { ImportExecutionResult, ImportSectionDecision } from '../types/import.types';
 
 interface ExecuteParams {
@@ -27,6 +28,7 @@ export function useImportExecution() {
   return useMutation<ImportExecutionResult, Error, ExecuteParams>({
     mutationFn: async ({ importId, columnMappings, ivaMode, presetName, listaId, sections }) => {
       const hasSections = Array.isArray(sections) && sections.length > 0;
+      const fixedValues = useImportStore.getState().fixedValues;
       const body: Record<string, unknown> = {
         importId,
         columnMappings,
@@ -35,6 +37,7 @@ export function useImportExecution() {
         ...(listaId ? { listaId } : {}),
       };
       if (hasSections) body.sections = sections;
+      if (fixedValues && Object.keys(fixedValues).length > 0) body.fixedValues = fixedValues;
 
       try {
         const { data } = await api.post('/products/import/execute', body);

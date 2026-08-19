@@ -152,6 +152,56 @@ describe('SuppliersService — módulo proveedores (OLA 7A)', () => {
     );
   });
 
+  it('C3: persiste rating 0-100 normalizado (80 → 8) y el GET lo expone ×10 (80)', async () => {
+    mockPrisma.supplier.findUnique.mockResolvedValueOnce(null);
+    const res = await service.createSupplier(
+      { name: 'Rated Supplier', nit: '888', category: 'VIDEO', rating: 80 },
+      ADMIN,
+    );
+    expect(mockPrisma.supplier.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ rating: 8 }) }),
+    );
+    expect(res.rating).toBe(80);
+
+    mockPrisma.supplier.findMany.mockResolvedValueOnce([
+      { ...mockSupplier, rating: 8, _count: { evaluations: 0 } },
+    ]);
+    const list = await service.findAllSuppliers({});
+    expect(list.data[0].rating).toBe(80);
+
+    mockPrisma.supplier.findUnique.mockResolvedValueOnce({
+      ...mockSupplier,
+      rating: 8,
+      _count: { evaluations: 0, purchaseOrders: 0 },
+    });
+    const detail = await service.findOneSupplier('supp-1');
+    expect(detail.rating).toBe(80);
+
+    const updated = await service.updateSupplier('supp-1', { rating: 90 }, COMMERCIAL);
+    expect(mockPrisma.supplier.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ rating: 9 }) }),
+    );
+    expect(updated.rating).toBe(90);
+
+    const cleared = await service.updateSupplier('supp-1', { rating: null }, COMMERCIAL);
+    expect(mockPrisma.supplier.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ rating: null }) }),
+    );
+    expect(cleared.rating).toBeNull();
+  });
+
+  it('C3-FIX: create y update (PUT /api/suppliers/:id) devuelven rating en escala 0-100', async () => {
+    mockPrisma.supplier.findUnique.mockResolvedValueOnce(null);
+    const created = await service.createSupplier(
+      { name: 'Proveedor Rateado', nit: '777777777-7', category: 'VIDEO', rating: 75 },
+      ADMIN,
+    );
+    expect(created.rating).toBe(75);
+
+    const updated = await service.updateSupplier('supp-1', { rating: 60 }, COMMERCIAL);
+    expect(updated.rating).toBe(60);
+  });
+
   it('rechaza NIT duplicado con 409', async () => {
     await expect(
       service.createSupplier({ name: 'Otra', nit: mockSupplier.nit, category: 'X' }, ADMIN),
@@ -578,9 +628,45 @@ describe('SuppliersService — Tanda 1C (stock avanzado, PO flujo completo, dash
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('403 al cancelar una orden sin rol Super Admin', async () => {
-    const promise = service.updatePurchaseOrderStatus('po-1', { status: 'cancelada' }, COMMERCIAL);
-    await expect(promise).rejects.toThrow(ForbiddenException);
+  it('Admin Comercial puede cancelar una orden (C4: AC = Super Admin del área comercial)', async () => {
+    const res = await service.updatePurchaseOrderStatus(
+      'po-1',
+      { status: 'cancelada', comment: 'No aplica' },
+      COMMERCIAL,
+    );
+    expect(res.status).toBe('cancelada');
+    expect(mockAudit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'status_change',
+        entity: 'PurchaseOrder',
+        newValues: expect.objectContaining({ status: 'cancelada', comment: 'No aplica' }),
+      }),
+    );
+  });
+
+  it('Admin Comercial puede cerrar una orden recibida (recibida → cerrada)', async () => {
+    mockPrisma.purchaseOrder.findUnique.mockResolvedValueOnce({ ...mockOrder, status: 'recibida' });
+    const res = await service.updatePurchaseOrderStatus('po-1', { status: 'cerrada' }, COMMERCIAL);
+    expect(res.status).toBe('cerrada');
+    expect(mockAudit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'status_change',
+        entity: 'PurchaseOrder',
+        oldValues: { status: 'recibida' },
+        newValues: expect.objectContaining({ status: 'cerrada' }),
+      }),
+    );
+  });
+
+  it('403 al cancelar/cerrar una orden sin rol de escritura (Operador)', async () => {
+    const operador = { userId: 'op-1', roles: ['Operador'] };
+    await expect(
+      service.updatePurchaseOrderStatus('po-1', { status: 'cancelada' }, operador),
+    ).rejects.toThrow(ForbiddenException);
+    mockPrisma.purchaseOrder.findUnique.mockResolvedValueOnce({ ...mockOrder, status: 'recibida' });
+    await expect(
+      service.updatePurchaseOrderStatus('po-1', { status: 'cerrada' }, operador),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('Super Admin puede cancelar una orden', async () => {

@@ -38,6 +38,24 @@ const mockRoleWithUsers = {
   ],
 };
 
+const mockGenericRole = {
+  id: 'role-2',
+  name: 'Editor',
+  description: 'Editor de contenido',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+const mockGenericRoleWithUsers = {
+  ...mockGenericRole,
+  permissions: [
+    { roleId: 'role-2', permission: 'products:read' },
+  ],
+  users: [
+    { userId: 'u1', roleId: 'role-2', user: { id: 'u1', name: 'User 1', email: 'user1@test.com' } },
+  ],
+};
+
 describe('RolesService', () => {
   let service: RolesService;
 
@@ -124,18 +142,28 @@ describe('RolesService', () => {
 
   describe('update', () => {
     it('debe actualizar un rol', async () => {
-      mockPrisma.role.findUnique.mockResolvedValueOnce(mockRole);
+      mockPrisma.role.findUnique.mockResolvedValueOnce(mockGenericRole);
       mockPrisma.role.findUnique.mockResolvedValueOnce(null);
       mockPrisma.rolePermission.deleteMany.mockResolvedValue({ count: 0 });
       mockPrisma.role.update.mockResolvedValue({
         ...mockRoleWithPermissions,
-        name: 'Super Admin',
+        name: 'Editor',
       });
 
-      const dto = { name: 'Super Admin', permissions: ['products:read', 'products:write'] };
-      const result = await service.update('role-1', dto);
+      const dto = { name: 'Editor', permissions: ['products:read', 'products:write'] };
+      const result = await service.update('role-2', dto);
 
-      expect(result.name).toBe('Super Admin');
+      expect(result.name).toBe('Editor');
+    });
+
+    it('debe lanzar ConflictException al intentar modificar el rol Super Admin', async () => {
+      mockPrisma.role.findUnique.mockResolvedValue(mockRole);
+
+      await expect(service.update('role-1', { name: 'Nope' })).rejects.toThrow(ConflictException);
+      await expect(service.update('role-1', { name: 'Nope' })).rejects.toThrow(
+        'No se puede modificar el rol Super Admin',
+      );
+      expect(mockPrisma.role.update).not.toHaveBeenCalled();
     });
 
     it('debe lanzar NotFoundException si el rol no existe', async () => {
@@ -147,20 +175,29 @@ describe('RolesService', () => {
 
   describe('remove', () => {
     it('debe eliminar un rol sin usuarios asignados', async () => {
-      mockPrisma.role.findUnique.mockResolvedValue({ ...mockRoleWithPermissions, users: [] });
+      mockPrisma.role.findUnique.mockResolvedValue({ ...mockGenericRole, users: [] });
       mockPrisma.rolePermission.deleteMany.mockResolvedValue({ count: 2 });
-      mockPrisma.role.delete.mockResolvedValue(mockRole);
+      mockPrisma.role.delete.mockResolvedValue(mockGenericRole);
 
-      const result = await service.remove('role-1');
+      const result = await service.remove('role-2');
 
       expect(result.message).toBe('Rol eliminado exitosamente');
     });
 
-    it('debe lanzar ConflictException si el rol tiene usuarios asignados', async () => {
+    it('debe lanzar ConflictException al intentar eliminar el rol Super Admin', async () => {
       mockPrisma.role.findUnique.mockResolvedValue(mockRoleWithUsers);
 
       await expect(service.remove('role-1')).rejects.toThrow(ConflictException);
-      await expect(service.remove('role-1')).rejects.toThrow('No se puede eliminar un rol asignado a usuarios');
+      await expect(service.remove('role-1')).rejects.toThrow(
+        'No se puede eliminar el rol Super Admin',
+      );
+    });
+
+    it('debe lanzar ConflictException si el rol tiene usuarios asignados', async () => {
+      mockPrisma.role.findUnique.mockResolvedValue(mockGenericRoleWithUsers);
+
+      await expect(service.remove('role-2')).rejects.toThrow(ConflictException);
+      await expect(service.remove('role-2')).rejects.toThrow('No se puede eliminar un rol asignado a usuarios');
     });
 
     it('debe lanzar NotFoundException si el rol no existe', async () => {

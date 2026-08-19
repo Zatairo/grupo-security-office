@@ -28,7 +28,13 @@ export interface ImportPreviewResult {
   detectedHeaders: string[];
   completedStage: string;
   /**
-   * Análisis por columna (contrato nuevo del paso headers/mapping).
+   * Contrato real del backend: valores distintos (top 50) por columna del archivo.
+   * Clave = nombre de columna (header). Se consume en el paso de Secciones para
+   * detectar categorías sin parsear el archivo en el navegador.
+   */
+  distinctValuesByColumn?: Record<string, Array<{ value: string; count: number }>>;
+  /**
+   * Análisis por columna (contrato legacy del paso headers/mapping).
    * `distinctValues` (top 50) y/o `sample_values`. Defensivo: si el runtime
    * aún no lo entrega, se cae al parseo local del fileBuffer.
    */
@@ -122,6 +128,8 @@ export interface ImportWizardState {
   preview: ImportPreviewResult | null;
   executionResult: ImportExecutionResult | null;
   columnMappings: Array<{ sourceColumn: string; targetField: SystemField }>;
+  /** Valores fijos para campos sin columna en el archivo (ej: Marca="Hikvision", Categoría="CCTV"). */
+  fixedValues: Partial<Record<SystemField, string>>;
   ivaMode: 'with_iva' | 'without_iva' | 'mixed';
   listaId: string | null;
   /** Proveedor asociado a la Lista destino (si aplica). */

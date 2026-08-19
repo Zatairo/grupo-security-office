@@ -1,20 +1,23 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { hasRole } from '../../lib/rbac'
+import { hasAnyRole } from '../../lib/rbac'
 import { ROLES } from '../../lib/roles'
 
 const COMMERCIAL_TABS = [
   { to: '/commercial/products', label: 'Productos', end: true },
   { to: '/commercial/lists', label: 'Listas', end: false },
-  { to: '/commercial/assignments', label: 'Asignaciones', end: false, superAdminOnly: true },
+  {
+    to: '/commercial/assignments',
+    label: 'Asignaciones',
+    end: false,
+    roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN_COMERCIAL],
+  },
   { to: '/commercial/suppliers', label: 'Proveedores', end: false },
   { to: '/commercial/purchase-orders', label: 'Órdenes de Compra', end: false },
   { to: '/commercial/purchasing-dashboard', label: 'Panel de Compras', end: false },
   { to: '/commercial/settings', label: 'Configuración', end: false },
 ]
 
-const isSuperAdmin = (): boolean => hasRole(ROLES.SUPER_ADMIN)
-
-const VISIBLE_TABS = COMMERCIAL_TABS.filter((tab) => !tab.superAdminOnly || isSuperAdmin())
+const VISIBLE_TABS = COMMERCIAL_TABS.filter((tab) => !tab.roles || hasAnyRole(tab.roles))
 
 export default function CommercialLayout() {
   return (

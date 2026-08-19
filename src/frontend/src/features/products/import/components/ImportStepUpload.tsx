@@ -202,7 +202,7 @@ export default function ImportStepUpload() {
           }
         `}
       >
-        {previewMutation.isPending ? 'Procesando...' : 'Continuar'}
+        {previewMutation.isPending ? 'Procesando...' : 'Siguiente'}
       </button>
     </div>
   );

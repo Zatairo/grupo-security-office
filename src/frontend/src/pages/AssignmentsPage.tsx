@@ -15,8 +15,7 @@ import { fetchListas } from '../services/listas.service'
 import { fetchUsers, type UserListItem } from '../services/users.service'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatDate } from '../lib/format'
-import { hasRole } from '../lib/rbac'
-import { ROLES } from '../lib/roles'
+import { canManageListaAccess } from '../lib/rbac'
 import { Button } from '../components/ui'
 
 const RESOURCE_TYPE_LABELS: Record<AssignmentResourceType, string> = {
@@ -127,7 +126,6 @@ export default function AssignmentsPage() {
   }
 
   const listError = error ? assignmentErrorFallback(error, 'No se pudieron cargar las asignaciones') : null
-  const isSuperAdmin = hasRole(ROLES.SUPER_ADMIN)
 
   return (
     <div className="space-y-6">
@@ -138,7 +136,7 @@ export default function AssignmentsPage() {
             Controla qué usuarios pueden ver y editar los recursos comerciales
           </p>
         </div>
-        {isSuperAdmin && (
+        {canManageListaAccess() && (
           <Button
             variant="primary"
             icon={

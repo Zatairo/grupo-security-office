@@ -13,7 +13,7 @@ import {
   type PurchaseOrderPayload,
 } from '../services/purchase-orders.service'
 import { fetchSuppliers } from '../services/suppliers.service'
-import { hasPermission, hasRole } from '../lib/rbac'
+import { canDeletePurchaseOrders, hasPermission, hasRole } from '../lib/rbac'
 import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatDate } from '../lib/format'
@@ -84,7 +84,7 @@ export default function PurchaseOrdersPage() {
   const [actionError, setActionError] = useState<string | null>(null)
 
   const canWrite = hasPermission('products:write') || hasRole(ROLES.SUPER_ADMIN)
-  const canDelete = hasRole(ROLES.SUPER_ADMIN)
+  const canDelete = canDeletePurchaseOrders()
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['purchase-orders', statusFilter],

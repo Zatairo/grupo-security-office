@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useImportStore } from '../store/import.store';
-import { Alert } from '../../../../components/ui';
+import { Alert, Button } from '../../../../components/ui';
 import ImportStepper from './ImportStepper';
 import ImportStepSections from './ImportStepSections';
 import ImportStepUpload from './ImportStepUpload';
@@ -32,6 +32,8 @@ interface ImportWizardProps {
 
 export default function ImportWizard({ onClose, onComplete, listaId }: ImportWizardProps) {
   const currentStep = useImportStore((s) => s.currentStep);
+  const nextStep = useImportStore((s) => s.nextStep);
+  const prevStep = useImportStore((s) => s.prevStep);
   const error = useImportStore((s) => s.error);
   const reset = useImportStore((s) => s.reset);
   const isRestored = useImportStore((s) => s.isRestored);
@@ -133,6 +135,17 @@ export default function ImportWizard({ onClose, onComplete, listaId }: ImportWiz
         <div className="flex-1 overflow-y-auto px-6 py-6">
           {renderStep()}
         </div>
+
+        {currentStep !== 'execution' && currentStep !== 'result' && (
+          <footer className="border-t border-neutral-200 px-6 py-4 flex items-center justify-between">
+            <Button variant="secondary" onClick={prevStep} disabled={currentStep === 'upload'}>
+              Anterior
+            </Button>
+            <Button onClick={nextStep} disabled>
+              Siguiente
+            </Button>
+          </footer>
+        )}
       </div>
     </div>
   );

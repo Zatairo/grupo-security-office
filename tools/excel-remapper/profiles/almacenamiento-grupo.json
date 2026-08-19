@@ -1,0 +1,85 @@
+{
+  "source_file": "C:/Users/sopor/OneDrive/Documentos/Esnaider/WEB GRUPOSECURITY/listas/LISTA ALMACENAMIENTO GRUPO.xlsx",
+  "sheet_name": "ALMACENAMIENTO",
+  "header_row": 0,
+  "mappings": [
+    {
+      "source_column": "REFERENCIA",
+      "destination_field": "sku",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "DESCRIPCION",
+      "destination_field": "name",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO INSTALLER (CON IVA)",
+      "destination_field": "price_instalador_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO TIENDA (CON IVA)",
+      "destination_field": "price_tienda_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO CLIENTE FINAL (CON IVA)",
+      "destination_field": "price_cliente_final_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "",
+      "destination_field": "brand",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "",
+      "destination_field": "category",
+      "default_value": "Almacenamiento",
+      "ignored": false
+    },
+    {
+      "source_column": "Columna43",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna5",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna6",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna7",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna8",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna9",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    }
+  ]
+}

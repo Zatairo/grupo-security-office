@@ -104,7 +104,7 @@ export class SuppliersController {
   }
 
   @Delete('suppliers/:id')
-  @Roles('Super Admin')
+  @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Eliminar proveedor (409 si tiene órdenes de compra)' })
   @ApiResponse({ status: 200, description: 'Proveedor eliminado' })
@@ -188,7 +188,7 @@ export class SuppliersController {
   }
 
   @Delete('stock/:id')
-  @Roles('Super Admin')
+  @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Eliminar registro de stock' })
   @ApiResponse({ status: 200, description: 'Stock eliminado' })
@@ -250,7 +250,7 @@ export class SuppliersController {
   }
 
   @Delete('purchase-orders/:id')
-  @Roles('Super Admin')
+  @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Eliminar orden de compra' })
   @ApiResponse({ status: 200, description: 'Orden eliminada' })

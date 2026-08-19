@@ -51,7 +51,7 @@ export class CategoriesController {
   }
 
   @Delete(':id')
-  @Roles('Super Admin')
+  @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Eliminar categoría' })
   remove(@Param('id') id: string) {
     return this.categoriesService.remove(id);

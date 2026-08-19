@@ -29,16 +29,17 @@ const PO_TRANSITIONS: Record<string, string[]> = {
 
 /**
  * Quién mueve cada estado de una orden de compra:
- * - solicitada / aprobada / en_transito / recibida: roles de escritura (Super Admin, Admin Comercial).
- * - cerrada / cancelada: solo Super Admin.
+ * - solicitada / aprobada / en_transito / recibida / cerrada / cancelada:
+ *   roles de escritura (Super Admin, Admin Comercial). El Admin Comercial
+ *   equivale al Super Admin del área comercial y puede cerrar y cancelar.
  */
 const PO_STATUS_ROLES: Record<string, string[]> = {
   solicitada: ['Super Admin', 'Admin Comercial'],
   aprobada: ['Super Admin', 'Admin Comercial'],
   en_transito: ['Super Admin', 'Admin Comercial'],
   recibida: ['Super Admin', 'Admin Comercial'],
-  cerrada: ['Super Admin'],
-  cancelada: ['Super Admin'],
+  cerrada: ['Super Admin', 'Admin Comercial'],
+  cancelada: ['Super Admin', 'Admin Comercial'],
 };
 
 /** Días sin evaluación para considerar a un proveedor "sin evaluación reciente". */
@@ -74,6 +75,7 @@ export class SuppliersService {
     return {
       data: suppliers.map((s) => ({
         ...s,
+        rating: this.toRating100(s.rating),
         evaluationCount: s._count.evaluations,
         averageScore: scores.get(s.id)?.averageScore ?? null,
       })),
@@ -90,6 +92,7 @@ export class SuppliersService {
     const score = (await this.supplierScoreMap()).get(id);
     return {
       ...supplier,
+      rating: this.toRating100(supplier.rating),
       averageScore: score?.averageScore ?? null,
       lastEvaluationDate: score?.lastEvaluationDate ?? null,
     };
@@ -110,7 +113,7 @@ export class SuppliersService {
         contact: (dto.contact ?? undefined) as any,
         category: dto.category,
         status: dto.status ?? 'active',
-        rating: dto.rating,
+        rating: this.toRatingDb(dto.rating),
       },
     });
 
@@ -127,7 +130,7 @@ export class SuppliersService {
       },
     });
 
-    return created;
+    return { ...created, rating: this.toRating100(created.rating) };
   }
 
   /** Actualizar proveedor (parcial) — nit único si cambia. */
@@ -149,7 +152,7 @@ export class SuppliersService {
     if (dto.contact !== undefined) data.contact = dto.contact;
     if (dto.category) data.category = dto.category;
     if (dto.status !== undefined) data.status = dto.status;
-    if (dto.rating !== undefined) data.rating = dto.rating;
+    if (dto.rating !== undefined) data.rating = this.toRatingDb(dto.rating);
 
     const updated = await this.prisma.supplier.update({ where: { id }, data });
 
@@ -167,7 +170,7 @@ export class SuppliersService {
       newValues: data,
     });
 
-    return updated;
+    return { ...updated, rating: this.toRating100(updated.rating) };
   }
 
   /** Eliminar proveedor — bloqueado (409) si tiene órdenes de compra (FK Restrict). */
@@ -1067,6 +1070,22 @@ export class SuppliersService {
       if (!map.has(log.entityId) && typeof v === 'number') map.set(log.entityId, v);
     }
     return map;
+  }
+
+  /**
+   * Escala de rating (C3): la UI y los consumidores usan 0-100, pero la columna
+   * en BD es DECIMAL(3,2) (máx. 9.99). Sin migración: se persiste el valor
+   * normalizado (0-100 → 0-10, dividiendo por 10) y se expone ×10 en los GET.
+   */
+  private toRating100(value: unknown): number | null {
+    if (value === null || value === undefined) return null;
+    return Number(value) * 10;
+  }
+
+  /** Convierte un rating 0-100 de entrada a su forma normalizada (0-10) para DECIMAL(3,2). */
+  private toRatingDb(value: number | null | undefined): number | null | undefined {
+    if (value === null || value === undefined) return value;
+    return value / 10;
   }
 
   /** Promedio y última fecha de evaluación por proveedor. */

@@ -234,7 +234,7 @@ export class ProductsService {
         ...p,
         stockStatus: stockStatusMap.get(p.id) ?? 'no_stock_data',
       })),
-      meta: { total: filteredProducts.length, skip, take },
+      meta: { total, skip, take },
     };
   }
 
@@ -513,16 +513,33 @@ export class ProductsService {
     }
 
     // (c) Al menos 1 precio vigente en la Lista.
-    const priceCount = await this.prisma.price.count({
+    // Los precios importados se crean con `listaId: null` y se vinculan vía
+    // `priceListId` (PriceList no tiene relación FK con Lista). Si no hay precio
+    // con el listaId de la lista, se hace fallback al precio vigente global del
+    // producto para que la publicación no se bloquee por este artefacto.
+    // Se mantiene la regla de fondo: el precio debe existir y ser vigente
+    // (validFrom <= hoy <= validUntil, límites abiertos con null).
+    const vigenciaFilter = {
+      AND: [
+        { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+        { OR: [{ validUntil: null }, { validUntil: { gt: now } }] },
+      ],
+    };
+    let priceCount = await this.prisma.price.count({
       where: {
         productId: product.id,
         ...(product.listaId ? { listaId: product.listaId } : {}),
-        AND: [
-          { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
-          { OR: [{ validUntil: null }, { validUntil: { gt: now } }] },
-        ],
+        ...vigenciaFilter,
       },
     });
+    if (priceCount === 0 && product.listaId) {
+      priceCount = await this.prisma.price.count({
+        where: {
+          productId: product.id,
+          ...vigenciaFilter,
+        },
+      });
+    }
     if (priceCount === 0) {
       failures.push('El producto no tiene al menos un precio vigente en su lista');
     }

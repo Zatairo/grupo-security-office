@@ -45,7 +45,9 @@ describe('AclService (TANDA 1B)', () => {
   let acl: AclService;
 
   const VIEWER = { userId: 'pepito-1', roles: ['Operador'] };
-  const EDIT_PRICES = { userId: 'price-editor', roles: ['Admin Comercial'] };
+  // Niveles vía assignments: el rol NO es Admin Comercial (deny-by-default de la política
+  // nueva aplica); el nivel lo dan los assignments del fixture, no el rol.
+  const EDIT_PRICES = { userId: 'price-editor', roles: ['Operador'] };
   const SUPER = { userId: 'admin-1', roles: ['Super Admin'] };
   const NOAUTH = { userId: 'none-1', roles: ['Operador'] };
 
@@ -146,12 +148,12 @@ describe('AclService (TANDA 1B)', () => {
 
   describe('grants por rol (ROLE:{nombre})', () => {
     it('getAllowedListaIds: grant por rol con nivel suficiente → TODAS las Listas activas', async () => {
-      const ROLE_USER = { userId: 'comercial-1', roles: ['Admin Comercial'] };
+      const ROLE_USER = { userId: 'comercial-1', roles: ['Operador'] };
       buildAssignmentMock([
         {
           userId: 'admin-1', // actor que creó el grant
           resourceType: 'LISTA',
-          resourceId: `${ROLE_ASSIGNMENT_PREFIX}Admin Comercial`,
+          resourceId: `${ROLE_ASSIGNMENT_PREFIX}Operador`,
           level: 'manage',
           isActive: true,
         },
@@ -164,12 +166,12 @@ describe('AclService (TANDA 1B)', () => {
     });
 
     it('getAllowedListaIds: grant por rol con nivel insuficiente NO abre todas las Listas', async () => {
-      const ROLE_USER = { userId: 'comercial-1', roles: ['Admin Comercial'] };
+      const ROLE_USER = { userId: 'comercial-1', roles: ['Operador'] };
       buildAssignmentMock([
         {
           userId: 'admin-1',
           resourceType: 'LISTA',
-          resourceId: `${ROLE_ASSIGNMENT_PREFIX}Admin Comercial`,
+          resourceId: `${ROLE_ASSIGNMENT_PREFIX}Operador`,
           level: 'view',
           isActive: true,
         },
@@ -189,7 +191,7 @@ describe('AclService (TANDA 1B)', () => {
     });
 
     it('getUserLevel toma el nivel máximo entre assignments del usuario y grants por rol', async () => {
-      const ROLE_USER = { userId: 'comercial-1', roles: ['Admin Comercial'] };
+      const ROLE_USER = { userId: 'comercial-1', roles: ['Operador'] };
       buildAssignmentMock([
         {
           userId: ROLE_USER.userId,
@@ -201,7 +203,7 @@ describe('AclService (TANDA 1B)', () => {
         {
           userId: 'admin-1',
           resourceType: 'LISTA',
-          resourceId: `${ROLE_ASSIGNMENT_PREFIX}Admin Comercial`,
+          resourceId: `${ROLE_ASSIGNMENT_PREFIX}Operador`,
           level: 'manage_access',
           isActive: true,
         },
@@ -306,6 +308,46 @@ describe('AclService (TANDA 1B)', () => {
 
     it('getAllowedListaIds devuelve null (sin filtro) para Super Admin', async () => {
       expect(await acl.getAllowedListaIds(SUPER.userId, SUPER.roles, 'view')).toBeNull();
+    });
+  });
+
+  describe('Admin Comercial (isListasAdmin — contenedor de compras)', () => {
+    const COMERCIAL = { userId: 'comercial-1', roles: ['Admin Comercial'] };
+
+    it('isListasAdmin es true para Admin Comercial y false para otros roles no-admin', () => {
+      expect(acl.isListasAdmin(['Admin Comercial'])).toBe(true);
+      expect(acl.isListasAdmin(['Operador'])).toBe(false);
+      expect(acl.isListasAdmin(undefined)).toBe(false);
+    });
+
+    it('getAllowedListaIds devuelve null (ve TODAS las listas) sin consultar assignments', async () => {
+      expect(await acl.getAllowedListaIds(COMERCIAL.userId, COMERCIAL.roles, 'view')).toBeNull();
+      expect(mockPrisma.assignment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('assertListaAccess no bloquea a Admin Comercial (incluida Lista inactiva/archivada)', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce({ id: LISTA_ID, isActive: false, archivedAt: null });
+      await expect(acl.assertListaAccess(LISTA_ID, COMERCIAL, 'manage_access')).resolves.toBeUndefined();
+    });
+
+    it('assertListaRestoreAccess no bloquea a Admin Comercial', async () => {
+      mockPrisma.lista.findUnique.mockResolvedValueOnce({ id: LISTA_ID });
+      await expect(
+        acl.assertListaRestoreAccess(LISTA_ID, COMERCIAL, 'manage'),
+      ).resolves.toBeUndefined();
+    });
+
+    it('assertProductAccess permite a Admin Comercial sobre cualquier producto', async () => {
+      const res = await acl.assertProductAccess('prod-1', COMERCIAL, 'manage_access');
+      expect(res.listaId).toBe(LISTA_ID);
+    });
+
+    it('can / canManageAccessOnLista / canManageAccessOnProduct / canAdministerAccessOnLista → true sin assignments', async () => {
+      expect(await acl.can(LISTA_ID, COMERCIAL, 'manage_access')).toBe(true);
+      expect(await acl.canManageAccessOnLista(LISTA_ID, COMERCIAL)).toBe(true);
+      expect(await acl.canManageAccessOnProduct('prod-1', COMERCIAL)).toBe(true);
+      expect(await acl.canAdministerAccessOnLista(LISTA_ID, COMERCIAL)).toBe(true);
+      expect(mockPrisma.assignment.findMany).not.toHaveBeenCalled();
     });
   });
 });

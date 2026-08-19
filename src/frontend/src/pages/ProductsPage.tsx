@@ -15,7 +15,8 @@ import { ProductPagination } from '../components/ProductPagination'
 import { fetchListas, type Lista } from '../services/listas.service'
 import { publishProduct, unpublishProduct, schedulePublish } from '../services/product-detail.service'
 import api from '../services/api'
-import { hasPermission } from '../lib/rbac'
+import { hasPermission, hasRole } from '../lib/rbac'
+import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
 import { Button } from '../components/ui'
 
@@ -95,6 +96,7 @@ export default function ProductsPage() {
 
   const canBulkDelete = hasPermission('products:delete')
   const canBulkManage = canBulkDelete || hasPermission('products:write')
+  const isCatalogManager = hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
   const { restrictedIds: accessRestrictedIds, unavailable: accessUnavailable } = useAccessMatrix(
     'PRODUCT',
     !isLoading
@@ -496,7 +498,11 @@ export default function ProductsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
               <p className="text-gray-500 font-medium">No hay productos</p>
-              <p className="text-gray-400 text-sm mt-1">Crea tu primer producto para comenzar</p>
+              <p className="text-gray-400 text-sm mt-1">
+                {isCatalogManager
+                  ? 'Crea tu primer producto para comenzar'
+                  : 'No tienes listas asignadas. Solicita acceso a tu administrador.'}
+              </p>
             </div>
           ) : (
             products?.map((product) => (
@@ -546,7 +552,14 @@ export default function ProductsPage() {
                 </tr>
               ) : products?.length === 0 ? (
                 <tr>
-                  <td colSpan={canBulkManage ? 7 : 6} className="px-6 py-12 text-center text-gray-400">No hay productos</td>
+                  <td colSpan={canBulkManage ? 7 : 6} className="px-6 py-12 text-center text-gray-400">
+                  No hay productos
+                  {!isCatalogManager && (
+                    <span className="block text-xs mt-1 text-gray-500">
+                      No tienes listas asignadas. Solicita acceso a tu administrador.
+                    </span>
+                  )}
+                </td>
                 </tr>
               ) : (
                 products?.map((product) => (

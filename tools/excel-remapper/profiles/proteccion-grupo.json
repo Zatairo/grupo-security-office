@@ -1,0 +1,85 @@
+{
+  "source_file": "C:/Users/sopor/OneDrive/Documentos/Esnaider/WEB GRUPOSECURITY/listas/LISTA PROTECCION GRUPO.xlsx",
+  "sheet_name": "POWEST",
+  "header_row": 0,
+  "mappings": [
+    {
+      "source_column": "REFERENCIA",
+      "destination_field": "sku",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "DESCRIPCION",
+      "destination_field": "name",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO INSTALLER (CON IVA)",
+      "destination_field": "price_instalador_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO TIENDA (CON IVA)",
+      "destination_field": "price_tienda_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO CLIENTE FINAL (CON IVA)",
+      "destination_field": "price_cliente_final_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "",
+      "destination_field": "brand",
+      "default_value": "POWEST",
+      "ignored": false
+    },
+    {
+      "source_column": "",
+      "destination_field": "category",
+      "default_value": "Energia/UPS",
+      "ignored": false
+    },
+    {
+      "source_column": "col_5",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "UTILIDAD",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "IVA INC",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna3",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna4",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "COSTO",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    }
+  ]
+}

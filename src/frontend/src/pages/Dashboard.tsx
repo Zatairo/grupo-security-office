@@ -176,13 +176,13 @@ export default function Dashboard() {
   const kpiActiveUsersQuery = useQuery({
     queryKey: ['dashboard', 'kpi', 'active-users'],
     queryFn: () => fetchActiveUsers(),
-    enabled: canViewKpis,
+    enabled: canViewKpis && canViewUsers,
   })
 
   const kpiAuditEventsQuery = useQuery({
     queryKey: ['dashboard', 'kpi', 'audit-events'],
     queryFn: () => fetchAuditEventsTotal(),
-    enabled: canViewKpis,
+    enabled: canViewKpis && canViewAudit,
   })
 
   const trendingProducts: Product[] = trendingData
@@ -245,6 +245,14 @@ export default function Dashboard() {
       ),
     },
   ]
+
+  const visibleKpiItems = kpiItems.filter((kpi) =>
+    kpi.title === 'Usuarios activos'
+      ? canViewUsers
+      : kpi.title === 'Eventos de auditoría'
+        ? canViewAudit
+        : true
+  )
 
   const quickLinks: QuickLink[] = [
     {
@@ -359,7 +367,7 @@ export default function Dashboard() {
             <h2 className="text-lg font-bold text-[var(--color-text-primary)]">Indicadores</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {kpiItems.map((kpi) => (
+            {visibleKpiItems.map((kpi) => (
               <KpiCard key={kpi.title} {...kpi} />
             ))}
           </div>

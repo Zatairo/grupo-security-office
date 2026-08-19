@@ -19,6 +19,7 @@ import {
   ImportPreviewResult,
   ImportExecutionResult,
   ImportProgressResult,
+  CurrentPriceResult,
   ValidationRowError,
 } from './interfaces/import-result';
 import {
@@ -211,6 +212,7 @@ export class ImportService {
       presetName?: string;
       listaId?: string;
       sections?: SectionDecisionDto[];
+      fixedValues?: Partial<Record<SystemField, string>>;
     },
     userId: string,
   ): Promise<ImportExecutionResult> {
@@ -230,6 +232,12 @@ export class ImportService {
     // si no se envía, se conserva la del preview (o cae a LISTA-GENERAL en batch).
     if (dto.listaId !== undefined) {
       ctx.listaId = dto.listaId;
+    }
+
+    // Valores fijos por campo: se aplican a todas las filas durante la
+    // re-normalización (columna mapeada no vacía > fixedValue > inferencia).
+    if (dto.fixedValues !== undefined) {
+      ctx.fixedValues = dto.fixedValues;
     }
 
     // Decisiones de secciones del wizard: mapear sourceValue normalizado → decisión.
@@ -355,6 +363,100 @@ export class ImportService {
   // === Presets de Mapping ===
 
   /**
+   * Precio vigente por SKU para el wizard de importación.
+   *
+   * 1. Busca el producto por SKU exacto (case-insensitive) dentro de la lista
+   *    destino (listaId opcional; si no viene, toma el primero que encuentre).
+   * 2. Si no existe producto → `{ data: null }`.
+   * 3. Si existe producto → precio vigente con el mismo criterio de vigencia que
+   *    prices.service (`validFrom <= hoy <= validUntil`, límites abiertos con
+   *    null); si hay múltiples, el más reciente (orderBy updatedAt desc).
+   * 4. Sin precio vigente → `{ data: { ...producto, exists: false } }`.
+   */
+  async getCurrentPriceBySku(
+    sku: string,
+    listaId?: string,
+  ): Promise<{ data: CurrentPriceResult | null }> {
+    const skuTrimmed = sku?.trim();
+    if (!skuTrimmed) return { data: null };
+
+    const products = await this.prisma.product.findMany({
+      where: {
+        sku: { equals: skuTrimmed, mode: 'insensitive' },
+        ...(listaId ? { listaId } : {}),
+      },
+      select: { id: true, sku: true, name: true },
+      take: 1,
+    });
+
+    const product = products[0];
+    if (!product) return { data: null };
+
+    // Precios del producto: primero filtrados por la lista destino (listaId).
+    // Los precios importados viven con `listaId: null` y se vinculan vía
+    // `priceListId` (PriceList no tiene relación FK con Lista, así que no es
+    // trazable a una lista concreta sin migración). Si no hay ningún precio con
+    // el listaId de la lista, se hace fallback al precio vigente global del
+    // producto (sin filtro de listaId) para que el wizard compare "precio
+    // actual" aunque el precio se importó sin listaId.
+    let prices = await this.prisma.price.findMany({
+      where: {
+        productId: product.id,
+        ...(listaId ? { listaId } : {}),
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    if (listaId && prices.length === 0) {
+      prices = await this.prisma.price.findMany({
+        where: { productId: product.id },
+        orderBy: { updatedAt: 'desc' },
+      });
+    }
+
+    const now = new Date();
+    const vigentes = prices.filter(
+      (p) =>
+        (!p.validFrom || p.validFrom <= now) &&
+        (!p.validUntil || p.validUntil >= now),
+    );
+    // "Más reciente": el vigente con updatedAt más nuevo (determinista).
+    const vigente = vigentes.reduce<typeof prices[number] | null>(
+      (best, p) =>
+        !best || (p.updatedAt?.getTime() ?? 0) >= (best.updatedAt?.getTime() ?? 0)
+          ? p
+          : best,
+      null,
+    );
+
+    if (!vigente) {
+      return {
+        data: {
+          sku: product.sku,
+          productId: product.id,
+          name: product.name,
+          price: null,
+          currency: null,
+          validUntil: null,
+          exists: false,
+        },
+      };
+    }
+
+    return {
+      data: {
+        sku: product.sku,
+        productId: product.id,
+        name: product.name,
+        price: Number(vigente.value),
+        currency: vigente.currency,
+        validUntil: vigente.validUntil ?? null,
+        exists: true,
+      },
+    };
+  }
+
+  /**
    * Lista todos los presets del usuario.
    */
   async listPresets(userId: string): Promise<MappingPreset[]> {
@@ -395,14 +497,28 @@ export class ImportService {
 
   /**
    * Guarda un nuevo preset de mapping.
+   *
+   * Normaliza la entrada antes de persistir:
+   * - Array plano `[{ sourceColumn, targetField }]` (lo que envía la UI:
+   *   MappingPresetManager, ImportStepConfirm, ListaDetailPage) → se convierte
+   *   al formato interno `{ entries: [...], confirmed: true }`.
+   * - Formato interno `{ entries, confirmed }` (lo que usa execute() al guardar
+   *   el mapping del contexto) → se conserva tal cual.
+   * El formato de LECTURA no cambia: GET devuelve `mappings: [{sourceColumn, targetField}]`
+   * (el contrato que el frontend ya parsea al cargar presets).
    */
   async savePreset(
-    mapping: ColumnMapping,
+    mapping: ColumnMapping | Array<{ sourceColumn: string; targetField: SystemField }>,
     name: string,
     userId: string,
     isDefault = false,
   ): Promise<MappingPreset> {
-    const presetData = this.columnMapper.toPreset(mapping, name, userId, isDefault);
+    const presetData = this.columnMapper.toPreset(
+      this.normalizeMappingForPreset(mapping),
+      name,
+      userId,
+      isDefault,
+    );
 
     const preset = await this.prisma.importMapping.create({
       data: {
@@ -439,6 +555,28 @@ export class ImportService {
   }
 
   // === Helpers privados ===
+
+  /**
+   * Normaliza un mapping recibido al formato interno `ColumnMapping`.
+   * Soporta el array plano `[{ sourceColumn, targetField }]` que envía la UI
+   * y el formato interno `{ entries, confirmed }` que usa el pipeline.
+   */
+  private normalizeMappingForPreset(
+    mapping: ColumnMapping | Array<{ sourceColumn: string; targetField: SystemField }>,
+  ): ColumnMapping {
+    if (Array.isArray(mapping)) {
+      return {
+        entries: mapping.map((m) => ({
+          sourceColumn: m.sourceColumn,
+          targetField: m.targetField,
+          isRequired: ['sku', 'name'].includes(m.targetField),
+          confidence: 1.0,
+        })),
+        confirmed: true,
+      };
+    }
+    return mapping;
+  }
 
   /**
    * Resuelve isUpdate y existingProductId en filas normalizadas

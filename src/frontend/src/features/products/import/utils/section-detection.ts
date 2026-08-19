@@ -20,16 +20,24 @@ export function normalizeSectionName(value: string): string {
 /**
  * Obtiene los valores distintos (con conteo) de la columna mapeada a categoría.
  * Orden defensivo:
- *   1. distinctValues del backend (contrato nuevo).
- *   2. sample_values únicos (fallback del contrato).
- *   3. parseo local del fileBuffer con xlsx (el runtime actual no entrega ninguno).
+ *   1. distinctByColumn (contrato real del preview, prioridad máxima).
+ *   2. columnInfo.distinctValues (contrato legacy).
+ *   3. columnInfo.sample_values (fallback del contrato legacy).
+ *   4. parseo local del fileBuffer con xlsx (defensivo: el runtime actual no lo entrega).
  */
 export async function detectSectionValues(
   buffer: ArrayBuffer | null,
   sourceColumn: string | undefined,
   columnInfo?: ImportColumnValueInfo,
+  distinctByColumn?: Array<{ value: string; count: number }>,
 ): Promise<DistinctValue[]> {
   if (sourceColumn) {
+    if (distinctByColumn && distinctByColumn.length > 0) {
+      return distinctByColumn
+        .map((v) => ({ value: String(v.value ?? '').trim(), count: Number(v.count) || 0 }))
+        .filter((v) => v.value !== '')
+        .slice(0, 50);
+    }
     if (columnInfo?.distinctValues && columnInfo.distinctValues.length > 0) {
       return columnInfo.distinctValues
         .map((v) => ({ value: String(v.value ?? '').trim(), count: Number(v.count) || 0 }))

@@ -17,9 +17,28 @@ describe('HeaderDetectorService', () => {
       expect(skuMapping!.sourceColumn).toBe('REFERENCIA');
       expect(skuMapping!.confidence).toBeGreaterThanOrEqual(0.8);
 
+      const descriptionMapping = result.suggestedMappings.find((m) => m.targetField === 'description');
+      expect(descriptionMapping).toBeDefined();
+      expect(descriptionMapping!.sourceColumn).toBe('DESCRIPCION');
+    });
+
+    it('debe mapear Nombre a name y DESCRIPCIÓN a description (no a name)', () => {
+      const headers = ['Nombre', 'DESCRIPCIÓN'];
+      const result = service.detect(headers, []);
+
       const nameMapping = result.suggestedMappings.find((m) => m.targetField === 'name');
       expect(nameMapping).toBeDefined();
-      expect(nameMapping!.sourceColumn).toBe('DESCRIPCION');
+      expect(nameMapping!.sourceColumn).toBe('Nombre');
+
+      const descriptionMapping = result.suggestedMappings.find((m) => m.targetField === 'description');
+      expect(descriptionMapping).toBeDefined();
+      expect(descriptionMapping!.sourceColumn).toBe('DESCRIPCIÓN');
+
+      // DESCRIPCIÓN no debe mapear a name (regresión del bug)
+      const descAsName = result.suggestedMappings.find(
+        (m) => m.targetField === 'name' && m.sourceColumn === 'DESCRIPCIÓN',
+      );
+      expect(descAsName).toBeUndefined();
     });
 
     it('debe detectar mapeo para headers de precios', () => {

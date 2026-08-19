@@ -150,8 +150,9 @@ export function ProductAccessModal({ productId, productName, onClose }: ProductA
         {notice && <Alert variant="success">{notice}</Alert>}
 
         {unavailable ? (
-          <Alert variant="info">
-            La gestión de accesos por producto estará disponible próximamente en el backend.
+          <Alert variant="error">
+            No tienes permisos para gestionar accesos por producto. Solo Super Admin y Admin
+            Comercial pueden gestionar asignaciones.
           </Alert>
         ) : (
           <>

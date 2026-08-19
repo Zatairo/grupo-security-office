@@ -1,0 +1,91 @@
+{
+  "source_file": "C:/Users/sopor/OneDrive/Documentos/Esnaider/WEB GRUPOSECURITY/listas/LISTA AUTOMATIZACIÓN GRUPO.xlsx",
+  "sheet_name": "PUERTAS AUTOMATICAS",
+  "header_row": 0,
+  "mappings": [
+    {
+      "source_column": "REFERENCIA",
+      "destination_field": "sku",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "DESCRIPCIÓN",
+      "destination_field": "name",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO INSTALLER (CON IVA)",
+      "destination_field": "price_instalador_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO TIENDA (CON IVA)",
+      "destination_field": "price_tienda_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "PRECIO CLIENTE FINAL (CON IVA)",
+      "destination_field": "price_cliente_final_iva",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "",
+      "destination_field": "brand",
+      "default_value": "",
+      "ignored": false
+    },
+    {
+      "source_column": "",
+      "destination_field": "category",
+      "default_value": "Puertas Automaticas",
+      "ignored": false
+    },
+    {
+      "source_column": "Columna6",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna4",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "COSTO MAS IVA",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna2",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "Columna1",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "INSTALLER",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    },
+    {
+      "source_column": "MASTER",
+      "destination_field": "",
+      "default_value": "",
+      "ignored": true
+    }
+  ]
+}

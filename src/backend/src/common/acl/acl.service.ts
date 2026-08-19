@@ -43,6 +43,9 @@ export const ROLE_ASSIGNMENT_PREFIX = 'ROLE:';
  *
  * Política:
  *  - Super Admin → acceso total (sin filtro, incluye Listas inactivas/archivadas).
+ *  - Admin Comercial (isListasAdmin) → mismo comportamiento que Super Admin sobre
+ *    Listas/Productos/Precios (contenedor de compras): ve/administra TODAS las Listas.
+ *    NO aplica a recursos globales (usuarios, roles, grants por rol, tipos legacy).
  *  - Usuario autenticado sin assignment activo a una Lista → deny (no ve Lista,
  *    Producto ni Precio asociado; se devuelve 404 para ocultar existencia).
  *  - Assignment inactivo → tratado como inexistente (salvo excepciones por PRODUCTO,
@@ -58,6 +61,15 @@ export class AclService {
 
   isSuperAdmin(roles: string[] | undefined): boolean {
     return !!roles && roles.includes('Super Admin');
+  }
+
+  /**
+   * Admin del área comercial (contenedor de compras): es el "Super Admin de Listas/
+   * Productos/Precios". Ve/administra TODAS las listas como Super Admin, pero NO
+   * gestiona recursos globales (usuarios, roles, grants por rol, tipos legacy).
+   */
+  isListasAdmin(roles: string[] | undefined): boolean {
+    return this.isSuperAdmin(roles) || !!roles?.includes('Admin Comercial');
   }
 
   /** Niveles con ranking >= al nivel solicitado. */
@@ -76,7 +88,7 @@ export class AclService {
     roles: string[],
     level: string = 'view',
   ): Promise<string[] | null> {
-    if (!userId || this.isSuperAdmin(roles)) return null;
+    if (!userId || this.isListasAdmin(roles)) return null;
 
     const levels = this.levelsAtLeast(level);
     const roleResourceIds = roles.map((r) => `${ROLE_ASSIGNMENT_PREFIX}${r}`);
@@ -176,7 +188,7 @@ export class AclService {
     ctx: AccessContext,
     level: string = 'view',
   ): Promise<void> {
-    if (this.isSuperAdmin(ctx.roles)) return;
+    if (this.isListasAdmin(ctx.roles)) return;
 
     const userLevel = await this.getUserLevel(ctx.userId!, listaId, ctx.roles);
     if (!userLevel) {
@@ -212,7 +224,7 @@ export class AclService {
     ctx: AccessContext,
     level: string = 'manage',
   ): Promise<void> {
-    if (this.isSuperAdmin(ctx.roles)) return;
+    if (this.isListasAdmin(ctx.roles)) return;
 
     const lista = await this.prisma.lista.findUnique({
       where: { id: listaId },
@@ -254,7 +266,7 @@ export class AclService {
     if (!product) throw new NotFoundException('Producto no encontrado');
     if (!product.listaId) throw new NotFoundException('Producto no encontrado');
 
-    if (this.isSuperAdmin(ctx.roles)) return { listaId: product.listaId };
+    if (this.isListasAdmin(ctx.roles)) return { listaId: product.listaId };
 
     // 1. Excepciones por producto del usuario (activas e inactivas).
     const productAssignments = await this.prisma.assignment.findMany({
@@ -315,7 +327,7 @@ export class AclService {
     ctx: AccessContext,
     level: string,
   ): Promise<boolean> {
-    if (this.isSuperAdmin(ctx.roles)) return true;
+    if (this.isListasAdmin(ctx.roles)) return true;
     const userLevel = await this.getUserLevel(ctx.userId!, listaId, ctx.roles);
     if (!userLevel) return false;
     return (LEVEL_RANK[userLevel] ?? 0) >= (LEVEL_RANK[level] ?? 0);
@@ -329,7 +341,7 @@ export class AclService {
     listaId: string,
     ctx: AccessContext,
   ): Promise<boolean> {
-    if (this.isSuperAdmin(ctx.roles)) return true;
+    if (this.isListasAdmin(ctx.roles)) return true;
     const userLevel = await this.getUserLevel(ctx.userId!, listaId, ctx.roles);
     return (
       !!userLevel &&
@@ -345,7 +357,7 @@ export class AclService {
     productId: string,
     ctx: AccessContext,
   ): Promise<boolean> {
-    if (this.isSuperAdmin(ctx.roles)) return true;
+    if (this.isListasAdmin(ctx.roles)) return true;
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
       select: { listaId: true },
@@ -362,7 +374,7 @@ export class AclService {
     listaId: string,
     ctx: AccessContext,
   ): Promise<boolean> {
-    if (this.isSuperAdmin(ctx.roles)) return true;
+    if (this.isListasAdmin(ctx.roles)) return true;
     const userLevel = await this.getUserLevel(ctx.userId!, listaId, ctx.roles);
     return (
       !!userLevel &&

@@ -213,10 +213,11 @@ export class ListasService {
     return { data: logs, meta: { total } };
   }
 
-  /** Crear Lista — exclusivo Super Admin. */
+  /** Crear Lista — Super Admin y Admin Comercial (el creador queda auto-asignado con manage_access; otros accesos los gestiona después el Super Admin). */
   async create(dto: CreateListaDto, ctx: AccessContext) {
-    if (!this.acl.isSuperAdmin(ctx.roles)) {
-      throw new ForbiddenException('Solo Super Admin puede crear Listas');
+    const canCreate = ['Super Admin', 'Admin Comercial'].some((r) => ctx.roles?.includes(r));
+    if (!canCreate) {
+      throw new ForbiddenException('Solo Super Admin o Admin Comercial pueden crear Listas');
     }
 
     const existing = await this.prisma.lista.findUnique({
@@ -251,6 +252,7 @@ export class ListasService {
         supplierId: dto.supplierId ?? null,
         validFrom: dto.validFrom ? new Date(dto.validFrom) : null,
         validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
+        createdById: ctx.userId,
       },
     });
 
@@ -272,6 +274,28 @@ export class ListasService {
         validFrom: created.validFrom,
         validUntil: created.validUntil,
       },
+    });
+
+    // Auto-asignación del creador (deny-by-default del findAll): sin este
+    // assignment, una Lista creada por un Admin Comercial no aparece en su
+    // propio listado. Es su recurso recién creado, no un otorgamiento a
+    // terceros (la anti-escalada del módulo assignments aplica a terceros).
+    await this.prisma.assignment.upsert({
+      where: {
+        userId_resourceType_resourceId: {
+          userId: ctx.userId,
+          resourceType: 'LISTA',
+          resourceId: created.id,
+        },
+      },
+      create: {
+        userId: ctx.userId,
+        resourceType: 'LISTA',
+        resourceId: created.id,
+        level: 'manage_access',
+        isActive: true,
+      },
+      update: { level: 'manage_access', isActive: true },
     });
 
     return created;
@@ -507,7 +531,7 @@ export class ListasService {
   }
 
   /**
-   * Eliminación física de una Lista — exclusivo Super Admin.
+   * Eliminación física de una Lista — Super Admin y Admin Comercial (isListasAdmin).
    *
    * Bloqueada (409) si la Lista tiene datos asociados: productos, precios,
    * accesos (assignments) o historial de auditoría. El conteo de historial
@@ -516,10 +540,15 @@ export class ListasService {
    * creada exige que ese evento no bloquee; el historial significativo
    * (update/archive/restore/duplicate/toggle) sí bloquea. Se audita la
    * eliminación ANTES de borrar para capturar id/nombre en el log.
+   *
+   * Fix H9: solo los accesos ACTIVOS de terceros bloquean. Las assignments
+   * soft-deleted (isActive=false) son ruido interno y NO bloquean el borrado,
+   * y al eliminar la Lista se hace hard-delete de TODAS sus assignments
+   * (Assignment no tiene FK a Lista) para no dejar registros huérfanos.
    */
   async removeLista(id: string, ctx: AccessContext) {
-    if (!this.acl.isSuperAdmin(ctx.roles)) {
-      throw new ForbiddenException('Solo Super Admin puede eliminar Listas');
+    if (!this.acl.isListasAdmin(ctx.roles)) {
+      throw new ForbiddenException('Solo Super Admin o Admin Comercial pueden eliminar Listas');
     }
 
     const lista = await this.prisma.lista.findUnique({
@@ -531,7 +560,18 @@ export class ListasService {
     const [products, prices, assignments, auditLogs] = await Promise.all([
       this.prisma.product.count({ where: { listaId: id } }),
       this.prisma.price.count({ where: { listaId: id } }),
-      this.prisma.assignment.count({ where: { resourceType: 'LISTA', resourceId: id } }),
+      // Fix H9: solo accesos ACTIVOS de terceros bloquean. La auto-asignación del
+      // propio actor (create → manage_access del creador) y las assignments
+      // soft-deleted (isActive=false) son ruido interno y NO bloquean, de modo que
+      // el creador (Super Admin o Admin Comercial) puede eliminar su Lista vacía.
+      this.prisma.assignment.count({
+        where: {
+          resourceType: 'LISTA',
+          resourceId: id,
+          isActive: true,
+          ...(ctx.userId ? { NOT: { userId: ctx.userId } } : {}),
+        },
+      }),
       this.prisma.auditLog.count({ where: { entity: 'LISTA', entityId: id, action: { not: 'create' } } }),
     ]);
 
@@ -555,6 +595,12 @@ export class ListasService {
       newValues: { code: lista.code, name: lista.name },
     });
 
+    // Fix H9: hard-delete de las assignments de la Lista (Assignment no tiene FK a
+    // Lista) para no dejar registros huérfanos, sean activos o soft-deleted.
+    await this.prisma.assignment.deleteMany({
+      where: { resourceType: 'LISTA', resourceId: id },
+    });
+
     await this.prisma.lista.delete({ where: { id } });
     return { message: 'Lista eliminada exitosamente' };
   }
@@ -569,7 +615,7 @@ export class ListasService {
    * (checklist 29/30). Super Admin siempre.
    */
   private async userCanSeePrices(listaId: string, ctx: AccessContext): Promise<boolean> {
-    if (this.acl.isSuperAdmin(ctx.roles)) return true;
+    if (this.acl.isListasAdmin(ctx.roles)) return true;
     const level = await this.acl.getUserLevel(ctx.userId!, listaId, ctx.roles);
     return !!level && (LEVEL_RANK[level] ?? 0) >= (LEVEL_RANK['edit_prices'] ?? 0);
   }
