@@ -91,14 +91,15 @@ jobs:
     name: Deploy (${{ needs.build.outputs.env }})
     needs: build
     runs-on: ubuntu-latest
-    # Se salta (skipped, no falla) cuando no hay servidor SSH configurado
-    # o cuando el branch no es producción. Las imágenes ya se publican en GHCR
-    # en el job `build` independientemente de este job.
-    if: ${{ needs.build.outputs.env == 'production' && secrets.DEPLOY_HOST != '' }}
+    # El job siempre corre cuando build tuvo éxito. La lógica de secrets se
+    # evalúa a nivel de step (el contexto secrets NO está disponible en `if`
+    # a nivel de job). Sin secrets, el deployment queda marcado como completado
+    # sin despliegue real (paso "Deploy skipped").
     environment: ${{ needs.build.outputs.env }}
 
     steps:
       - name: Deploy via SSH
+        if: ${{ secrets.DEPLOY_HOST != '' }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -116,12 +117,18 @@ jobs:
 
       # ── Smoke test ──
       - name: Smoke test
+        if: ${{ secrets.DEPLOY_HOST != '' }}
         env:
           DEPLOY_URL: ${{ vars.DEPLOY_URL || 'https://panel.gruposecurity.com' }}
         run: |
           echo "→ Running smoke tests against $DEPLOY_URL"
           chmod +x ./scripts/smoke-test.sh
           ./scripts/smoke-test.sh "$DEPLOY_URL"
+
+      - name: Deploy skipped (sin secrets)
+        if: ${{ secrets.DEPLOY_HOST == '' }}
+        run: |
+          echo "Deploy SSH no configurado (faltan secrets DEPLOY_HOST/DEPLOY_USER/DEPLOY_SSH_KEY). Build publicado en GHCR. El deployment de GitHub queda marcado como completado sin despliegue real."
 
   # ─────────── Post-deploy notification ───────────
   notify:
