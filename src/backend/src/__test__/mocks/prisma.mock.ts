@@ -45,6 +45,7 @@ export const createPrismaMock = () => ({
     update: jest.fn(),
     updateMany: jest.fn(),
     delete: jest.fn(),
+    deleteMany: jest.fn(),
     count: jest.fn(),
   },
   category: {
@@ -128,6 +129,7 @@ export const createPrismaMock = () => ({
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    deleteMany: jest.fn(),
     upsert: jest.fn(),
     count: jest.fn(),
   },
@@ -148,6 +150,11 @@ export const createPrismaMock = () => ({
     deleteMany: jest.fn(),
     updateMany: jest.fn(),
     count: jest.fn(),
+  },
+  masterKey: {
+    findUnique: jest.fn(),
+    upsert: jest.fn(),
+    delete: jest.fn(),
   },
   $connect: jest.fn(),
   $disconnect: jest.fn(),

@@ -157,12 +157,14 @@ export class ListasController {
   @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Eliminar Lista físicamente (bloqueada si tiene productos, precios, accesos o historial)',
+    summary:
+      'Eliminar Lista físicamente (sin datos: directo; con datos asociados exige clave maestra)',
   })
-  @ApiResponse({ status: 200, description: 'Lista eliminada (sin datos asociados)' })
+  @ApiResponse({ status: 200, description: 'Lista eliminada (sin datos o borrado forzado con clave maestra)' })
   @ApiResponse({ status: 404, description: 'Lista no encontrada' })
-  @ApiResponse({ status: 409, description: 'La Lista tiene datos asociados' })
-  remove(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.listasService.removeLista(id, this.ctx(user));
+  @ApiResponse({ status: 409, description: 'La Lista tiene datos asociados y no se envió la clave maestra' })
+  @ApiResponse({ status: 403, description: 'Clave maestra incorrecta' })
+  remove(@Param('id') id: string, @Body() dto: { masterKey?: string }, @CurrentUser() user: any) {
+    return this.listasService.removeLista(id, this.ctx(user), dto);
   }
 }

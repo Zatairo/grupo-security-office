@@ -169,7 +169,7 @@ function TableShell({
 function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-6 py-12 text-center text-neutral-400">
+      <td colSpan={colSpan} className="px-3 py-6 text-center text-neutral-400">
         {message}
       </td>
     </tr>
@@ -1203,11 +1203,11 @@ function HistoryTab() {
           <table className="min-w-full divide-y divide-neutral-200">
             <thead className="bg-neutral-50">
               <tr>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Fecha</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Usuario</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Acción</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Entidad</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">ID</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Fecha</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Usuario</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Acción</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Entidad</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">ID</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-200">
@@ -1218,10 +1218,10 @@ function HistoryTab() {
               ) : (
                 logs.map((log) => (
                   <tr key={log.id} className="hover:bg-neutral-50 transition-colors">
-                    <td className="px-6 py-4 text-sm text-neutral-500 whitespace-nowrap">{formatAuditTimestamp(log.createdAt)}</td>
-                    <td className="px-6 py-4 text-sm text-neutral-800">{log.user?.name ?? 'Sistema'}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded ${
+                    <td className="px-3 py-1.5 text-xs text-neutral-500 whitespace-nowrap">{formatAuditTimestamp(log.createdAt)}</td>
+                    <td className="px-3 py-1.5 text-xs text-neutral-800">{log.user?.name ?? 'Sistema'}</td>
+                    <td className="px-3 py-1.5">
+                      <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
                         log.action === 'CREATE' ? 'bg-emerald-100 text-emerald-700' :
                         log.action === 'UPDATE' ? 'bg-amber-100 text-amber-700' :
                         'bg-red-100 text-red-700'
@@ -1229,8 +1229,8 @@ function HistoryTab() {
                         {log.action}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">{log.entity}</td>
-                    <td className="px-6 py-4 text-xs font-mono text-neutral-500">{log.entityId?.substring(0, 8)}...</td>
+                    <td className="px-3 py-1.5 text-xs text-neutral-600">{log.entity}</td>
+                    <td className="px-3 py-1.5 text-xs font-mono text-neutral-500">{log.entityId?.substring(0, 8)}...</td>
                   </tr>
                 ))
               )}

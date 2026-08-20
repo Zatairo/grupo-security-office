@@ -4,10 +4,12 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService, AccessContext, LEVEL_RANK } from '../../common/acl/acl.service';
 import { AuditService } from '../audit/audit.service';
+import { MasterKeyService } from '../master-key/master-key.service';
 import { CreateListaDto } from './dto/create-lista.dto';
 import { UpdateListaDto } from './dto/update-lista.dto';
 import { randomBytes } from 'crypto';
@@ -18,6 +20,7 @@ export class ListasService {
     private prisma: PrismaService,
     private acl: AclService,
     private audit: AuditService,
+    @Optional() private masterKey?: MasterKeyService,
   ) {}
 
   /** Lista de Listas autorizadas (deny-by-default). */
@@ -533,20 +536,26 @@ export class ListasService {
   /**
    * Eliminación física de una Lista — Super Admin y Admin Comercial (isListasAdmin).
    *
-   * Bloqueada (409) si la Lista tiene datos asociados: productos, precios,
-   * accesos (assignments) o historial de auditoría. El conteo de historial
-   * EXCLUYE el evento `create` (decisión OLA 7A): toda Lista creada por API
-   * genera un audit de creación, y permitir borrar una Lista vacía recién
-   * creada exige que ese evento no bloquee; el historial significativo
-   * (update/archive/restore/duplicate/toggle) sí bloquea. Se audita la
-   * eliminación ANTES de borrar para capturar id/nombre en el log.
+   * Comportamiento por impacto:
+   * - SIN datos asociados (products=0, prices=0, assignments activos=0): borra normal,
+   *   sin pedir clave maestra (flujo histórico).
+   * - CON datos asociados y SIN `dto.masterKey` → 409 (exige la clave maestra).
+   * - CON datos asociados y clave maestra inválida/no configurada → 403.
+   * - CON datos asociados y clave maestra válida → borrado FORZADO en cascada dentro
+   *   de una transacción (orden por FKs: stock → productImage → price(product) →
+   *   price(lista) → product → assignment → lista).
+   *
+   * El historial de auditoría NO bloquea (decisión de negocio): al borrar la Lista se
+   * conserva como rastro la tabla AuditLog (no se borra con la lista), y el evento
+   * `delete` se registra ANTES del borrado físico para dejar constancia del código/
+   * nombre. En el borrado forzado se anota `forced: true` con los counts previos.
    *
    * Fix H9: solo los accesos ACTIVOS de terceros bloquean. Las assignments
    * soft-deleted (isActive=false) son ruido interno y NO bloquean el borrado,
    * y al eliminar la Lista se hace hard-delete de TODAS sus assignments
    * (Assignment no tiene FK a Lista) para no dejar registros huérfanos.
    */
-  async removeLista(id: string, ctx: AccessContext) {
+  async removeLista(id: string, ctx: AccessContext, dto?: { masterKey?: string }) {
     if (!this.acl.isListasAdmin(ctx.roles)) {
       throw new ForbiddenException('Solo Super Admin o Admin Comercial pueden eliminar Listas');
     }
@@ -557,7 +566,7 @@ export class ListasService {
     });
     if (!lista) throw new NotFoundException('Lista no encontrada');
 
-    const [products, prices, assignments, auditLogs] = await Promise.all([
+    const [products, prices, assignments] = await Promise.all([
       this.prisma.product.count({ where: { listaId: id } }),
       this.prisma.price.count({ where: { listaId: id } }),
       // Fix H9: solo accesos ACTIVOS de terceros bloquean. La auto-asignación del
@@ -572,19 +581,57 @@ export class ListasService {
           ...(ctx.userId ? { NOT: { userId: ctx.userId } } : {}),
         },
       }),
-      this.prisma.auditLog.count({ where: { entity: 'LISTA', entityId: id, action: { not: 'create' } } }),
     ]);
 
     const impact: string[] = [];
     if (products > 0) impact.push(`${products} producto${products === 1 ? '' : 's'}`);
     if (prices > 0) impact.push(`${prices} precio${prices === 1 ? '' : 's'}`);
     if (assignments > 0) impact.push(`${assignments} accesos`);
-    if (auditLogs > 0) impact.push(`${auditLogs} registros de historial`);
 
     if (impact.length > 0) {
-      throw new ConflictException(
-        `La Lista tiene ${impact.join(' y ')}. Archívela o elimine los datos asociados primero.`,
-      );
+      // Con datos asociados: se exige la clave maestra (feature de seguridad autorizada).
+      const masterKey = dto?.masterKey;
+      if (!masterKey) {
+        throw new ConflictException(
+          `La Lista tiene ${impact.join(' y ')}. Se requiere la clave maestra para eliminar.`,
+        );
+      }
+      if (!this.masterKey || !(await this.masterKey.validateMasterKey(masterKey))) {
+        throw new ForbiddenException('Clave maestra incorrecta');
+      }
+
+      // Auditoría ANTES del borrado físico: deja constancia del borrado forzado
+      // (code/name/forced/counts) aunque algo falle a mitad de la transacción.
+      await this.audit.log({
+        userId: ctx.userId,
+        action: 'delete',
+        entity: 'LISTA',
+        entityId: lista.id,
+        oldValues: { name: lista.name, code: lista.code },
+        newValues: {
+          code: lista.code,
+          name: lista.name,
+          forced: true,
+          productsRemoved: products,
+          pricesRemoved: prices,
+        },
+      });
+
+      // Borrado forzado en cascada. Orden importa por FKs:
+      // 1) Stock (FK productId → Product), 2) ProductImage (FK productId → Product),
+      // 3) Price por producto y por lista, 4) Product, 5) Assignment (sin FK a Lista),
+      // 6) Lista.
+      await this.prisma.$transaction(async (tx) => {
+        await tx.stock.deleteMany({ where: { product: { listaId: id } } });
+        await tx.productImage.deleteMany({ where: { product: { listaId: id } } });
+        await tx.price.deleteMany({ where: { product: { listaId: id } } });
+        await tx.price.deleteMany({ where: { listaId: id } });
+        await tx.product.deleteMany({ where: { listaId: id } });
+        await tx.assignment.deleteMany({ where: { resourceType: 'LISTA', resourceId: id } });
+        await tx.lista.delete({ where: { id } });
+      });
+
+      return { message: 'Lista eliminada exitosamente' };
     }
 
     await this.audit.log({
@@ -592,6 +639,7 @@ export class ListasService {
       action: 'delete',
       entity: 'LISTA',
       entityId: lista.id,
+      oldValues: { name: lista.name, code: lista.code },
       newValues: { code: lista.code, name: lista.name },
     });
 

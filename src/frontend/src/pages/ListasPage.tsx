@@ -109,6 +109,7 @@ export default function ListasPage() {
   const [expiryDateFilter, setExpiryDateFilter] = useState<ExpiryDateFilter>('all')
   const [actionNotice, setActionNotice] = useState<string | null>(null)
   const [deleteImpactIds, setDeleteImpactIds] = useState<string[]>([])
+  const [deleteImpactError, setDeleteImpactError] = useState<string | null>(null)
   const selectAllRef = useRef<HTMLInputElement>(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -263,29 +264,44 @@ export default function ListasPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: async (ids: string[]) => {
-      const results = await Promise.allSettled(ids.map((id) => api.delete(`/listas/${id}`)))
+    mutationFn: async ({ ids, masterKey }: { ids: string[]; masterKey?: string }) => {
+      const results = await Promise.allSettled(
+        ids.map((id) => api.delete(`/listas/${id}`, { data: { masterKey } }))
+      )
       let deleted = 0
       let blocked = 0
       let pending = 0
+      let deleteBlockedMessage: string | null = null
       for (const r of results) {
         if (r.status === 'fulfilled') {
           deleted += 1
           continue
         }
         const status = (r.reason as { response?: { status?: number } })?.response?.status
-        if (status === 409) blocked += 1
-        else if (status === 404 || status === 405 || status === 501) pending += 1
+        if (status === 403 || status === 409) {
+          blocked += 1
+          deleteBlockedMessage = getApiErrorMessage(
+            r.reason,
+            status === 403 ? 'Clave maestra incorrecta' : 'Se requiere la clave maestra para eliminar'
+          )
+        } else if (status === 404 || status === 405 || status === 501) {
+          pending += 1
+        }
       }
-      return { deleted, blocked, pending }
+      return { deleted, blocked, pending, deleteBlockedMessage }
     },
     onSuccess: (result) => {
+      if (result.blocked > 0) {
+        setDeleteImpactError(result.deleteBlockedMessage ?? 'No se pudo eliminar. Verifica la clave maestra.')
+        return
+      }
       invalidate()
       setSelectedIds([])
+      setDeleteImpactIds([])
+      setDeleteImpactError(null)
       setActionError(null)
       const parts: string[] = []
       if (result.deleted > 0) parts.push(`${result.deleted} Lista(s) eliminada(s)`)
-      if (result.blocked > 0) parts.push(`${result.blocked} bloqueada(s) por tener productos, precios o asignaciones asociados`)
       if (result.pending > 0) parts.push('la eliminación de algunas Listas estará disponible próximamente')
       setActionNotice(parts.length > 0 ? parts.join('. ') : 'No se eliminó ninguna Lista')
     },
@@ -808,10 +824,14 @@ export default function ListasPage() {
         <DeleteImpactModal
           listas={listas ?? []}
           ids={deleteImpactIds}
-          onClose={() => setDeleteImpactIds([])}
-          onConfirm={(ids) => {
+          error={deleteImpactError}
+          onClose={() => {
             setDeleteImpactIds([])
-            deleteMutation.mutate(ids)
+            setDeleteImpactError(null)
+          }}
+          onConfirm={(ids, masterKey) => {
+            setDeleteImpactError(null)
+            deleteMutation.mutate({ ids, masterKey })
           }}
         />
       )}
@@ -824,13 +844,16 @@ function DeleteImpactModal({
   ids,
   onClose,
   onConfirm,
+  error,
 }: {
   listas: Lista[]
   ids: string[]
   onClose: () => void
-  onConfirm: (ids: string[]) => void
+  onConfirm: (ids: string[], masterKey: string) => void
+  error?: string | null
 }) {
-  const { data, isLoading, error } = useQuery({
+  const [masterKey, setMasterKey] = useState('')
+  const { data, isLoading, error: impactQueryError } = useQuery({
     queryKey: ['lista-delete-impact', ids.join(',')],
     queryFn: async () => {
       const [prices, assignments, audit] = await Promise.all([
@@ -850,7 +873,9 @@ function DeleteImpactModal({
     staleTime: 0,
   })
 
-  const impactError = error ? getApiErrorMessage(error, 'No se pudo calcular el impacto') : null
+  const impactError = impactQueryError ? getApiErrorMessage(impactQueryError, 'No se pudo calcular el impacto') : null
+  const requiresKey =
+    (data?.products ?? 0) > 0 || (data?.prices ?? 0) > 0 || (data?.assignments ?? 0) > 0
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -879,8 +904,8 @@ function DeleteImpactModal({
                 <strong>{data?.products ?? 0} productos</strong>,{' '}
                 <strong>{data?.prices ?? 0} precios</strong> y{' '}
                 <strong>{data?.assignments ?? 0} asignaciones</strong>
-                {data && data.audit > 0 ? ` y ${data.audit} registros de auditoría` : ''}. Esta acción no se puede
-                deshacer.
+                {data && data.audit > 0 ? '. El historial de auditoría se conservará como registro del borrado' : ''}.
+                Esta acción no se puede deshacer.
               </p>
               <p className="text-xs text-neutral-400">
                 {ids.length} Lista(s) seleccionada(s):{' '}
@@ -892,6 +917,32 @@ function DeleteImpactModal({
             </>
           )}
 
+          {!isLoading && requiresKey && (
+            <div>
+              <label htmlFor="delete-master-key" className="block text-sm font-medium text-neutral-800 mb-1.5">
+                Clave maestra
+              </label>
+              <input
+                id="delete-master-key"
+                type="password"
+                value={masterKey}
+                onChange={(e) => setMasterKey(e.target.value)}
+                autoComplete="off"
+                placeholder="••••••"
+                className="w-full px-4 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm"
+              />
+              <p className="text-xs text-neutral-500 mt-1.5">
+                Esta lista tiene datos asociados. Ingresa la clave maestra para eliminar.
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-red-50 border-red-200 text-red-700" role="alert">
+              <span className="flex-1">{error}</span>
+            </div>
+          )}
+
           <div className="flex gap-3 justify-end pt-2">
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancelar
@@ -899,8 +950,8 @@ function DeleteImpactModal({
             <Button
               type="button"
               variant="danger"
-              disabled={isLoading}
-              onClick={() => onConfirm(ids)}
+              disabled={isLoading || (requiresKey && masterKey.length === 0)}
+              onClick={() => onConfirm(ids, masterKey)}
             >
               Eliminar definitivamente
             </Button>

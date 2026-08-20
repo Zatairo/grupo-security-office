@@ -1680,35 +1680,35 @@ function AuditTab({ product }: { product: Product }) {
 
   return (
     <div className="overflow-x-auto border border-neutral-200 rounded-lg">
-      <table className="min-w-full divide-y divide-neutral-200 text-sm">
+      <table className="min-w-full divide-y divide-neutral-200 text-xs">
         <thead className="bg-neutral-50">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Fecha</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Usuario</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Acción</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Detalle</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-600 uppercase">Fecha</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-600 uppercase">Usuario</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-600 uppercase">Acción</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-600 uppercase">Detalle</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-100">
           {logs.map((log: AuditLog) => (
             <tr key={log.id}>
-              <td className="px-4 py-3 text-neutral-500 text-xs whitespace-nowrap">
+              <td className="px-3 py-1.5 text-neutral-500 text-xs whitespace-nowrap">
                 {formatDate(log.createdAt)}
               </td>
-              <td className="px-4 py-3 text-neutral-700">
+              <td className="px-3 py-1.5 text-neutral-700">
                 {log.user?.name ?? log.user?.email ?? 'Sistema'}
               </td>
-              <td className="px-4 py-3">
+              <td className="px-3 py-1.5">
                 <Badge variant={log.action === 'delete' ? 'error' : log.action === 'create' ? 'success' : 'info'}>
                   {log.action}
                 </Badge>
               </td>
-              <td className="px-4 py-3 text-xs text-neutral-500">
+              <td className="px-3 py-1.5 text-xs text-neutral-500">
                 <details>
                   <summary className="cursor-pointer text-[var(--color-primary)]">
                     Ver cambios
                   </summary>
-                  <pre className="mt-2 bg-neutral-50 p-2 rounded overflow-x-auto text-[11px] text-neutral-600">
+                  <pre className="mt-1 bg-neutral-50 p-1.5 rounded overflow-x-auto text-[11px] text-neutral-600">
                     {JSON.stringify({ anterior: log.oldValues, nuevo: log.newValues }, null, 2)}
                   </pre>
                 </details>

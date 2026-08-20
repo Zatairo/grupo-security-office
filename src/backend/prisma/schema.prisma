@@ -22,6 +22,7 @@ model User {
   supplierEvaluations SupplierEvaluation[]
   purchaseOrders      PurchaseOrder[]
   publishedProducts   Product[]            @relation("ProductPublishedBy")
+  masterKeyUpdates    MasterKey[]          @relation("MasterKeyUpdatedBy")
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
@@ -345,4 +346,14 @@ model PurchaseOrder {
   @@index([status])
   @@index([requestedById])
   @@map("purchase_orders")
+}
+
+model MasterKey {
+  id          String   @id @default(uuid())
+  keyHash     String
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+  updatedBy   User?    @relation("MasterKeyUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("master_keys")
 }

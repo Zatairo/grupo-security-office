@@ -12,6 +12,7 @@ import { BrandsModule } from './modules/brands/brands.module';
 import { AssignmentsModule } from './modules/assignments/assignments.module';
 import { PricesModule } from './modules/prices/prices.module';
 import { ListasModule } from './modules/listas/listas.module';
+import { MasterKeyModule } from './modules/master-key/master-key.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { HealthModule } from './modules/health/health.module';
@@ -43,6 +44,7 @@ import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
     AssignmentsModule,
     PricesModule,
     ListasModule,
+    MasterKeyModule,
     SuppliersModule,
     AuditModule,
     HealthModule,

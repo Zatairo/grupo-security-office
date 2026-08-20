@@ -73,34 +73,34 @@ export default function AuditPage() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Fecha</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Usuario</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Acción</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Entidad</th>
-              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">ID</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Fecha</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Usuario</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Acción</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Entidad</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">ID</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {isLoading ? (
-              <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-400">Cargando...</td></tr>
+              <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Cargando...</td></tr>
             ) : logs?.data?.length === 0 ? (
-              <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-400">No hay registros</td></tr>
+              <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">No hay registros</td></tr>
             ) : (
               logs?.data?.map((log: any) => (
                 <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 text-sm text-gray-500">{formatAuditTimestamp(log.createdAt)}</td>
-                  <td className="px-6 py-4">
+                  <td className="px-3 py-1.5 text-xs text-gray-500">{formatAuditTimestamp(log.createdAt)}</td>
+                  <td className="px-3 py-1.5">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-security-100 rounded-full flex items-center justify-center">
+                      <div className="w-5 h-5 bg-security-100 rounded-full flex items-center justify-center">
                         <span className="text-xs font-semibold text-security-700">
                           {log.user?.name?.charAt(0).toUpperCase() || 'S'}
                         </span>
                       </div>
-                      <span className="text-sm text-gray-900">{log.user?.name || 'Sistema'}</span>
+                      <span className="text-xs text-gray-900">{log.user?.name || 'Sistema'}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded ${
+                  <td className="px-3 py-1.5">
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded ${
                       log.action === 'CREATE' ? 'bg-emerald-100 text-emerald-700' :
                       log.action === 'UPDATE' ? 'bg-amber-100 text-amber-700' :
                       'bg-red-100 text-red-700'
@@ -113,8 +113,8 @@ export default function AuditPage() {
                       {log.action}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{log.entity}</td>
-                  <td className="px-6 py-4 text-sm font-mono text-gray-500">{log.entityId?.substring(0, 8)}...</td>
+                  <td className="px-3 py-1.5 text-xs text-gray-600">{log.entity}</td>
+                  <td className="px-3 py-1.5 text-xs font-mono text-gray-500">{log.entityId?.substring(0, 8)}...</td>
                 </tr>
               ))
             )}

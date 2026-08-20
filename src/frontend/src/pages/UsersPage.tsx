@@ -5,6 +5,12 @@ import api from '../services/api'
 import { canViewUsers, hasRole } from '../lib/rbac'
 import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
+import { formatDate } from '../lib/format'
+import {
+  fetchMasterKeyStatus,
+  saveMasterKey,
+  removeMasterKey,
+} from '../services/master-key.service'
 import {
   fetchRoles,
   fetchRole,
@@ -335,6 +341,205 @@ export default function UsersPage() {
           )}
         </>
       )}
+
+      {hasRole(ROLES.SUPER_ADMIN) && <MasterKeySection />}
+    </div>
+  )
+}
+
+function MasterKeySection() {
+  const queryClient = useQueryClient()
+  const [newKey, setNewKey] = useState('')
+  const [confirmKey, setConfirmKey] = useState('')
+  const [currentKey, setCurrentKey] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const { data: status, isLoading } = useQuery({
+    queryKey: ['security', 'master-key'],
+    queryFn: fetchMasterKeyStatus,
+  })
+
+  const configured = status?.configured ?? false
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      saveMasterKey({
+        masterKey: newKey,
+        ...(configured ? { currentMasterKey: currentKey } : {}),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['security', 'master-key'] })
+      setNewKey('')
+      setConfirmKey('')
+      setCurrentKey('')
+      setFormError(null)
+      setNotice('Clave maestra guardada correctamente.')
+    },
+    onError: (err) => {
+      setNotice(null)
+      setFormError(getApiErrorMessage(err, 'No se pudo guardar la clave maestra'))
+    },
+  })
+
+  const removeMutation = useMutation({
+    mutationFn: removeMasterKey,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['security', 'master-key'] })
+      setFormError(null)
+      setNotice('Clave maestra eliminada.')
+    },
+    onError: (err) => {
+      setNotice(null)
+      setFormError(getApiErrorMessage(err, 'No se pudo eliminar la clave maestra'))
+    },
+  })
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault()
+    setFormError(null)
+    setNotice(null)
+    if (newKey.length < 6) {
+      setFormError('La clave maestra debe tener al menos 6 caracteres')
+      return
+    }
+    if (newKey !== confirmKey) {
+      setFormError('Las claves no coinciden')
+      return
+    }
+    if (configured && !currentKey) {
+      setFormError('Ingresa la clave maestra actual')
+      return
+    }
+    saveMutation.mutate()
+  }
+
+  const handleRemove = () => {
+    setFormError(null)
+    setNotice(null)
+    if (
+      !window.confirm(
+        '¿Eliminar la clave maestra? El borrado de Listas con datos asociados requerirá nuevamente una clave.'
+      )
+    ) {
+      return
+    }
+    removeMutation.mutate()
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+      <div>
+        <h2 className="text-base font-bold text-security-700">Clave maestra</h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Protección adicional para eliminar Listas con productos, precios o asignaciones asociados.
+        </p>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-gray-400">Consultando estado...</p>
+      ) : (
+        <p className="text-sm text-gray-700">
+          {configured ? (
+            <>
+              Clave maestra: <span className="font-semibold text-emerald-600">configurada</span>
+              {status?.updatedAt && (
+                <>
+                  {' '}
+                  (última actualización {formatDate(status.updatedAt)}
+                  {status?.updatedBy?.name ? ` por ${status.updatedBy.name}` : ''})
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              Clave maestra: <span className="font-semibold text-gray-900">no configurada</span>
+            </>
+          )}
+        </p>
+      )}
+
+      {notice && (
+        <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-emerald-50 border-emerald-200 text-emerald-800" role="status">
+          <span className="flex-1">{notice}</span>
+          <button onClick={() => setNotice(null)} className="p-0.5 rounded hover:bg-emerald-100/60" aria-label="Cerrar">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {formError && (
+        <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
+          <span className="flex-1">{formError}</span>
+          <button onClick={() => setFormError(null)} className="p-0.5 rounded hover:bg-red-100/60" aria-label="Cerrar">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-4">
+        {configured && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Clave maestra actual</label>
+            <input
+              type="password"
+              value={currentKey}
+              onChange={(e) => setCurrentKey(e.target.value)}
+              autoComplete="current-password"
+              placeholder="Ingresa la clave actual para modificarla"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+            />
+          </div>
+        )}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Nueva clave maestra</label>
+          <input
+            type="password"
+            value={newKey}
+            onChange={(e) => setNewKey(e.target.value)}
+            minLength={6}
+            required
+            autoComplete="new-password"
+            placeholder="Mínimo 6 caracteres"
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirmar clave maestra</label>
+          <input
+            type="password"
+            value={confirmKey}
+            onChange={(e) => setConfirmKey(e.target.value)}
+            minLength={6}
+            required
+            autoComplete="new-password"
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <button
+            type="submit"
+            disabled={saveMutation.isPending}
+            className="px-4 py-2.5 bg-security-500 text-white rounded-lg hover:bg-security-600 disabled:opacity-50 font-semibold transition-colors"
+          >
+            {saveMutation.isPending ? 'Guardando...' : 'Guardar clave'}
+          </button>
+          {configured && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={removeMutation.isPending}
+              className="px-4 py-2.5 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50 font-semibold transition-colors"
+            >
+              {removeMutation.isPending ? 'Eliminando...' : 'Eliminar clave'}
+            </button>
+          )}
+        </div>
+      </form>
     </div>
   )
 }

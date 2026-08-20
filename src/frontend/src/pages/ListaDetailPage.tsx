@@ -984,7 +984,7 @@ function AccesosTab({ assignments }: { assignments: any[] }) {
 function AuditoriaTab({ logs }: { logs: any[] }) {
   if (logs.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-neutral-200 text-center py-12">
+      <div className="bg-white rounded-xl border border-neutral-200 text-center py-6">
         <p className="text-neutral-400">Sin eventos de auditoría registrados para esta Lista.</p>
       </div>
     )
@@ -995,19 +995,19 @@ function AuditoriaTab({ logs }: { logs: any[] }) {
         <table className="min-w-full divide-y divide-neutral-200">
           <thead className="bg-neutral-100">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Fecha</th>
-              <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Acción</th>
-              <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Usuario</th>
-              <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Detalle</th>
+              <th className="px-3 py-2 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Fecha</th>
+              <th className="px-3 py-2 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Acción</th>
+              <th className="px-3 py-2 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Usuario</th>
+              <th className="px-3 py-2 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase">Detalle</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100">
             {logs.map((l: any) => (
               <tr key={l.id} className="hover:bg-neutral-50">
-                <td className="px-4 py-3 text-sm text-neutral-500">{formatDate(l.createdAt)}</td>
-                <td className="px-4 py-3 text-sm text-gray-900 font-medium">{l.action}</td>
-                <td className="px-4 py-3 text-sm text-neutral-700">{l.user?.email ?? l.userId?.slice(0, 8) ?? '-'}</td>
-                <td className="px-4 py-3 text-sm text-neutral-500 truncate max-w-xs">
+                <td className="px-3 py-1.5 text-xs text-neutral-500">{formatDate(l.createdAt)}</td>
+                <td className="px-3 py-1.5 text-xs text-gray-900 font-medium">{l.action}</td>
+                <td className="px-3 py-1.5 text-xs text-neutral-700">{l.user?.email ?? l.userId?.slice(0, 8) ?? '-'}</td>
+                <td className="px-3 py-1.5 text-xs text-neutral-500 truncate max-w-xs">
                   {l.oldValues || l.newValues ? 'Cambio registrado' : '-'}
                 </td>
               </tr>
