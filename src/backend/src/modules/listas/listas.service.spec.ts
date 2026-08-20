@@ -34,6 +34,13 @@ const mockLista = {
   code: 'LISTA-GENERAL',
   name: 'Lista General',
   description: 'Raíz',
+  type: 'catalogo',
+  defaultVisibility: false,
+  responsibleId: null,
+  validFrom: null,
+  validUntil: null,
+  codigo: null,
+  supplierId: null,
   currency: 'COP',
   isActive: true,
   archivedAt: null,
@@ -44,7 +51,7 @@ const mockLista = {
 
 const mockListaInactiva = { ...mockLista, isActive: false };
 const mockListaArchivada = { ...mockLista, archivedAt: new Date() };
-const mockOtherLista = { id: OTHER_LISTA_ID, code: 'OTHER', name: 'Otra', description: null, currency: 'COP', isActive: true, archivedAt: null, createdAt: new Date(), updatedAt: new Date(), _count: { products: 0 } };
+const mockOtherLista = { id: OTHER_LISTA_ID, code: 'OTHER', name: 'Otra', description: null, type: 'catalogo', defaultVisibility: false, responsibleId: null, validFrom: null, validUntil: null, codigo: null, supplierId: null, currency: 'COP', isActive: true, archivedAt: null, createdAt: new Date(), updatedAt: new Date(), _count: { products: 0 } };
 
 // Assignments activos por usuario (resourceType LISTA).
 const assignments: Record<

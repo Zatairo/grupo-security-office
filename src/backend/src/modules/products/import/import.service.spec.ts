@@ -438,13 +438,13 @@ describe('ImportService — savePreset (normalización de mapping 500)', () => {
 
     service = new ImportService(
       mockPrismaLocal,
-      { log: jest.fn().mockResolvedValue(undefined) },
-      { parse: jest.fn() },
-      { detect: jest.fn() },
+      { log: jest.fn().mockResolvedValue(undefined), prisma: {} as any, isGlobalAuditor: jest.fn(), findAll: jest.fn(), findByEntity: jest.fn() } as unknown as AuditService,
+      { parse: jest.fn() } as unknown as ExcelAdapter,
+      { detect: jest.fn() } as unknown as HeaderDetectorService,
       mockColumnMapper as unknown as ColumnMapperService,
-      { validateAll: jest.fn() },
-      { normalizeAll: jest.fn() },
-      { execute: jest.fn() },
+      { validateAll: jest.fn() } as unknown as RowValidatorService,
+      { normalizeAll: jest.fn() } as unknown as RowNormalizerService,
+      { execute: jest.fn() } as unknown as BatchExecutorService,
     );
   });
 

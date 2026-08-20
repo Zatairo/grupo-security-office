@@ -91,7 +91,10 @@ jobs:
     name: Deploy (${{ needs.build.outputs.env }})
     needs: build
     runs-on: ubuntu-latest
-    if: success()
+    # Se salta (skipped, no falla) cuando no hay servidor SSH configurado
+    # o cuando el branch no es producción. Las imágenes ya se publican en GHCR
+    # en el job `build` independientemente de este job.
+    if: ${{ needs.build.outputs.env == 'production' && secrets.DEPLOY_HOST != '' }}
     environment: ${{ needs.build.outputs.env }}
 
     steps:

@@ -555,7 +555,7 @@ describe('PricesService', () => {
       mockPrisma.price.findMany.mockResolvedValue([]);
       mockPrisma.price.update.mockResolvedValue({ ...mockPriceWithRelations, value: 1600000 });
 
-      await service.updatePrice('price-1', { value: 1600000 }, { userId: 'admin-1' });
+      await service.updatePrice('price-1', { value: 1600000 }, { userId: 'admin-1', roles: [] });
 
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({
