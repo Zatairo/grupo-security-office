@@ -1,18 +1,14 @@
-# ============================================================
-# CD — Build images → Push GHCR → Deploy via SSH → Smoke test
-# ============================================================
-
 name: CD
 
 on:
   push:
     branches:
-      - dev        # → staging
-      - main       # → producción
+      - dev
+      - main
 
 concurrency:
   group: cd-${{ github.ref_name }}
-  cancel-in-progress: false  # no cancelar deploys en curso
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -22,22 +18,17 @@ env:
   NODE_VERSION: 20
 
 jobs:
-  # ─────────── Build & Push ───────────
   build:
     name: Build images + push to GHCR
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
     outputs:
       tag: ${{ steps.vars.outputs.tag }}
       env: ${{ steps.vars.outputs.env }}
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Set env vars (branch-based)
         id: vars
         run: |
@@ -47,18 +38,14 @@ jobs:
           else
             echo "env=staging" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      # ── Build backend ──
       - name: Build & push backend
         uses: docker/build-push-action@v6
         with:
@@ -71,8 +58,6 @@ jobs:
             ${{ env.IMAGE_BACKEND }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      # ── Build frontend ──
       - name: Build & push frontend
         uses: docker/build-push-action@v6
         with:
@@ -86,20 +71,20 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ─────────── Deploy ───────────
   deploy:
     name: Deploy (${{ needs.build.outputs.env }})
     needs: build
     runs-on: ubuntu-latest
-    # El job siempre corre cuando build tuvo éxito. La lógica de secrets se
-    # evalúa a nivel de step (el contexto secrets NO está disponible en `if`
-    # a nivel de job). Sin secrets, el deployment queda marcado como completado
-    # sin despliegue real (paso "Deploy skipped").
+    if: success()
     environment: ${{ needs.build.outputs.env }}
-
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
     steps:
       - name: Deploy via SSH
-        if: ${{ secrets.DEPLOY_HOST != '' }}
+        if: ${{ env.DEPLOY_HOST }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -109,34 +94,29 @@ jobs:
           envs: IMAGE_TAG
           script: |
             set -e
-            echo "→ Pulling images..."
+            echo "Pulling images..."
             docker compose -f /opt/grupo-security/docker-compose.prod.yml pull
-            echo "→ Deploying with tag: ${{ needs.build.outputs.tag }}"
+            echo "Deploying with tag: ${{ needs.build.outputs.tag }}"
             IMAGE_TAG=${{ needs.build.outputs.tag }} \
               docker compose -f /opt/grupo-security/docker-compose.prod.yml up -d --no-deps --remove-orphans
-
-      # ── Smoke test ──
       - name: Smoke test
-        if: ${{ secrets.DEPLOY_HOST != '' }}
+        if: ${{ env.DEPLOY_HOST }}
         env:
-          DEPLOY_URL: ${{ vars.DEPLOY_URL || 'https://panel.gruposecurity.com' }}
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
         run: |
-          echo "→ Running smoke tests against $DEPLOY_URL"
+          echo "Running smoke tests against $DEPLOY_URL"
           chmod +x ./scripts/smoke-test.sh
           ./scripts/smoke-test.sh "$DEPLOY_URL"
-
-      - name: Deploy skipped (sin secrets)
-        if: ${{ secrets.DEPLOY_HOST == '' }}
+      - name: Deploy skipped (sin secrets configurados)
+        if: ${{ !env.DEPLOY_HOST }}
         run: |
           echo "Deploy SSH no configurado (faltan secrets DEPLOY_HOST/DEPLOY_USER/DEPLOY_SSH_KEY). Build publicado en GHCR. El deployment de GitHub queda marcado como completado sin despliegue real."
 
-  # ─────────── Post-deploy notification ───────────
   notify:
     name: Notify result
     needs: [build, deploy]
     if: always()
     runs-on: ubuntu-latest
-
     steps:
       - name: Notify Discord (opcional)
         if: ${{ vars.DISCORD_WEBHOOK_URL != '' }}
