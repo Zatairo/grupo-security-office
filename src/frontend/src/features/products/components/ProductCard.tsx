@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import type { Product } from '../types/product.types'
+import { getAllowedActions, canMarkReady } from '../lib/actionMatrix'
 import { ProductStatusBadge } from './ProductStatusBadge'
 import { StockBadge, PublishBadge } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
@@ -17,6 +18,8 @@ interface ProductCardProps {
 
 export function ProductCard({ product, onEdit, onToggleActive, onDelete, onMoveCategory, onAccess, onMarkReady }: ProductCardProps) {
   const navigate = useNavigate()
+  const allowed = getAllowedActions(product)
+  const canToggleActive = product.isActive ? allowed.includes('deactivate') : allowed.includes('activate')
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button')) return
@@ -59,7 +62,7 @@ export function ProductCard({ product, onEdit, onToggleActive, onDelete, onMoveC
         </div>
         {/* Actions */}
         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1">
-          {hasPermission('products:write') && onMarkReady && product.publishStatus && product.publishStatus !== 'publicado' && product.publishStatus !== 'listo' && (
+          {hasPermission('products:write') && onMarkReady && canMarkReady(product) && (
             <button
               onClick={() => onMarkReady(product)}
               className="p-2 bg-white rounded-lg shadow hover:bg-amber-50 text-gray-600 hover:text-amber-600 transition-colors"
@@ -120,7 +123,7 @@ export function ProductCard({ product, onEdit, onToggleActive, onDelete, onMoveC
           )}
         </div>
         <div className="mt-3 flex items-center gap-2">
-          {hasPermission('products:write') && (
+          {hasPermission('products:write') && canToggleActive && (
             <button
               onClick={() => onToggleActive(product.id)}
               className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${

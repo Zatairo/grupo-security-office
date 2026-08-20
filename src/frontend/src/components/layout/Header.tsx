@@ -75,7 +75,7 @@ export default function Header() {
     <header className="bg-[var(--color-bg-card)] shadow-sm sticky top-0 z-50 border-b border-[var(--color-border)] transition-all duration-300 ease-out">
       {/* Nivel 1 - Identidad + búsqueda + acciones */}
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between min-h-[48px] lg:min-h-[56px] h-auto py-2 gap-3">
+        <div className="flex flex-wrap items-center justify-between min-h-[48px] lg:min-h-[56px] h-auto py-2 gap-3">
           {/* Izquierda: Isotipo + nombre */}
           <div className="flex-shrink-0">
             <button onClick={() => navigate('/')} className="flex items-center justify-center gap-2">
@@ -91,7 +91,7 @@ export default function Header() {
           </div>
 
           {/* Centro: Buscador global */}
-          <form onSubmit={handleSearch} className="flex-1 max-w-md">
+          <form onSubmit={handleSearch} className="order-last sm:order-none w-full sm:w-auto sm:flex-1 max-w-md min-w-0">
             <div className="relative">
               <input
                 type="text"

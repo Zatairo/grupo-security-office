@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Product, ProductPrice } from '../types/product.types'
+import { getAllowedActions, canMarkReady } from '../lib/actionMatrix'
 import { ProductStatusBadge } from './ProductStatusBadge'
 import { ProductIndicators } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
@@ -386,6 +387,13 @@ export function ProductSpreadsheetTable({
           {!isLoading &&
             sortedProducts.map((product) => {
               const selected = selectedIds.has(product.id)
+              const allowed = getAllowedActions(product)
+              const canToggleActive = product.isActive
+                ? allowed.includes('deactivate')
+                : allowed.includes('activate')
+              const canToggleVisibility = product.isVisible
+                ? allowed.includes('hide')
+                : allowed.includes('show')
               const activeClass = product.isActive
                 ? 'bg-emerald-100 text-emerald-700'
                 : 'bg-red-100 text-red-700'
@@ -479,7 +487,7 @@ export function ProductSpreadsheetTable({
                   >
                     <ProductStatusBadge
                       label={product.isVisible ? 'Visible' : 'Oculto'}
-                      onClick={() => onToggleVisibility(product.id)}
+                      onClick={canToggleVisibility ? () => onToggleVisibility(product.id) : undefined}
                       className={`px-2 py-1 text-xs font-medium rounded whitespace-nowrap ${visibleClass}`}
                     />
                   </td>
@@ -490,7 +498,7 @@ export function ProductSpreadsheetTable({
                   >
                     <ProductStatusBadge
                       label={product.isActive ? 'Activo' : 'Inactivo'}
-                      onClick={() => onToggleActive(product.id)}
+                      onClick={canToggleActive ? () => onToggleActive(product.id) : undefined}
                       className={`px-2 py-1 text-xs font-medium rounded whitespace-nowrap ${activeClass}`}
                     />
                   </td>
@@ -510,7 +518,7 @@ export function ProductSpreadsheetTable({
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex items-center justify-center gap-1">
-                      {canWrite && onMarkReady && product.publishStatus && product.publishStatus !== 'publicado' && product.publishStatus !== 'listo' && (
+                      {canWrite && onMarkReady && canMarkReady(product) && (
                         <button
                           onClick={() => onMarkReady(product)}
                           className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"

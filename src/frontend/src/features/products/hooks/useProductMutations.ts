@@ -5,7 +5,7 @@ export function useProductMutations() {
   const queryClient = useQueryClient()
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['products'] })
+    queryClient.invalidateQueries({ queryKey: ['products'], refetchType: 'all' })
 
   const toggleVisibility = useMutation({
     mutationFn: (id: string) => api.patch(`/products/${id}/toggle-visibility`),

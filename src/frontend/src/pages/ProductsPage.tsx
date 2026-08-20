@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Product } from '../features/products/types/product.types'
+import { canBulkApply, getAllowedActions, type BulkActionKind } from '../features/products/lib/actionMatrix'
 import { useProducts } from '../features/products/hooks/useProducts'
 import { useProductMutations } from '../features/products/hooks/useProductMutations'
 import { useAccessMatrix } from '../features/products/hooks/useAccessMatrix'
@@ -22,16 +23,6 @@ import { Button } from '../components/ui'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const DEFAULT_PAGE_SIZE = 20
-
-type BulkActionKind =
-  | 'activate'
-  | 'deactivate'
-  | 'show'
-  | 'hide'
-  | 'archive'
-  | 'restore'
-  | 'publish'
-  | 'unpublish'
 
 function extractErrorMessage(error: unknown): string {
   const res = (error as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
@@ -142,26 +133,8 @@ export default function ProductsPage() {
     const ids = Array.from(selectedProductIds)
     if (ids.length === 0) return
 
-    const appliesTo = (p: Product): boolean => {
-      switch (kind) {
-        case 'activate':
-          return !p.isActive
-        case 'deactivate':
-          return p.isActive
-        case 'show':
-          return !p.isVisible
-        case 'hide':
-          return p.isVisible
-        case 'archive':
-          return p.isActive || p.isVisible
-        case 'restore':
-          return !p.isActive || !p.isVisible
-        case 'publish':
-          return p.publishStatus !== 'publicado'
-        case 'unpublish':
-          return p.publishStatus === 'publicado' || p.publishStatus === 'listo'
-      }
-    }
+    const selectedProducts = currentProducts.filter((p) => ids.includes(p.id))
+    const applicable = canBulkApply(kind, selectedProducts)
 
     const labels: Record<BulkActionKind, { action: string; verb: string }> = {
       activate: { action: 'Activar', verb: 'activados' },
@@ -175,7 +148,6 @@ export default function ProductsPage() {
     }
     const { action, verb } = labels[kind]
 
-    const applicable = currentProducts.filter((p) => ids.includes(p.id) && appliesTo(p))
     if (applicable.length === 0) {
       setBulkNotice(`Ningún producto seleccionado aplica para "${action}".`)
       return
@@ -261,6 +233,21 @@ export default function ProductsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
+  const selectedProducts = currentProducts.filter((p) => selectedProductIds.has(p.id))
+  const bulkAvailability: Record<BulkActionKind, boolean> = {
+    activate: canBulkApply('activate', selectedProducts).length > 0,
+    deactivate: canBulkApply('deactivate', selectedProducts).length > 0,
+    show: canBulkApply('show', selectedProducts).length > 0,
+    hide: canBulkApply('hide', selectedProducts).length > 0,
+    archive: canBulkApply('archive', selectedProducts).length > 0,
+    restore: canBulkApply('restore', selectedProducts).length > 0,
+    publish: canBulkApply('publish', selectedProducts).length > 0,
+    unpublish: canBulkApply('unpublish', selectedProducts).length > 0,
+  }
+  const scheduleAvailable = selectedProducts.some((p) =>
+    getAllowedActions(p).includes('schedule')
+  )
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -269,7 +256,7 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-condensed font-bold text-security-800">Productos</h1>
           <p className="text-sm text-neutral-500 mt-1">Gestiona tu catálogo de productos</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 max-w-full">
           {hasPermission('products:write') && (
             <>
               <select
@@ -361,7 +348,7 @@ export default function ProductsPage() {
       </div>
 
       {/* View controls */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-2">
           <button
             onClick={() => setViewMode('grid')}
@@ -415,57 +402,59 @@ export default function ProductsPage() {
         />
       </div>
 
-      {canBulkManage && selectedProductIds.size > 0 && (
+      {canBulkManage && (selectedProductIds.size > 0 || bulkNotice || bulkError) && (
         <div className="px-4 py-3 bg-white rounded-xl border border-neutral-200 space-y-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm font-medium text-neutral-600">{selectedProductIds.size} seleccionado(s)</span>
-            <button
-              onClick={() => {
-                setSelectedProductIds(new Set())
-                setBulkNotice(null)
-                setBulkError(null)
-              }}
-              className="text-sm text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
-            >
-              Limpiar selección
-            </button>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              {canBulkManage && (
-                <>
-                  <BulkButton label="Activar" disabled={bulkPending} onClick={() => runBulkAction('activate')} />
-                  <BulkButton label="Desactivar" disabled={bulkPending} onClick={() => runBulkAction('deactivate')} />
-                  <BulkButton label="Mostrar" disabled={bulkPending} onClick={() => runBulkAction('show')} />
-                  <BulkButton label="Ocultar" disabled={bulkPending} onClick={() => runBulkAction('hide')} />
-                  <BulkButton label="Archivar" disabled={bulkPending} onClick={() => runBulkAction('archive')} />
-                  <BulkButton label="Restaurar" disabled={bulkPending} onClick={() => runBulkAction('restore')} />
-                  <BulkButton label="Publicar" disabled={bulkPending} onClick={() => runBulkAction('publish')} />
-                  <BulkButton label="Despublicar" disabled={bulkPending} onClick={() => runBulkAction('unpublish')} />
-                  <BulkButton label="Programar" disabled={bulkPending} onClick={() => setShowScheduleModal(true)} />
-                  <BulkButton
-                    label="Mover categoría"
-                    disabled={bulkPending}
-                    onClick={() =>
-                      setMoveCategoryTarget({
-                        type: 'bulk',
-                        products: currentProducts.filter((p) => selectedProductIds.has(p.id)),
-                      })
-                    }
-                  />
-                  <BulkButton
-                    label="Actualizar precios"
-                    disabled={bulkPending}
-                    onClick={() => setShowBulkPrices(true)}
-                  />
-                </>
-              )}
-              {canBulkDelete && (
-                <Button variant="danger" onClick={bulkDeleteProducts} disabled={bulkPending}>
-                  Eliminar
-                </Button>
-              )}
+          {selectedProductIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium text-neutral-600">{selectedProductIds.size} seleccionado(s)</span>
+              <button
+                onClick={() => {
+                  setSelectedProductIds(new Set())
+                  setBulkNotice(null)
+                  setBulkError(null)
+                }}
+                className="text-sm text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+              >
+                Limpiar selección
+              </button>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {canBulkManage && (
+                  <>
+                    <BulkButton label="Activar" disabled={bulkPending || !bulkAvailability.activate} onClick={() => runBulkAction('activate')} />
+                    <BulkButton label="Desactivar" disabled={bulkPending || !bulkAvailability.deactivate} onClick={() => runBulkAction('deactivate')} />
+                    <BulkButton label="Mostrar" disabled={bulkPending || !bulkAvailability.show} onClick={() => runBulkAction('show')} />
+                    <BulkButton label="Ocultar" disabled={bulkPending || !bulkAvailability.hide} onClick={() => runBulkAction('hide')} />
+                    <BulkButton label="Archivar" disabled={bulkPending || !bulkAvailability.archive} onClick={() => runBulkAction('archive')} />
+                    <BulkButton label="Restaurar" disabled={bulkPending || !bulkAvailability.restore} onClick={() => runBulkAction('restore')} />
+                    <BulkButton label="Publicar" disabled={bulkPending || !bulkAvailability.publish} onClick={() => runBulkAction('publish')} />
+                    <BulkButton label="Despublicar" disabled={bulkPending || !bulkAvailability.unpublish} onClick={() => runBulkAction('unpublish')} />
+                    <BulkButton label="Programar" disabled={bulkPending || !scheduleAvailable} onClick={() => setShowScheduleModal(true)} />
+                    <BulkButton
+                      label="Mover categoría"
+                      disabled={bulkPending}
+                      onClick={() =>
+                        setMoveCategoryTarget({
+                          type: 'bulk',
+                          products: currentProducts.filter((p) => selectedProductIds.has(p.id)),
+                        })
+                      }
+                    />
+                    <BulkButton
+                      label="Actualizar precios"
+                      disabled={bulkPending}
+                      onClick={() => setShowBulkPrices(true)}
+                    />
+                  </>
+                )}
+                {canBulkDelete && (
+                  <Button variant="danger" onClick={bulkDeleteProducts} disabled={bulkPending}>
+                    Eliminar
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
-          {bulkNotice && (
+          )}
+          {(bulkNotice || bulkError) && (
             <div
               className={`text-sm px-3 py-2 rounded-lg ${
                 bulkError ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'

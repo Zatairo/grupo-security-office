@@ -1,4 +1,5 @@
 import type { Product } from '../types/product.types'
+import { getAllowedActions, canMarkReady } from '../lib/actionMatrix'
 import { ProductStatusBadge } from './ProductStatusBadge'
 import { ProductIndicators } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
@@ -33,6 +34,10 @@ export function ProductTableRow({
   onAccess,
   onMarkReady,
 }: ProductTableRowProps) {
+  const allowed = getAllowedActions(product)
+  const canToggleActive = product.isActive ? allowed.includes('deactivate') : allowed.includes('activate')
+  const canToggleVisibility = product.isVisible ? allowed.includes('hide') : allowed.includes('show')
+
   return (
     <tr className="hover:bg-gray-50 transition-colors">
       {onToggleSelect && (
@@ -81,14 +86,14 @@ export function ProductTableRow({
             className={`px-2 py-1 text-xs font-medium rounded ${
               product.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
             }`}
-            onClick={() => onToggleActive(product.id)}
+            onClick={canToggleActive ? () => onToggleActive(product.id) : undefined}
           />
           <ProductStatusBadge
             label={product.isVisible ? 'Visible' : 'Oculto'}
             className={`px-2 py-1 text-xs font-medium rounded ${
               product.isVisible ? 'bg-security-100 text-security-700' : 'bg-gray-100 text-gray-600'
             }`}
-            onClick={() => onToggleVisibility(product.id)}
+            onClick={canToggleVisibility ? () => onToggleVisibility(product.id) : undefined}
           />
         </div>
         <div className="flex items-center gap-1 mt-1.5">
@@ -101,7 +106,7 @@ export function ProductTableRow({
       </td>
       <td className="px-6 py-4">
         <div className="flex items-center gap-1">
-          {hasPermission('products:write') && onMarkReady && product.publishStatus && product.publishStatus !== 'publicado' && product.publishStatus !== 'listo' && (
+          {hasPermission('products:write') && onMarkReady && canMarkReady(product) && (
             <button
               onClick={() => onMarkReady(product)}
               className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"

@@ -189,6 +189,12 @@ export class AssignmentsService {
     return updated;
   }
 
+  /**
+   * Elimina físicamente una asignación (hard-delete), activa o inactiva.
+   * - Permisos intactos: authorizeAssignmentMutation + NotFoundException si no existe.
+   * - Se registra el audit ANTES del borrado (patrón del repo) para conservar la
+   *   trazabilidad en el AuditLog aunque el registro físico desaparezca.
+   */
   async remove(id: string, ctx?: AccessContext) {
     const existing = await this.prisma.assignment.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Asignación no encontrada');
@@ -200,21 +206,21 @@ export class AssignmentsService {
       undefined,
     );
 
-    if (existing.isActive) {
-      await this.prisma.assignment.update({
-        where: { id },
-        data: { isActive: false },
-      });
+    await this.audit.log({
+      userId: ctx?.userId,
+      action: 'delete',
+      entity: 'Assignment',
+      entityId: id,
+      oldValues: {
+        resourceType: existing.resourceType,
+        resourceId: existing.resourceId,
+        level: existing.level,
+        isActive: existing.isActive,
+      },
+      newValues: { deleted: true },
+    });
 
-      await this.audit.log({
-        userId: ctx?.userId,
-        action: 'delete',
-        entity: 'Assignment',
-        entityId: id,
-        oldValues: { level: existing.level, isActive: existing.isActive },
-        newValues: { isActive: false },
-      });
-    }
+    await this.prisma.assignment.delete({ where: { id } });
   }
 
   // ---------------------------------------------------------------------------

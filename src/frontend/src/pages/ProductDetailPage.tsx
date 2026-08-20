@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../services/api'
 import type { Product, Category, Brand, PriceList, ProductDocument } from '../features/products/types/product.types'
+import { getAllowedActions, canMarkReady as canMarkReadyProduct } from '../features/products/lib/actionMatrix'
 import { usePriceLists } from '../features/products/hooks/usePriceLists'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatCurrency, formatDate, formatBytes } from '../lib/format'
@@ -1466,6 +1467,11 @@ function PublishTab({ product }: { product: Product }) {
       <Badge variant="warning">Borrador</Badge>
     ) : null
 
+  const allowed = getAllowedActions(product)
+  const canPublish = allowed.includes('publish')
+  const canUnpublish = allowed.includes('unpublish')
+  const canSchedule = allowed.includes('schedule')
+
   const publish = useMutation({
     mutationFn: () => publishProduct(product.id),
     onError: (err) => {
@@ -1502,8 +1508,7 @@ function PublishTab({ product }: { product: Product }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['product', product.id] }),
   })
 
-  const canMarkReady =
-    !!status && status !== 'publicado' && status !== 'listo' && status !== 'programado'
+  const canMarkReady = canMarkReadyProduct(product)
 
   return (
     <div className="space-y-4">
@@ -1534,15 +1539,21 @@ function PublishTab({ product }: { product: Product }) {
               Marcar listo para publicar
             </Button>
           )}
-          <Button onClick={() => publish.mutate()} loading={publish.isPending}>
-            Publicar
-          </Button>
-          <Button variant="secondary" onClick={() => unpublish.mutate()} loading={unpublish.isPending}>
-            Despublicar
-          </Button>
-          <Button variant="secondary" onClick={() => setScheduleOpen(true)}>
-            Programar
-          </Button>
+          {canPublish && (
+            <Button onClick={() => publish.mutate()} loading={publish.isPending}>
+              Publicar
+            </Button>
+          )}
+          {canUnpublish && (
+            <Button variant="secondary" onClick={() => unpublish.mutate()} loading={unpublish.isPending}>
+              Despublicar
+            </Button>
+          )}
+          {canSchedule && (
+            <Button variant="secondary" onClick={() => setScheduleOpen(true)}>
+              Programar
+            </Button>
+          )}
         </div>
       )}
 
@@ -1803,6 +1814,14 @@ export default function ProductDetailPage() {
 
   const orderedLists = orderedPriceLists(priceLists)
 
+  const detailAllowed = getAllowedActions(product)
+  const canToggleActive = product.isActive
+    ? detailAllowed.includes('deactivate')
+    : detailAllowed.includes('activate')
+  const canToggleVisibility = product.isVisible
+    ? detailAllowed.includes('hide')
+    : detailAllowed.includes('show')
+
   const finalPrice = orderedLists.reduce<PriceList | null>((acc, list) => {
     if (acc) return acc
     const price = findPrice(product, list.id)
@@ -1923,26 +1942,30 @@ export default function ProductDetailPage() {
 
             {canEdit && (
               <div className="mt-4 flex gap-2">
-                <button
-                  onClick={() => toggleActive.mutate(product.id)}
-                  className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
-                    product.isActive
-                      ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                      : 'bg-red-50 text-red-700 hover:bg-red-100'
-                  }`}
-                >
-                  {product.isActive ? 'Activo' : 'Inactivo'}
-                </button>
-                <button
-                  onClick={() => toggleVisibility.mutate(product.id)}
-                  className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
-                    product.isVisible
-                      ? 'bg-security-50 text-security-700 hover:bg-security-100'
-                      : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
-                  }`}
-                >
-                  {product.isVisible ? 'Visible' : 'Oculto'}
-                </button>
+                {canToggleActive && (
+                  <button
+                    onClick={() => toggleActive.mutate(product.id)}
+                    className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
+                      product.isActive
+                        ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                        : 'bg-red-50 text-red-700 hover:bg-red-100'
+                    }`}
+                  >
+                    {product.isActive ? 'Activo' : 'Inactivo'}
+                  </button>
+                )}
+                {canToggleVisibility && (
+                  <button
+                    onClick={() => toggleVisibility.mutate(product.id)}
+                    className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
+                      product.isVisible
+                        ? 'bg-security-50 text-security-700 hover:bg-security-100'
+                        : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
+                    }`}
+                  >
+                    {product.isVisible ? 'Visible' : 'Oculto'}
+                  </button>
+                )}
               </div>
             )}
 

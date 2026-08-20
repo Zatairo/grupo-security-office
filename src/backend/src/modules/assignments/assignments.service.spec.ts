@@ -221,25 +221,40 @@ describe('AssignmentsService', () => {
   });
 
   describe('remove', () => {
-    it('debe desactivar lógicamente la asignación', async () => {
+    it('debe eliminar físicamente la asignación (hard-delete) con audit previo', async () => {
       mockPrisma.assignment.findUnique.mockResolvedValue(mockAssignment);
-      mockPrisma.assignment.update.mockResolvedValue({ ...mockAssignment, isActive: false });
+      mockPrisma.assignment.delete.mockResolvedValue(mockAssignment);
 
       await service.remove('assign-1');
 
-      expect(mockPrisma.assignment.update).toHaveBeenCalledWith(
+      expect(mockPrisma.assignment.delete).toHaveBeenCalledWith({
+        where: { id: 'assign-1' },
+      });
+      expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'assign-1' },
-          data: expect.objectContaining({ isActive: false }),
+          action: 'delete',
+          entity: 'Assignment',
+          entityId: 'assign-1',
+          oldValues: {
+            resourceType: 'LISTA',
+            resourceId: 'lista-1',
+            level: 'view',
+            isActive: true,
+          },
+          newValues: { deleted: true },
         }),
       );
     });
 
-    it('no debe actualizar si ya está inactiva', async () => {
+    it('debe eliminar físicamente una asignación ya inactiva (caso del bug)', async () => {
       mockPrisma.assignment.findUnique.mockResolvedValue({ ...mockAssignment, isActive: false });
+      mockPrisma.assignment.delete.mockResolvedValue({ ...mockAssignment, isActive: false });
 
       await service.remove('assign-1');
 
+      expect(mockPrisma.assignment.delete).toHaveBeenCalledWith({
+        where: { id: 'assign-1' },
+      });
       expect(mockPrisma.assignment.update).not.toHaveBeenCalled();
     });
 

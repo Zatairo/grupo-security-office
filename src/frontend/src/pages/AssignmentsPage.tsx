@@ -70,6 +70,7 @@ export default function AssignmentsPage() {
   const queryClient = useQueryClient()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active')
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['assignments'] })
 
@@ -100,6 +101,15 @@ export default function AssignmentsPage() {
     return map
   }, [users])
 
+  const visibleAssignments = useMemo(() => {
+    if (!assignments) return []
+    if (statusFilter === 'all') return assignments
+    return assignments.filter((a) => a.isActive === (statusFilter === 'active'))
+  }, [assignments, statusFilter])
+
+  const activeCount = useMemo(() => (assignments ?? []).filter((a) => a.isActive).length, [assignments])
+  const inactiveCount = (assignments?.length ?? 0) - activeCount
+
   const toggleMutation = useMutation({
     mutationFn: (a: Assignment) => updateAssignment(a.id, { isActive: !a.isActive }),
     onSuccess: invalidate,
@@ -126,6 +136,31 @@ export default function AssignmentsPage() {
   }
 
   const listError = error ? assignmentErrorFallback(error, 'No se pudieron cargar las asignaciones') : null
+
+  const emptyMessage =
+    statusFilter === 'active'
+      ? 'No hay asignaciones activas'
+      : statusFilter === 'inactive'
+        ? 'No hay asignaciones inactivas'
+        : 'No hay asignaciones'
+
+  const filterBar = (
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <select
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}
+        className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm"
+        aria-label="Filtrar asignaciones por estado"
+      >
+        <option value="active">Activos</option>
+        <option value="inactive">Inactivos</option>
+        <option value="all">Todos</option>
+      </select>
+      <span className="text-xs text-neutral-400">
+        {activeCount} activa{activeCount === 1 ? '' : 's'} · {inactiveCount} inactiva{inactiveCount === 1 ? '' : 's'}
+      </span>
+    </div>
+  )
 
   return (
     <div className="space-y-6">
@@ -225,8 +260,17 @@ export default function AssignmentsPage() {
           <p className="text-neutral-500 font-medium">No hay asignaciones</p>
           <p className="text-neutral-400 text-sm mt-1">Crea tu primera asignación para comenzar</p>
         </div>
+      ) : visibleAssignments.length === 0 ? (
+        <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-neutral-200">{filterBar}</div>
+          <div className="text-center py-16">
+            <p className="text-neutral-500 font-medium">{emptyMessage}</p>
+            <p className="text-neutral-400 text-sm mt-1">Cambia el filtro para ver otras asignaciones</p>
+          </div>
+        </div>
       ) : (
         <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-neutral-200">{filterBar}</div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-neutral-200">
               <thead className="bg-neutral-100">
@@ -255,7 +299,7 @@ export default function AssignmentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
-                {assignments.map((a) => {
+                {visibleAssignments.map((a) => {
                   const user = userMap.get(a.userId)
                   const isToggling = toggleMutation.isPending && toggleMutation.variables?.id === a.id
                   const isDeleting = deleteMutation.isPending && deleteMutation.variables === a.id
