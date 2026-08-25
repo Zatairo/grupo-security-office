@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Product } from '../features/products/types/product.types'
-import { canBulkApply, getAllowedActions, type BulkActionKind } from '../features/products/lib/actionMatrix'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { LifecycleEvent, LifecycleStatus, Product } from '../features/products/types/product.types'
+import {
+  LIFECYCLE_STATUS_LABEL,
+  effectiveLifecycleStatus,
+  productAllowedActions,
+} from '../features/products/lib/lifecycle'
 import { useProducts } from '../features/products/hooks/useProducts'
 import { useProductMutations } from '../features/products/hooks/useProductMutations'
+import { useTransitionProduct } from '../features/products/hooks/useProductTransition'
 import { useAccessMatrix } from '../features/products/hooks/useAccessMatrix'
+import { useBulkTransition } from '../features/products/hooks/useProductTransition'
 import { ProductCard } from '../features/products/components/ProductCard'
 import { ProductTableRow } from '../features/products/components/ProductTableRow'
 import { ProductSpreadsheetTable } from '../features/products/components/ProductSpreadsheetTable'
@@ -14,22 +20,62 @@ import { BulkPriceUpdateModal } from '../features/products/components/BulkPriceU
 import { ProductAccessModal } from '../features/products/components/ProductAccessModal'
 import { ProductPagination } from '../components/ProductPagination'
 import { fetchListas, type Lista } from '../services/listas.service'
-import { publishProduct, unpublishProduct, schedulePublish } from '../services/product-detail.service'
-import api from '../services/api'
-import { hasPermission, hasRole } from '../lib/rbac'
+import type { BulkTransitionPayload } from '../services/product-detail.service'
+import { hasPermission, hasRole, canManageListas } from '../lib/rbac'
 import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
 import { Button } from '../components/ui'
+import { useAuthStore } from '../stores/auth.store'
+import { BulkDeleteModal } from '../features/products/components/BulkDeleteModal'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const DEFAULT_PAGE_SIZE = 20
 
-function extractErrorMessage(error: unknown): string {
-  const res = (error as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
-  if (Array.isArray(res)) return res.join(', ')
-  if (typeof res === 'string') return res
-  return 'Error de red o del servidor'
+/** Acciones bulk legacy → evento FSM (Etapa 5). */
+type BulkEventKind =
+  | 'activate'
+  | 'deactivate'
+  | 'show'
+  | 'hide'
+  | 'archive'
+  | 'restore'
+  | 'publish'
+  | 'unpublish'
+  | 'schedule'
+
+const KIND_TO_EVENT: Record<BulkEventKind, LifecycleEvent> = {
+  activate: 'REACTIVATE',
+  deactivate: 'DISCONTINUE',
+  show: 'SHOW',
+  hide: 'HIDE',
+  archive: 'ARCHIVE',
+  restore: 'RESTORE',
+  publish: 'PUBLISH',
+  unpublish: 'UNPUBLISH',
+  schedule: 'SCHEDULE',
 }
+
+const BULK_LABELS: Record<BulkEventKind, string> = {
+  activate: 'Activar',
+  deactivate: 'Desactivar',
+  show: 'Mostrar',
+  hide: 'Ocultar',
+  archive: 'Archivar',
+  restore: 'Restaurar',
+  publish: 'Publicar',
+  unpublish: 'Despublicar',
+  schedule: 'Programar',
+}
+
+const LIFECYCLE_FILTER_OPTIONS: LifecycleStatus[] = [
+  'DRAFT',
+  'READY',
+  'SCHEDULED',
+  'PUBLISHED',
+  'HIDDEN',
+  'DISCONTINUED',
+  'ARCHIVED',
+]
 
 export default function ProductsPage() {
   const queryClient = useQueryClient()
@@ -37,21 +83,23 @@ export default function ProductsPage() {
   const [categoryId, setCategoryId] = useState('')
   const [brandId, setBrandId] = useState('')
   const [status, setStatus] = useState('')
+  const [lifecycleFilter, setLifecycleFilter] = useState<'' | LifecycleStatus>('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
+const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
   const [createListaId, setCreateListaId] = useState('')
   const [showListaSelector, setShowListaSelector] = useState(false)
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(() => new Set())
   const [bulkNotice, setBulkNotice] = useState<string | null>(null)
   const [bulkError, setBulkError] = useState<string | null>(null)
-  const [bulkPending, setBulkPending] = useState(false)
+  const [bulkModal, setBulkModal] = useState<{ kind: BulkEventKind } | null>(null)
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [moveCategoryTarget, setMoveCategoryTarget] = useState<MoveCategoryTarget | null>(null)
   const [accessProduct, setAccessProduct] = useState<Product | null>(null)
   const [showBulkPrices, setShowBulkPrices] = useState(false)
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
 
   const listasQuery = useQuery({
     queryKey: ['listas'],
@@ -73,17 +121,11 @@ export default function ProductsPage() {
     page,
     pageSize,
   })
-  const { toggleVisibility, toggleActive, deleteProduct } = useProductMutations()
-
-  const markReady = useMutation({
-    mutationFn: (id: string) => api.put(`/products/${id}`, { publishStatus: 'listo' }),
-    onSuccess: () => {
-      setBulkNotice('Producto marcado como listo para publicar.')
-      queryClient.invalidateQueries({ queryKey: ['products'] })
-    },
-    onError: (err) =>
-      setBulkError(getApiErrorMessage(err, 'No se pudo marcar el producto como listo')),
-  })
+  const { deleteProductWithMasterKey, markReady } = useProductMutations()
+  const transitionProduct = useTransitionProduct()
+  const bulkTransition = useBulkTransition()
+  const currentUser = useAuthStore((s) => s.user)
+  const userRoles = currentUser?.roles ?? []
 
   const canBulkDelete = hasPermission('products:delete')
   const canBulkManage = canBulkDelete || hasPermission('products:write')
@@ -92,7 +134,13 @@ export default function ProductsPage() {
     'PRODUCT',
     !isLoading
   )
-  const currentProducts = products ?? []
+
+  // Filtro de estado FSM (provisional, cliente): el backend aún no soporta
+  // `?status=` en el query DTO. Se aplica sobre los productos ya cargados.
+  const filteredProducts = lifecycleFilter
+    ? (products ?? []).filter((p) => effectiveLifecycleStatus(p) === lifecycleFilter)
+    : products ?? []
+  const currentProducts = filteredProducts
   const allPageSelected = currentProducts.length > 0 && currentProducts.every((p) => selectedProductIds.has(p.id))
 
   const toggleSelectProduct = (id: string) => {
@@ -119,134 +167,117 @@ export default function ProductsPage() {
   const bulkDeleteProducts = () => {
     const count = selectedProductIds.size
     if (count === 0) return
-    if (!window.confirm(`¿Eliminar ${count} producto(s) seleccionado(s)? Esta acción no se puede deshacer.`)) return
-    void Promise.allSettled(Array.from(selectedProductIds).map((id) => deleteProduct.mutateAsync(id))).then((results) => {
-      const ok = results.filter((r) => r.status === 'fulfilled').length
-      const failed = results.length - ok
-      setBulkNotice(failed === 0 ? `${ok} producto(s) eliminados correctamente.` : `${ok} OK, ${failed} fallaron.`)
-      setSelectedProductIds(new Set())
-      queryClient.invalidateQueries({ queryKey: ['products'] })
+    const productsToDelete = Array.from(selectedProductIds).map((id) => currentProducts.find((p) => p.id === id)).filter(Boolean) as Product[]
+    if (productsToDelete.length === 0) return
+    setShowBulkDeleteModal(true)
+  }
+
+  const handleBulkDeleteConfirm = () => {
+    // El modal ya maneja la eliminación interna (executeDelete / handleRetryWithClave / handleRetryWithMasterKey).
+    // NO cerrar modal aquí: el modal se cierra solo tras 2s en finish().
+    // Solo reseteamos el estado local del padre.
+    setBulkNotice(null)
+    setBulkError(null)
+    setSelectedProductIds(new Set())
+    queryClient.invalidateQueries({ queryKey: ['products'], refetchType: 'all' })
+  }
+
+  /** Ejecuta una transición FSM en lote vía POST /api/products/bulk-transition. */
+  const submitBulk = (payload: BulkTransitionPayload, actionLabel: string) => {
+    setBulkNotice(null)
+    setBulkError(null)
+    bulkTransition.mutate(payload, {
+      onSuccess: (result) => {
+        const applied = result.applied.length
+        const rejected = result.rejected
+        setBulkNotice(
+          rejected.length === 0
+            ? `${applied} de ${payload.ids.length} producto(s) procesado(s) (${actionLabel}).`
+            : `${applied} de ${payload.ids.length} producto(s) procesado(s) (${actionLabel}); ${rejected.length} rechazado(s).`
+        )
+        if (rejected.length > 0) {
+          setBulkError(
+            rejected
+              .slice(0, 6)
+              .map((r) => `${r.id}: ${r.reason}`)
+              .join(' • ')
+          )
+        }
+        setSelectedProductIds(new Set())
+        setBulkModal(null)
+        setShowScheduleModal(false)
+        setPage(1)
+        queryClient.invalidateQueries({ queryKey: ['products'], refetchType: 'all' })
+      },
+      onError: (err) => {
+        setBulkError(getApiErrorMessage(err, 'No se pudo completar la acción masiva.'))
+      },
     })
   }
 
-  const runBulkAction = async (kind: BulkActionKind) => {
+  const runBulkTransition = (kind: BulkEventKind, reason?: string) => {
     const ids = Array.from(selectedProductIds)
     if (ids.length === 0) return
-
-    const selectedProducts = currentProducts.filter((p) => ids.includes(p.id))
-    const applicable = canBulkApply(kind, selectedProducts)
-
-    const labels: Record<BulkActionKind, { action: string; verb: string }> = {
-      activate: { action: 'Activar', verb: 'activados' },
-      deactivate: { action: 'Desactivar', verb: 'desactivados' },
-      show: { action: 'Mostrar', verb: 'mostrados' },
-      hide: { action: 'Ocultar', verb: 'ocultados' },
-      archive: { action: 'Archivar', verb: 'archivados' },
-      restore: { action: 'Restaurar', verb: 'restaurados' },
-      publish: { action: 'Publicar', verb: 'publicados' },
-      unpublish: { action: 'Despublicar', verb: 'despublicados' },
-    }
-    const { action, verb } = labels[kind]
-
-    if (applicable.length === 0) {
-      setBulkNotice(`Ningún producto seleccionado aplica para "${action}".`)
-      return
-    }
-    if (!window.confirm(`¿${action} ${applicable.length} producto(s)?`)) return
-
-    setBulkPending(true)
-    setBulkNotice(null)
-    setBulkError(null)
-
-    const results = await Promise.allSettled(
-      applicable.map((p) => {
-        switch (kind) {
-          case 'activate':
-            return api.put(`/products/${p.id}`, { isActive: true })
-          case 'deactivate':
-            return api.put(`/products/${p.id}`, { isActive: false })
-          case 'show':
-            return api.put(`/products/${p.id}`, { isVisible: true })
-          case 'hide':
-            return api.put(`/products/${p.id}`, { isVisible: false })
-          case 'archive':
-            return api.put(`/products/${p.id}`, { isActive: false, isVisible: false })
-          case 'restore':
-            return api.put(`/products/${p.id}`, { isActive: true, isVisible: true })
-          case 'publish':
-            return publishProduct(p.id)
-          case 'unpublish':
-            return unpublishProduct(p.id, 'Despublicación masiva')
-        }
-      })
+    const event = KIND_TO_EVENT[kind]
+    submitBulk(
+      {
+        ids,
+        event,
+        ...(reason ? { reason } : {}),
+        ...(event === 'ARCHIVE' || event === 'RESTORE' ? { confirm: true } : {}),
+      },
+      BULK_LABELS[kind]
     )
-
-    const ok = results.filter((r) => r.status === 'fulfilled').length
-    const failed = results.length - ok
-    setBulkPending(false)
-    setBulkNotice(failed === 0 ? `${ok} producto(s) ${verb} correctamente.` : `${ok} OK, ${failed} fallaron.`)
-    if (failed > 0) {
-      const messages = results
-        .filter((r) => r.status === 'rejected')
-        .slice(0, 4)
-        .map((r) => extractErrorMessage((r as PromiseRejectedResult).reason))
-      setBulkError(messages.join(' • '))
-    }
-    setSelectedProductIds(new Set())
-    queryClient.invalidateQueries({ queryKey: ['products'] })
   }
 
-  const runScheduledPublish = async (publishAt: string, unpublishAt?: string) => {
+  const handleBulkClick = (kind: BulkEventKind) => {
+    if (kind === 'schedule') {
+      setShowScheduleModal(true)
+      return
+    }
+    const event = KIND_TO_EVENT[kind]
+    if (event === 'ARCHIVE' || event === 'RESTORE' || event === 'DISCONTINUE' || event === 'UNPUBLISH') {
+      setBulkModal({ kind })
+      return
+    }
+    runBulkTransition(kind)
+  }
+
+  const runBulkSchedule = (publishAt: string, unpublishAt?: string) => {
     const ids = Array.from(selectedProductIds)
     if (ids.length === 0) return
-    if (!publishAt) return
-    setBulkPending(true)
-    setBulkNotice(null)
-    setBulkError(null)
-    const results = await Promise.allSettled(
-      ids.map((id) => schedulePublish(id, { publishAt, unpublishAt }))
+    submitBulk(
+      {
+        ids,
+        event: 'SCHEDULE',
+        publishAt: new Date(publishAt).toISOString(),
+        ...(unpublishAt ? { unpublishAt: new Date(unpublishAt).toISOString() } : {}),
+      },
+      'Programar'
     )
-    const ok = results.filter((r) => r.status === 'fulfilled').length
-    const failed = results.length - ok
-    setBulkPending(false)
-    setBulkNotice(
-      failed === 0
-        ? `${ok} producto(s) programados para publicar.`
-        : `${ok} OK, ${failed} fallaron al programar.`
-    )
-    if (failed > 0) {
-      const messages = results
-        .filter((r) => r.status === 'rejected')
-        .slice(0, 4)
-        .map((r) => extractErrorMessage((r as PromiseRejectedResult).reason))
-      setBulkError(messages.join(' • '))
-    }
-    setSelectedProductIds(new Set())
-    setShowScheduleModal(false)
-    queryClient.invalidateQueries({ queryKey: ['products'] })
   }
 
   useEffect(() => {
     setPage(1)
     setSelectedProductIds(new Set())
-  }, [search, categoryId, brandId, status])
+  }, [search, categoryId, brandId, status, lifecycleFilter])
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   const selectedProducts = currentProducts.filter((p) => selectedProductIds.has(p.id))
-  const bulkAvailability: Record<BulkActionKind, boolean> = {
-    activate: canBulkApply('activate', selectedProducts).length > 0,
-    deactivate: canBulkApply('deactivate', selectedProducts).length > 0,
-    show: canBulkApply('show', selectedProducts).length > 0,
-    hide: canBulkApply('hide', selectedProducts).length > 0,
-    archive: canBulkApply('archive', selectedProducts).length > 0,
-    restore: canBulkApply('restore', selectedProducts).length > 0,
-    publish: canBulkApply('publish', selectedProducts).length > 0,
-    unpublish: canBulkApply('unpublish', selectedProducts).length > 0,
+  const selectedCan = (event: LifecycleEvent) =>
+    selectedProducts.some((p) => productAllowedActions(p, userRoles).includes(event))
+  const bulkAvailability: Record<BulkEventKind, boolean> = {
+    activate: selectedCan('REACTIVATE'),
+    deactivate: selectedCan('DISCONTINUE'),
+    show: selectedCan('SHOW'),
+    hide: selectedCan('HIDE'),
+    archive: selectedCan('ARCHIVE'),
+    restore: selectedCan('RESTORE'),
+    publish: selectedCan('PUBLISH'),
+    unpublish: selectedCan('UNPUBLISH'),
+    schedule: selectedCan('SCHEDULE'),
   }
-  const scheduleAvailable = selectedProducts.some((p) =>
-    getAllowedActions(p).includes('schedule')
-  )
 
   return (
     <div className="space-y-6">
@@ -344,6 +375,19 @@ export default function ProductsPage() {
             <option value="active">Activo</option>
             <option value="inactive">Inactivo</option>
           </select>
+          <select
+            value={lifecycleFilter}
+            onChange={(e) => setLifecycleFilter((e.target.value || '') as '' | LifecycleStatus)}
+            aria-label="Filtrar por estado de ciclo de vida"
+            className="px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm bg-white"
+          >
+            <option value="">Todos los ciclos</option>
+            {LIFECYCLE_FILTER_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {LIFECYCLE_STATUS_LABEL[s]}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -420,18 +464,18 @@ export default function ProductsPage() {
               <div className="ml-auto flex flex-wrap items-center gap-2">
                 {canBulkManage && (
                   <>
-                    <BulkButton label="Activar" disabled={bulkPending || !bulkAvailability.activate} onClick={() => runBulkAction('activate')} />
-                    <BulkButton label="Desactivar" disabled={bulkPending || !bulkAvailability.deactivate} onClick={() => runBulkAction('deactivate')} />
-                    <BulkButton label="Mostrar" disabled={bulkPending || !bulkAvailability.show} onClick={() => runBulkAction('show')} />
-                    <BulkButton label="Ocultar" disabled={bulkPending || !bulkAvailability.hide} onClick={() => runBulkAction('hide')} />
-                    <BulkButton label="Archivar" disabled={bulkPending || !bulkAvailability.archive} onClick={() => runBulkAction('archive')} />
-                    <BulkButton label="Restaurar" disabled={bulkPending || !bulkAvailability.restore} onClick={() => runBulkAction('restore')} />
-                    <BulkButton label="Publicar" disabled={bulkPending || !bulkAvailability.publish} onClick={() => runBulkAction('publish')} />
-                    <BulkButton label="Despublicar" disabled={bulkPending || !bulkAvailability.unpublish} onClick={() => runBulkAction('unpublish')} />
-                    <BulkButton label="Programar" disabled={bulkPending || !scheduleAvailable} onClick={() => setShowScheduleModal(true)} />
+                    <BulkButton label="Activar" disabled={bulkTransition.isPending || !bulkAvailability.activate} onClick={() => handleBulkClick('activate')} />
+                    <BulkButton label="Desactivar" disabled={bulkTransition.isPending || !bulkAvailability.deactivate} onClick={() => handleBulkClick('deactivate')} />
+                    <BulkButton label="Mostrar" disabled={bulkTransition.isPending || !bulkAvailability.show} onClick={() => handleBulkClick('show')} />
+                    <BulkButton label="Ocultar" disabled={bulkTransition.isPending || !bulkAvailability.hide} onClick={() => handleBulkClick('hide')} />
+                    <BulkButton label="Archivar" disabled={bulkTransition.isPending || !bulkAvailability.archive} onClick={() => handleBulkClick('archive')} />
+                    <BulkButton label="Restaurar" disabled={bulkTransition.isPending || !bulkAvailability.restore} onClick={() => handleBulkClick('restore')} />
+                    <BulkButton label="Publicar" disabled={bulkTransition.isPending || !bulkAvailability.publish} onClick={() => handleBulkClick('publish')} />
+                    <BulkButton label="Despublicar" disabled={bulkTransition.isPending || !bulkAvailability.unpublish} onClick={() => handleBulkClick('unpublish')} />
+                    <BulkButton label="Programar" disabled={bulkTransition.isPending || !bulkAvailability.schedule} onClick={() => handleBulkClick('schedule')} />
                     <BulkButton
                       label="Mover categoría"
-                      disabled={bulkPending}
+                      disabled={bulkTransition.isPending}
                       onClick={() =>
                         setMoveCategoryTarget({
                           type: 'bulk',
@@ -441,13 +485,13 @@ export default function ProductsPage() {
                     />
                     <BulkButton
                       label="Actualizar precios"
-                      disabled={bulkPending}
+                      disabled={bulkTransition.isPending}
                       onClick={() => setShowBulkPrices(true)}
                     />
                   </>
                 )}
                 {canBulkDelete && (
-                  <Button variant="danger" onClick={bulkDeleteProducts} disabled={bulkPending}>
+                  <Button variant="danger" onClick={bulkDeleteProducts} disabled={bulkTransition.isPending}>
                     Eliminar
                   </Button>
                 )}
@@ -456,6 +500,8 @@ export default function ProductsPage() {
           )}
           {(bulkNotice || bulkError) && (
             <div
+              role="status"
+              aria-live="polite"
               className={`text-sm px-3 py-2 rounded-lg ${
                 bulkError ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
               }`}
@@ -481,12 +527,16 @@ export default function ProductsPage() {
                 </div>
               </div>
             ))
-          ) : products?.length === 0 ? (
+          ) : currentProducts.length === 0 ? (
             <div className="col-span-full text-center py-12">
               <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
-              <p className="text-gray-500 font-medium">No hay productos</p>
+              <p className="text-gray-500 font-medium">
+                {lifecycleFilter && (products?.length ?? 0) > 0
+                  ? `No hay productos en estado ${LIFECYCLE_STATUS_LABEL[lifecycleFilter]}`
+                  : 'No hay productos'}
+              </p>
               <p className="text-gray-400 text-sm mt-1">
                 {isCatalogManager
                   ? 'Crea tu primer producto para comenzar'
@@ -494,13 +544,13 @@ export default function ProductsPage() {
               </p>
             </div>
           ) : (
-            products?.map((product) => (
+            currentProducts.map((product) => (
               <ProductCard
                 key={product.id}
                 product={product}
                 onEdit={setEditingProduct}
-                onToggleActive={toggleActive.mutate}
-                onDelete={deleteProduct.mutate}
+onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEvent })}
+                onDelete={(id) => deleteProductWithMasterKey.mutate({ id })}
                 onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
                 onAccess={setAccessProduct}
                 onMarkReady={(p) => {
@@ -539,11 +589,13 @@ export default function ProductsPage() {
                 <tr>
                   <td colSpan={canBulkManage ? 7 : 6} className="px-6 py-12 text-center text-gray-400">Cargando...</td>
                 </tr>
-              ) : products?.length === 0 ? (
+              ) : currentProducts.length === 0 ? (
                 <tr>
                   <td colSpan={canBulkManage ? 7 : 6} className="px-6 py-12 text-center text-gray-400">
-                  No hay productos
-                  {!isCatalogManager && (
+                  {lifecycleFilter && (products?.length ?? 0) > 0
+                    ? `No hay productos en estado ${LIFECYCLE_STATUS_LABEL[lifecycleFilter]}`
+                    : 'No hay productos'}
+                  {!isCatalogManager && !lifecycleFilter && (
                     <span className="block text-xs mt-1 text-gray-500">
                       No tienes listas asignadas. Solicita acceso a tu administrador.
                     </span>
@@ -551,14 +603,13 @@ export default function ProductsPage() {
                 </td>
                 </tr>
               ) : (
-                products?.map((product) => (
+                currentProducts.map((product) => (
                   <ProductTableRow
                     key={product.id}
                     product={product}
                     onEdit={setEditingProduct}
-                    onToggleActive={toggleActive.mutate}
-                    onToggleVisibility={toggleVisibility.mutate}
-                    onDelete={deleteProduct.mutate}
+onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEvent })}
+                    onDelete={(id) => deleteProductWithMasterKey.mutate({ id })}
                     selected={selectedProductIds.has(product.id)}
                     onToggleSelect={canBulkManage ? toggleSelectProduct : undefined}
                     accessRestrictedIds={accessRestrictedIds}
@@ -576,12 +627,11 @@ export default function ProductsPage() {
         </div>
       ) : (
         <ProductSpreadsheetTable
-          products={products}
+          products={currentProducts}
           isLoading={isLoading}
           onEdit={setEditingProduct}
-          onToggleActive={toggleActive.mutate}
-          onToggleVisibility={toggleVisibility.mutate}
-          onDelete={deleteProduct.mutate}
+          onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEvent })}
+          onDelete={(id) => deleteProductWithMasterKey.mutate({ id })}
           selectedProductIds={canBulkManage ? selectedProductIds : undefined}
           onToggleSelectProduct={canBulkManage ? toggleSelectProduct : undefined}
           onToggleSelectAllProducts={canBulkManage ? toggleSelectAllPage : undefined}
@@ -645,8 +695,17 @@ export default function ProductsPage() {
       {showScheduleModal && (
         <SchedulePublishModal
           count={selectedProductIds.size}
-          onConfirm={runScheduledPublish}
+          onConfirm={runBulkSchedule}
           onClose={() => setShowScheduleModal(false)}
+        />
+      )}
+
+      {bulkModal && (
+        <BulkLifecycleModal
+          kind={bulkModal.kind}
+          count={selectedProductIds.size}
+          onConfirm={(reason) => runBulkTransition(bulkModal.kind, reason)}
+          onClose={() => setBulkModal(null)}
         />
       )}
 
@@ -683,6 +742,16 @@ export default function ProductsPage() {
             queryClient.invalidateQueries({ queryKey: ['products'] })
             setShowBulkPrices(false)
           }}
+        />
+      )}
+
+      {showBulkDeleteModal && (
+        <BulkDeleteModal
+          open={showBulkDeleteModal}
+          onClose={() => setShowBulkDeleteModal(false)}
+          products={currentProducts.filter((p) => selectedProductIds.has(p.id))}
+          onConfirm={handleBulkDeleteConfirm}
+          canManageListas={canManageListas}
         />
       )}
     </div>
@@ -772,6 +841,82 @@ function SchedulePublishModal({
               onClick={() => onConfirm(publishAt, unpublishAt || undefined)}
             >
               Programar
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BulkLifecycleModal({
+  kind,
+  count,
+  onConfirm,
+  onClose,
+}: {
+  kind: BulkEventKind
+  count: number
+  onConfirm: (reason?: string) => void
+  onClose: () => void
+}) {
+  const event = KIND_TO_EVENT[kind]
+  const requiresConfirm = event === 'ARCHIVE' || event === 'RESTORE'
+  const [reason, setReason] = useState('')
+  const [confirmed, setConfirmed] = useState(false)
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl w-full max-w-md shadow-2xl">
+        <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between">
+          <h2 className="text-lg font-condensed font-semibold text-neutral-800">{BULK_LABELS[kind]}</h2>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-colors"
+            aria-label="Cerrar"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-neutral-500">
+            Aplicar {BULK_LABELS[kind].toLowerCase()} a <strong>{count}</strong> producto(s) seleccionado(s).
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Motivo *</label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              placeholder="Indica el motivo de esta acción"
+              className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm"
+            />
+          </div>
+          {requiresConfirm && (
+            <label className="flex items-start gap-2 text-sm text-neutral-600">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(e) => setConfirmed(e.target.checked)}
+                className="mt-1 h-4 w-4 accent-security-500"
+              />
+              <span>
+                Confirmo que deseo {event === 'RESTORE' ? 'restaurar' : 'archivar'} los productos seleccionados.
+              </span>
+            </label>
+          )}
+          <div className="flex gap-3 justify-end pt-2">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={!reason.trim() || (requiresConfirm && !confirmed)}
+              onClick={() => onConfirm(reason.trim())}
+            >
+              Confirmar
             </Button>
           </div>
         </div>

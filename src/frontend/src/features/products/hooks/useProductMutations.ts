@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../../services/api'
+import { deleteProduct, transitionProduct } from '../../../services/product-detail.service'
 
 export function useProductMutations() {
   const queryClient = useQueryClient()
@@ -17,10 +18,19 @@ export function useProductMutations() {
     onSuccess: invalidate,
   })
 
-  const deleteProduct = useMutation({
-    mutationFn: (id: string) => api.delete(`/products/${id}`),
+  // Borrado físico con confirm: true (obligatorio por el backend);
+  // Si el usuario tiene clave configurada, el backend responde 409 sin clave.
+  const deleteProductWithMasterKey = useMutation({
+    mutationFn: ({ id, clave }: { id: string; clave?: string }) =>
+      deleteProduct(id, { clave }),
     onSuccess: invalidate,
   })
 
-  return { toggleVisibility, toggleActive, deleteProduct }
+  // "Marcar listo para publicar" -> evento PREPARE de la FSM
+  const markReady = useMutation({
+    mutationFn: (id: string) => transitionProduct(id, { event: 'PREPARE' }),
+    onSuccess: invalidate,
+  })
+
+  return { toggleVisibility, toggleActive, deleteProduct: undefined as any, deleteProductWithMasterKey, markReady }
 }

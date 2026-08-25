@@ -151,11 +151,6 @@ export const createPrismaMock = () => ({
     updateMany: jest.fn(),
     count: jest.fn(),
   },
-  masterKey: {
-    findUnique: jest.fn(),
-    upsert: jest.fn(),
-    delete: jest.fn(),
-  },
   $connect: jest.fn(),
   $disconnect: jest.fn(),
   $transaction: jest.fn(),

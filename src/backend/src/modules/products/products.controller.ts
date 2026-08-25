@@ -8,6 +8,9 @@ import { UpdateProductImageDto } from './dto/update-product-image.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { PublishProductDto } from './dto/publish-product.dto';
 import { UnpublishProductDto } from './dto/unpublish-product.dto';
+import { TransitionProductDto } from './dto/transition.dto';
+import { BulkTransitionProductDto } from './dto/bulk-transition.dto';
+import { DeleteProductDto } from './dto/delete-product.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AccessContext } from '../../common/acl/acl.service';
@@ -137,11 +140,45 @@ export class ProductsController {
     return this.productsService.unpublish(id, dto, this.ctx(user));
   }
 
+  @Post(':id/transition')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
+  @ApiOperation({ summary: 'Transición de ciclo de vida FSM de un producto (PREPARE, SCHEDULE, PUBLISH, HIDE, SHOW, UNPUBLISH, DISCONTINUE, REACTIVATE, ARCHIVE, RESTORE)' })
+  @ApiResponse({ status: 200, description: 'Transición aplicada. Devuelve el producto con allowedActions.' })
+  @ApiResponse({ status: 400, description: 'Transición inválida, motivo/confirm/publishAt faltante o checklist de publicación incumplido.' })
+  @ApiResponse({ status: 403, description: 'Sin permisos RBAC o nivel ACL insuficiente.' })
+  transition(
+    @Param('id') id: string,
+    @Body() dto: TransitionProductDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.productsService.transition(id, dto, this.ctx(user));
+  }
+
+  @Post('bulk-transition')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
+  @ApiOperation({ summary: 'Aplicar un evento FSM a varios productos (1..500). Procesa producto a producto; devuelve applied y rejected.' })
+  @ApiResponse({ status: 201, description: 'Procesado. Respuesta: { data: { applied, rejected } }.' })
+  bulkTransition(
+    @Body() dto: BulkTransitionProductDto,
+    @CurrentUser() user: any,
+  ) {
+    const { ids, event, reason, publishAt, unpublishAt, confirm } = dto;
+    return this.productsService.bulkTransition(
+      ids,
+      { event, reason, publishAt, unpublishAt, confirm },
+      this.ctx(user),
+    );
+  }
+
   @Delete(':id')
   @Roles('Super Admin', 'Admin Comercial')
-  @ApiOperation({ summary: 'Eliminar producto' })
-  remove(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.productsService.remove(id, this.ctx(user));
+  @ApiOperation({ summary: 'Eliminar producto físicamente. Exige confirm: true; si el producto tiene datos asociados, exige masterKey (409 si falta, 403 si es incorrecta).' })
+  @ApiResponse({ status: 200, description: 'Producto eliminado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Falta confirm: true' })
+  @ApiResponse({ status: 403, description: 'Rol sin permiso, ACL sin manage o clave maestra incorrecta' })
+  @ApiResponse({ status: 409, description: 'El producto tiene datos asociados y no se envió masterKey' })
+  remove(@Param('id') id: string, @Body() dto: DeleteProductDto, @CurrentUser() user: any) {
+    return this.productsService.remove(id, dto, this.ctx(user));
   }
 
   @Post('import')

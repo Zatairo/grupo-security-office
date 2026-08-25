@@ -9,7 +9,6 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService, AccessContext, LEVEL_RANK } from '../../common/acl/acl.service';
 import { AuditService } from '../audit/audit.service';
-import { MasterKeyService } from '../master-key/master-key.service';
 import { CreateListaDto } from './dto/create-lista.dto';
 import { UpdateListaDto } from './dto/update-lista.dto';
 import { randomBytes } from 'crypto';
@@ -20,7 +19,7 @@ export class ListasService {
     private prisma: PrismaService,
     private acl: AclService,
     private audit: AuditService,
-    @Optional() private masterKey?: MasterKeyService,
+    
   ) {}
 
   /** Lista de Listas autorizadas (deny-by-default). */
@@ -555,7 +554,7 @@ export class ListasService {
    * y al eliminar la Lista se hace hard-delete de TODAS sus assignments
    * (Assignment no tiene FK a Lista) para no dejar registros huérfanos.
    */
-  async removeLista(id: string, ctx: AccessContext, dto?: { masterKey?: string }) {
+  async removeLista(id: string, ctx: AccessContext) {
     if (!this.acl.isListasAdmin(ctx.roles)) {
       throw new ForbiddenException('Solo Super Admin o Admin Comercial pueden eliminar Listas');
     }
@@ -588,51 +587,7 @@ export class ListasService {
     if (prices > 0) impact.push(`${prices} precio${prices === 1 ? '' : 's'}`);
     if (assignments > 0) impact.push(`${assignments} accesos`);
 
-    if (impact.length > 0) {
-      // Con datos asociados: se exige la clave maestra (feature de seguridad autorizada).
-      const masterKey = dto?.masterKey;
-      if (!masterKey) {
-        throw new ConflictException(
-          `La Lista tiene ${impact.join(' y ')}. Se requiere la clave maestra para eliminar.`,
-        );
-      }
-      if (!this.masterKey || !(await this.masterKey.validateMasterKey(masterKey))) {
-        throw new ForbiddenException('Clave maestra incorrecta');
-      }
-
-      // Auditoría ANTES del borrado físico: deja constancia del borrado forzado
-      // (code/name/forced/counts) aunque algo falle a mitad de la transacción.
-      await this.audit.log({
-        userId: ctx.userId,
-        action: 'delete',
-        entity: 'LISTA',
-        entityId: lista.id,
-        oldValues: { name: lista.name, code: lista.code },
-        newValues: {
-          code: lista.code,
-          name: lista.name,
-          forced: true,
-          productsRemoved: products,
-          pricesRemoved: prices,
-        },
-      });
-
-      // Borrado forzado en cascada. Orden importa por FKs:
-      // 1) Stock (FK productId → Product), 2) ProductImage (FK productId → Product),
-      // 3) Price por producto y por lista, 4) Product, 5) Assignment (sin FK a Lista),
-      // 6) Lista.
-      await this.prisma.$transaction(async (tx) => {
-        await tx.stock.deleteMany({ where: { product: { listaId: id } } });
-        await tx.productImage.deleteMany({ where: { product: { listaId: id } } });
-        await tx.price.deleteMany({ where: { product: { listaId: id } } });
-        await tx.price.deleteMany({ where: { listaId: id } });
-        await tx.product.deleteMany({ where: { listaId: id } });
-        await tx.assignment.deleteMany({ where: { resourceType: 'LISTA', resourceId: id } });
-        await tx.lista.delete({ where: { id } });
-      });
-
-      return { message: 'Lista eliminada exitosamente' };
-    }
+    // Asociados: se eliminan en cascada.
 
     await this.audit.log({
       userId: ctx.userId,

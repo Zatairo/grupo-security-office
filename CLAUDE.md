@@ -171,3 +171,37 @@ Supplier (create/update/delete), SupplierEvaluation (create), Stock (create/upda
 - `npm test` (src/backend): **393/393** (baseline 352 + 41 nuevos: movimientos, transiciones inválidas 400, 403 por rol, recibida actualiza stock, historial, dashboard, alerts, report, averageScore, stockStatus).
 - `npm run build`: **0 errores**.
 - No se reinició el backend ni se ejecutaron migraciones. No se tocaron `schema.prisma` ni `src/frontend/**`.
+
+### Cierre FSM de ciclo de vida de Product (2026-08-20)
+
+#### Propósito
+Registrar la implementación completa y validada de la FSM de ciclo de vida de Product, consolidando backend, frontend, scheduler y contratos, con baseline final y decisión de continuidad.
+
+#### Estado final
+- **FSM implementada y validada** en rama `main` @ `258e5e1fdbfeebcd70b087969b2724f612788591`.
+- **Baseline final**: 616 tests / 30 suites, build/lint 0 errores, 14 migraciones sin drift, 230 productos en BD.
+- **Fuente de verdad**: `lifecycleStatus` (7 estados: DRAFT, READY, SCHEDULED, PUBLISHED, HIDDEN, DISCONTINUED, ARCHIVED).
+- **Dual-write temporal**: columnas legacy (`isActive`, `isVisible`, `publishStatus`, `publishAt`, `unpublishAt`) mantenidas como espejo read-model; NO se ejecutan DROP COLUMN.
+
+#### Contratos confirmados
+- **P4** — Eliminación física: Super Admin + Admin Comercial, ACL `manage`, confirmación explícita, clave maestra obligatoria si hay datos asociados (precios, imágenes, stock, auditoría, POs). Auditado.
+- **P6** — Scheduler: `@nestjs/schedule` tick 1 min idempotente; publica SCHEDULED (`publishAt <= now` + checklist), despublica PUBLISHED (`unpublishAt <= now` + reason `'auto'`). Lazy read-repair mantenido como fallback.
+
+#### Entregables validados
+- Backend: 616 tests, transición matrix 14 eventos, endpoints `transition`/`bulk-transition`, bloqueo PUT, dual-write, `allowedActions` por producto.
+- Frontend: tipos, hooks, PublishTab real (sin hack 2099), bulk con `bulk-transition` (applied/rejected, `aria-live`), filtros por estado, contraste WCAG AA.
+- QA: APROBADO CON OBSERVACIONES → H1/H2/H3 resueltas (create activo, contraste ≥4.5:1, master-key limpiada).
+- Baseline: 616/30, build/lint 0, 14 migraciones, 230 productos, entorno vivo.
+
+#### Hallazgos menores (no bloqueantes, pendientes)
+- Throttler 429 agresivo en login → proponer ajuste específico.
+- `limit` no válido en `/api/products` (usa `skip`/`take`).
+- Scripts residuales `check-*.cjs`/`qa_*.js` en `Temp/opencode` (19/08).
+- Seed email: `admin@gruposecurity.co` vs docs `admin@grupo-security.com` → alinear en Etapa 8.1.
+
+#### Decisión de continuidad
+**Etapa 8 (destructiva) CONGELADA**. Planificada iteración separada `feat/fsm-legacy-removal-prep`:
+- **8.1** (no destructiva): inventario y migración de lecturas/escrituras a `lifecycleStatus` (import, trending, Listas, lazy repair, `allowedActions` en listado), dual-write mantenido, docs/tests actualizados, email canónico.
+- **8.2** (destructiva, futura): búsqueda referencias cero, DROP COLUMN legacy, desactivar dual-write, QA regresión completa con rollback.
+
+> **No se ejecutan migraciones destructivas ni DROP COLUMN en este cierre.**

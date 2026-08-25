@@ -1,4 +1,4 @@
-import { IsString, MinLength, IsOptional, IsBoolean, IsObject, IsArray, ValidateNested, IsUUID, IsIn, IsISO8601 } from 'class-validator';
+import { IsString, MinLength, IsOptional, IsObject, IsArray, ValidateNested, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PriceInputDto } from './price-input.dto';
@@ -62,29 +62,4 @@ export class UpdateProductDto {
   @Type(() => PriceInputDto)
   @IsOptional()
   prices?: PriceInputDto[];
-
-  @ApiPropertyOptional()
-  @IsBoolean()
-  @IsOptional()
-  isActive?: boolean;
-
-  @ApiPropertyOptional()
-  @IsBoolean()
-  @IsOptional()
-  isVisible?: boolean;
-
-  @ApiPropertyOptional({ description: "Estado de publicación: 'borrador' | 'listo' | 'publicado' | 'archivado'." })
-  @IsIn(['borrador', 'listo', 'publicado', 'archivado'])
-  @IsOptional()
-  publishStatus?: string;
-
-  @ApiPropertyOptional({ description: 'Fecha ISO programada de publicación.' })
-  @IsISO8601()
-  @IsOptional()
-  publishAt?: string;
-
-  @ApiPropertyOptional({ description: 'Fecha ISO opcional de auto-despublicación.' })
-  @IsISO8601()
-  @IsOptional()
-  unpublishAt?: string;
 }

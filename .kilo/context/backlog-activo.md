@@ -58,3 +58,16 @@ Incremento 0 finalizado (Fases A/B/C). Incremento 1 — **Fase 1A planificada; F
 - No se implementó: permisos por rol en Assignment (`roleId` XOR), excepciones por producto, PriceHistory, importación masiva por Lista, publicación programada, proveedores/stock/compras/órdenes, borrado físico de Listas (se usa archivo lógico).
 - ACL `ctx` en servicios: opcional; el controlador es el punto de autorización (siempre pasa ctx). Ausente → comportamiento legacy (no rompe callers/tests existentes).
 
+## Incremento: Clave por usuario (claveHash, 2026-08-24) — COMPLETADA
+- **Backend** (LOCAL): nueva columna `User.claveHash` (bcrypt, nullable) + migración `20260824151000_user_clave` aplicada; `ProductsService.assertClave(ctx, clave)` exige clave personal en `update`/`doTransition`(transition+toggles)/`remove` solo si el usuario tiene `claveHash` (scheduler `internal` nunca exige); discriminadores 409 `CLAVE_USUARIO_REQUERIDA` / 403 `CLAVE_USUARIO_INCORRECTA`; capa independiente de la clave maestra global (`masterKey`, cascade-delete). Endpoints de clave: auto-servicio `PUT/DELETE /api/users/:id/clave` (service fuerza propio-usuario) + admin `PUT/DELETE /api/users/:id/clave/admin` y `GET /api/users/:id/clave` (`@Roles('Super Admin','Admin Comercial')`). DTO `SetClaveDto`. Auditoría en writes de clave.
+- **Frontend**: panel "Clave por usuario" en UsersPage (admin); diálogo extendido en ProductDetailPage y BulkDeleteModal (fase confirmar → clave usuario → clave maestra → done); campo inline en ProductFormModal (modificar). `deleteProduct` envía `{ clave, masterKey }`; `ToggleProductDto { clave? }`.
+- **Modelo/DTOs**: `User.claveHash`; `UpdateProductDto`/`TransitionProductDto`/`DeleteProductDto` extienden con `clave?: string`; `ToggleProductDto` nuevo. Fixture `auth.fixture.ts` incluye `claveHash: null`.
+- **Validación (LOCAL)**: backend `tsc --noEmit` limpio; `nest build` OK; `prisma validate` OK; jest **630/630 pass** (30 suites); frontend `tsc --noEmit` limpio; `vite build` OK (224 módulos).
+- **Datos**: migración aplicada en LOCAL. No se corrieron `migrate reset/db push/DELETE/TRUNCATE/DROP`. No se tocaron secretos/.env. No se hicieron deploy/commits. Working tree con cambios sin commitear.
+
+## Restricciones respetadas (este incremento)
+- La clave por usuario y la clave maestra global son capas independientes: no se debilitó la protección de cascada (`masterKey` sigue exigiéndose para productos con datos asociados).
+- `assertClave` no se aplica al scheduler interno (`internal=true`) ni a llamadas sin contexto.
+- Nunca se expone `claveHash` en respuestas (ni en fixtures de tipo `User` se loguea el hash).
+- Se reutilizó el diálogo 409/403 existente; el masterKey sigue funcionando sin cambios para quienes no configuran clave por usuario.
+

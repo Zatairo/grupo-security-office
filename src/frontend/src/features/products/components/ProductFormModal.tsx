@@ -74,7 +74,7 @@ export default function ProductFormModal({
     description: product?.description || '',
     categoryId: product?.categoryId || '',
     brandId: product?.brandId || '',
-    isActive: product?.isActive ?? false,
+    isActive: product?.isActive ?? true,
     isVisible: product?.isVisible ?? false,
   })
   const [technicalSpecsText, setTechnicalSpecsText] = useState(() =>
@@ -133,8 +133,11 @@ export default function ProductFormModal({
     onSuccess: refreshProduct,
   })
 
+  const [clave, setClave] = useState('')
+  const [claveRequired, setClaveRequired] = useState(false)
+
   const mutation = useMutation({
-    mutationFn: async (data: ProductPayload) => {
+    mutationFn: async (data: ProductPayload & { clave?: string }) => {
       if (product) {
         return api.put(`/products/${product.id}`, data)
       }
@@ -143,6 +146,12 @@ export default function ProductFormModal({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] })
       onSaved()
+    },
+    onError: (err) => {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
+      if (code === 'CLAVE_USUARIO_REQUERIDA' || code === 'CLAVE_USUARIO_INCORRECTA') {
+        setClaveRequired(true)
+      }
     },
   })
 
@@ -207,7 +216,12 @@ export default function ProductFormModal({
     if (!product) {
       payload.listaId = listaId
     }
-    mutation.mutate(payload)
+    // La clave del usuario solo aplica en modificación (el backend la exige sólo
+    // si el usuario tiene clave configurada).
+    const body: ProductPayload & { clave?: string } = product
+      ? { ...payload, clave: clave.trim() || undefined }
+      : payload
+    mutation.mutate(body)
   }
 
   const setPriceRow = (listId: string, patch: Partial<PriceRow>) => {
@@ -644,6 +658,25 @@ export default function ProductFormModal({
               </div>
             )}
           </div>
+
+          {product && claveRequired && (
+            <div className="px-6 pt-4">
+              <label className="block text-sm font-medium text-neutral-800 mb-1.5">
+                Clave del usuario
+              </label>
+              <input
+                type="password"
+                value={clave}
+                onChange={(e) => setClave(e.target.value)}
+                autoComplete="current-password"
+                placeholder="Ingresa tu clave para guardar los cambios"
+                className={inputClass}
+              />
+              <p className="text-xs text-neutral-500 mt-1.5">
+                Tu usuario tiene clave configurada. Ingrésala para confirmar la modificación.
+              </p>
+            </div>
+          )}
 
           <div className="flex gap-3 justify-end px-6 py-4 border-t border-gray-200">
             <button

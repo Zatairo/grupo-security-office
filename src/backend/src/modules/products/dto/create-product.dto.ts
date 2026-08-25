@@ -65,6 +65,7 @@ export class CreateProductDto {
   @ApiPropertyOptional({ example: false })
   @IsBoolean()
   @IsOptional()
+  // En Etapa 7 este campo saldrá del DTO: la FSM derivará isActive del lifecycleStatus.
   isActive?: boolean;
 
   @ApiPropertyOptional({ example: false })

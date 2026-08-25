@@ -1,7 +1,11 @@
 import type { Product } from '../types/product.types'
 
 /**
- * Matriz única de acciones válidas por estado efectivo del producto.
+ * @deprecated Usar `lifecycle.ts` → `productAllowedActions` / `getProductActions`.
+ * Fuente de verdad: backend `allowedActions` + FSM `LifecycleEvent`.
+ * Este archivo se mantiene solo por consumidores legacy no migrados.
+ *
+ * Matriz única de acciones válidas por estado efectivo del producto (legacy).
  * Fuente de verdad para BULK (ProductsPage), FILA (ProductTableRow),
  * TARJETA (ProductCard) y DETALLE (ProductDetailPage).
  *

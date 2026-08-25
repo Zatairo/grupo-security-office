@@ -32,6 +32,36 @@ export interface PriceList {
   priceCount?: number
 }
 
+/** Estados de la FSM de ciclo de vida (fuente de verdad, etapa 2 backend). */
+export type LifecycleStatus =
+  | 'DRAFT'
+  | 'READY'
+  | 'SCHEDULED'
+  | 'PUBLISHED'
+  | 'HIDDEN'
+  | 'DISCONTINUED'
+  | 'ARCHIVED'
+
+/**
+ * Eventos de negocio de la FSM que un usuario puede disparar (12; excluye
+ * CREATE y SCHEDULED_PUBLISH que son del sistema/scheduler). DELETE se declara
+ * aquí porque el borrado físico usa la misma semántica, aunque el backend no lo
+ * incluye en allowedActions (está fuera de la matriz de transiciones).
+ */
+export type LifecycleEvent =
+  | 'PREPARE'
+  | 'SCHEDULE'
+  | 'CANCEL_SCHEDULE'
+  | 'PUBLISH'
+  | 'HIDE'
+  | 'SHOW'
+  | 'UNPUBLISH'
+  | 'DISCONTINUE'
+  | 'REACTIVATE'
+  | 'ARCHIVE'
+  | 'RESTORE'
+  | 'DELETE'
+
 export interface Product {
   id: string
   sku: string
@@ -39,14 +69,16 @@ export interface Product {
   description: string | null
   categoryId: string
   brandId: string
-  catalogId: string
-  catalog?: { id: string; name: string; code: string }
   listaId?: string | null
   technicalSpecs: Record<string, unknown> | null
   extraAttributes?: Record<string, unknown> | null
   isActive: boolean
   isVisible: boolean
   publishStatus?: 'borrador' | 'listo' | 'programado' | 'publicado' | 'archivado' | string | null
+  /** Estado FSM (backend). Puede llegar null/undefined en registros legacy hasta backfill. */
+  lifecycleStatus?: LifecycleStatus | null
+  /** Eventos que el usuario puede disparar dado su rol+ACL+estado (findOne/transition). */
+  allowedActions?: LifecycleEvent[]
   publishedAt?: string | null
   publishAt?: string | null
   unpublishAt?: string | null
@@ -76,7 +108,6 @@ export interface ProductPayload {
   description?: string | null
   categoryId: string
   brandId: string
-  catalogId?: string
   listaId?: string
   technicalSpecs?: Record<string, unknown> | null
   extraAttributes?: Record<string, unknown> | null

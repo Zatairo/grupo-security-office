@@ -158,13 +158,13 @@ export class ListasController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Eliminar Lista físicamente (sin datos: directo; con datos asociados exige clave maestra)',
+      'Eliminar Lista físicamente (y sus datos asociados en cascada)'
   })
-  @ApiResponse({ status: 200, description: 'Lista eliminada (sin datos o borrado forzado con clave maestra)' })
+  @ApiResponse({ status: 200, description: 'Lista eliminada' })
   @ApiResponse({ status: 404, description: 'Lista no encontrada' })
-  @ApiResponse({ status: 409, description: 'La Lista tiene datos asociados y no se envió la clave maestra' })
-  @ApiResponse({ status: 403, description: 'Clave maestra incorrecta' })
-  remove(@Param('id') id: string, @Body() dto: { masterKey?: string }, @CurrentUser() user: any) {
-    return this.listasService.removeLista(id, this.ctx(user), dto);
+  
+  
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.listasService.removeLista(id, this.ctx(user));
   }
 }

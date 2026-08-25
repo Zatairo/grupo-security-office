@@ -15,8 +15,9 @@ export const buildActiveUser = (overrides: Partial<User> = {}): User => ({
   id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
   email: 'admin@grupo-security.com',
   name: 'Admin Principal',
-  password: '$2b$10$hash_del_password_valido', // bcrypt hash
+  password: '$2b$10$hash_del_password_valido',
   isActive: true,
+  claveHash: null,
   createdAt: new Date('2025-01-01T00:00:00Z'),
   updatedAt: new Date('2025-01-01T00:00:00Z'),
   ...overrides,
@@ -31,6 +32,7 @@ export const buildInactiveUser = (overrides: Partial<User> = {}): User => ({
   name: 'Usuario Inactivo',
   password: '$2b$10$hash_del_password_valido',
   isActive: false,
+  claveHash: null,
   createdAt: new Date('2025-01-01T00:00:00Z'),
   updatedAt: new Date('2025-01-01T00:00:00Z'),
   ...overrides,

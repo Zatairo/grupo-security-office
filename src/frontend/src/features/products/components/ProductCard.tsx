@@ -1,25 +1,33 @@
 import { useNavigate } from 'react-router-dom'
 import type { Product } from '../types/product.types'
-import { getAllowedActions, canMarkReady } from '../lib/actionMatrix'
+import { productAllowedActions, canMarkReady } from '../lib/lifecycle'
 import { ProductStatusBadge } from './ProductStatusBadge'
 import { StockBadge, PublishBadge } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
 import { formatCurrency } from '../../../lib/format'
+import { useAuthStore } from '../../../stores/auth.store'
+
+import type { LifecycleEvent } from '../types/product.types'
 
 interface ProductCardProps {
   product: Product
   onEdit: (product: Product) => void
-  onToggleActive: (id: string) => void
+  onTransition: (id: string, event: LifecycleEvent) => void
   onDelete: (id: string) => void
   onMoveCategory?: (product: Product) => void
   onAccess?: (product: Product) => void
   onMarkReady?: (product: Product) => void
 }
 
-export function ProductCard({ product, onEdit, onToggleActive, onDelete, onMoveCategory, onAccess, onMarkReady }: ProductCardProps) {
+export function ProductCard({ product, onEdit, onTransition, onDelete, onMoveCategory, onAccess, onMarkReady }: ProductCardProps) {
   const navigate = useNavigate()
-  const allowed = getAllowedActions(product)
-  const canToggleActive = product.isActive ? allowed.includes('deactivate') : allowed.includes('activate')
+  const userRoles = useAuthStore((s) => s.user?.roles ?? [])
+  const allowed = productAllowedActions(product, userRoles)
+  const canReactivate = allowed.includes('REACTIVATE')
+  const canDiscontinue = allowed.includes('DISCONTINUE')
+  const canToggleActive = product.isActive ? canDiscontinue : canReactivate
+  const toggleLabel = product.isActive ? 'Inactivo' : 'Activo'
+  const toggleEvent = product.isActive ? 'DISCONTINUE' : 'REACTIVATE'
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button')) return
@@ -123,16 +131,16 @@ export function ProductCard({ product, onEdit, onToggleActive, onDelete, onMoveC
           )}
         </div>
         <div className="mt-3 flex items-center gap-2">
-          {hasPermission('products:write') && canToggleActive && (
+          {hasPermission('products:write') && canToggleActive && onTransition && (
             <button
-              onClick={() => onToggleActive(product.id)}
+              onClick={() => onTransition(product.id, toggleEvent)}
               className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
                 product.isActive
-                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                  : 'bg-red-50 text-red-700 hover:bg-red-100'
+                  ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
               }`}
             >
-              {product.isActive ? 'Activo' : 'Inactivo'}
+              {toggleLabel}
             </button>
           )}
           {hasPermission('products:delete') && (

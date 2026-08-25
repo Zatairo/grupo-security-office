@@ -22,7 +22,6 @@ model User {
   supplierEvaluations SupplierEvaluation[]
   purchaseOrders      PurchaseOrder[]
   publishedProducts   Product[]            @relation("ProductPublishedBy")
-  masterKeyUpdates    MasterKey[]          @relation("MasterKeyUpdatedBy")
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
@@ -103,9 +102,9 @@ model Lista {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  creator     User? @relation("ListaCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  updater     User? @relation("ListaUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
-  responsible User? @relation("ListaResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  creator     User?     @relation("ListaCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updater     User?     @relation("ListaUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  responsible User?     @relation("ListaResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
   supplier    Supplier? @relation("ListaSupplier", fields: [supplierId], references: [id], onDelete: SetNull)
 
   products Product[]
@@ -137,6 +136,7 @@ model Product {
   unpublishAt     DateTime?
   publishedById   String?
   unpublishReason String?
+  lifecycleStatus String         @default("DRAFT")
   category        Category       @relation(fields: [categoryId], references: [id])
   brand           Brand          @relation(fields: [brandId], references: [id])
   lista           Lista?         @relation(fields: [listaId], references: [id])
@@ -155,6 +155,7 @@ model Product {
   @@index([publishAt])
   @@index([unpublishAt])
   @@index([isActive, isVisible])
+  @@index([lifecycleStatus])
   @@map("products")
 }
 
@@ -346,14 +347,4 @@ model PurchaseOrder {
   @@index([status])
   @@index([requestedById])
   @@map("purchase_orders")
-}
-
-model MasterKey {
-  id          String   @id @default(uuid())
-  keyHash     String
-  updatedAt   DateTime @updatedAt
-  updatedById String?
-  updatedBy   User?    @relation("MasterKeyUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-
-  @@map("master_keys")
 }

@@ -1,28 +1,43 @@
 import { useState, type FormEvent } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../services/api'
-import type { Product, Category, Brand, PriceList, ProductDocument } from '../features/products/types/product.types'
-import { getAllowedActions, canMarkReady as canMarkReadyProduct } from '../features/products/lib/actionMatrix'
+import type {
+  Product,
+  Category,
+  Brand,
+  PriceList,
+  ProductDocument,
+  LifecycleEvent,
+  LifecycleStatus,
+} from '../features/products/types/product.types'
+import {
+  LIFECYCLE_EVENT_HINT,
+  LIFECYCLE_EVENT_LABEL,
+  LIFECYCLE_STATUS_LABEL,
+  effectiveLifecycleStatus,
+} from '../features/products/lib/lifecycle'
 import { usePriceLists } from '../features/products/hooks/usePriceLists'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatCurrency, formatDate, formatBytes } from '../lib/format'
-import { useProductMutations } from '../features/products/hooks/useProductMutations'
 import { canManageListaAccess, canViewAudit, hasPermission } from '../lib/rbac'
 import { Button, Modal, Badge, Alert } from '../components/ui'
+import {
+  useTransitionProduct,
+  getTransitionHttpStatus,
+} from '../features/products/hooks/useProductTransition'
 import {
   fetchProductStock,
   updateProductStock,
   fetchProductAudit,
   fetchProductSuppliers,
-  publishProduct,
-  unpublishProduct,
-  schedulePublish,
   uploadProductImage,
   deleteProductImage,
   markProductImagePrimary,
   updateProductImageAlt,
+  deleteProduct,
   isNotImplemented,
+  type TransitionPayload,
   type ProductStock,
   type AuditLog,
 } from '../services/product-detail.service'
@@ -72,9 +87,33 @@ const PRICE_LIST_ORDER = [
 const inputClass =
   'w-full px-3 py-2.5 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm'
 
-/** Fecha futura usada por el PATCH /products/:id/publish para dejar el producto en estado 'listo'
- *  (el DTO no acepta publishStatus directo: un publishAt futuro queda 'listo' sin auto-publicar). */
-const READY_PUBLISH_AT = '2099-12-31T23:59:59.000Z'
+/** Evento de ciclo de vida con motivo + confirmación (modales del detalle). */
+type LifecycleActionEvent = 'UNPUBLISH' | 'DISCONTINUE' | 'ARCHIVE' | 'RESTORE'
+
+/** Eventos FSM que se disparan de forma directa (sin modal). */
+const DIRECT_TRANSITIONS: LifecycleEvent[] = [
+  'PREPARE',
+  'CANCEL_SCHEDULE',
+  'PUBLISH',
+  'HIDE',
+  'SHOW',
+  'REACTIVATE',
+]
+
+/**
+ * Colores de fondo sólido por estado de ciclo de vida (WCAG AA ≥ 4.5:1 con
+ * texto blanco). Todos los tonos son ≥ 600 de la escala Tailwind (o grises
+ * institucionales de la paleta `security`/`neutral` del proyecto).
+ */
+const LIFECYCLE_STATUS_BG: Record<LifecycleStatus, string> = {
+  DRAFT: 'bg-amber-700', // #b45309 · blanco = 5.02:1
+  READY: 'bg-emerald-700', // #047857 · blanco = 5.48:1
+  SCHEDULED: 'bg-indigo-600', // #4f46e5 · blanco = 6.29:1
+  PUBLISHED: 'bg-sky-700', // #0369a1 · blanco = 5.93:1
+  HIDDEN: 'bg-neutral-600', // #5c5b5c · blanco = 6.76:1
+  DISCONTINUED: 'bg-red-700', // #b91c1c · blanco = 6.47:1
+  ARCHIVED: 'bg-gray-700', // #374151 · blanco = 10.31:1
+}
 
 function findPrice(product: Product, priceListId: string) {
   return product.prices?.find((p) => p.priceList.id === priceListId)
@@ -1450,140 +1489,238 @@ function AccessTab({ product }: { product: Product }) {
   )
 }
 
-// ------------------------------ Publicación (defensivo) ------------------------------
-function PublishTab({ product }: { product: Product }) {
-  const queryClient = useQueryClient()
-  const [notAvailable, setNotAvailable] = useState(false)
-  const [scheduleOpen, setScheduleOpen] = useState(false)
-  const canEdit = hasPermission('products:write') || hasPermission('publish:manage')
+// ------------------------------ Publicación (ciclo de vida FSM) ------------------------------
+function PublishTab({
+  product,
+  allowed,
+  canEdit,
+  pending,
+  error,
+  onDirect,
+  onOpenAction,
+  onOpenSchedule,
+  onDelete,
+}: {
+  product: Product
+  allowed: LifecycleEvent[]
+  canEdit: boolean
+  pending: boolean
+  error: unknown
+  onDirect: (event: LifecycleEvent) => void
+  onOpenAction: (event: LifecycleEvent) => void
+  onOpenSchedule: () => void
+  onDelete: () => void
+}) {
+  const status = effectiveLifecycleStatus(product)
+  const hasError = Boolean(error)
+  const statusBadge = (
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${LIFECYCLE_STATUS_BG[status]} text-white`}
+    >
+      {LIFECYCLE_STATUS_LABEL[status]}
+    </span>
+  )
 
-  const status = product.publishStatus
-  const statusBadge =
-    status === 'publicado' ? (
-      <Badge variant="success">Publicado</Badge>
-    ) : status === 'programado' ? (
-      <Badge variant="info">Programado</Badge>
-    ) : status === 'borrador' ? (
-      <Badge variant="warning">Borrador</Badge>
-    ) : null
+  const can = (event: LifecycleEvent) => allowed.includes(event)
 
-  const allowed = getAllowedActions(product)
-  const canPublish = allowed.includes('publish')
-  const canUnpublish = allowed.includes('unpublish')
-  const canSchedule = allowed.includes('schedule')
-
-  const publish = useMutation({
-    mutationFn: () => publishProduct(product.id),
-    onError: (err) => {
-      if (isNotImplemented(err)) setNotAvailable(true)
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['product', product.id] }),
-  })
-
-  const unpublish = useMutation({
-    mutationFn: () => unpublishProduct(product.id),
-    onError: (err) => {
-      if (isNotImplemented(err)) setNotAvailable(true)
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['product', product.id] }),
-  })
-
-  const schedule = useMutation({
-    mutationFn: (payload: { publishAt: string; unpublishAt?: string }) =>
-      schedulePublish(product.id, payload),
-    onError: (err) => {
-      if (isNotImplemented(err)) setNotAvailable(true)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['product', product.id] })
-      setScheduleOpen(false)
-    },
-  })
-
-  const markReady = useMutation({
-    mutationFn: () => publishProduct(product.id, { publishAt: READY_PUBLISH_AT }),
-    onError: (err) => {
-      if (isNotImplemented(err)) setNotAvailable(true)
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['product', product.id] }),
-  })
-
-  const canMarkReady = canMarkReadyProduct(product)
+  const actionButton = (event: LifecycleEvent) => {
+    const enabled = can(event)
+    const label = LIFECYCLE_EVENT_LABEL[event]
+    const hintId = `evt-hint-${event}`
+    const handleClick = () => {
+      if (event === 'SCHEDULE') onOpenSchedule()
+      else if (DIRECT_TRANSITIONS.includes(event)) onDirect(event)
+      else onOpenAction(event)
+    }
+    return (
+      <span key={event} className="inline-flex">
+        <button
+          type="button"
+          disabled={!enabled || pending}
+          onClick={handleClick}
+          aria-describedby={enabled ? undefined : hintId}
+          className="px-3 py-2 text-xs font-medium rounded-lg border border-neutral-300 text-neutral-700 bg-white hover:bg-neutral-50 hover:border-security-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {label}
+        </button>
+        {!enabled && (
+          <span id={hintId} className="sr-only">
+            {LIFECYCLE_EVENT_HINT[event]}
+          </span>
+        )}
+      </span>
+    )
+  }
 
   return (
     <div className="space-y-4">
-      {notAvailable && (
-        <Alert variant="info">El módulo de publicación programada estará disponible próximamente.</Alert>
-      )}
-
       <div className="flex items-center gap-3">
-        <span className="text-sm text-neutral-600">Estado de publicación:</span>
-        {statusBadge ?? <Badge variant="neutral">Sin estado</Badge>}
+        <span className="text-sm text-neutral-600">Estado de ciclo de vida:</span>
+        {statusBadge}
       </div>
 
       {(product.publishAt || product.unpublishAt) && (
         <div className="text-xs text-neutral-500 space-y-1">
-          {product.publishAt && (
-            <p>Publicar programado: {formatDate(product.publishAt)}</p>
-          )}
-          {product.unpublishAt && (
-            <p>Despublicar programado: {formatDate(product.unpublishAt)}</p>
-          )}
+          {product.publishAt && <p>Publicar programado: {formatDate(product.publishAt)}</p>}
+          {product.unpublishAt && <p>Despublicar programado: {formatDate(product.unpublishAt)}</p>}
         </div>
+      )}
+
+      {hasError && (
+        <Alert variant="error">{getApiErrorMessage(error, 'No se pudo aplicar la acción.')}</Alert>
       )}
 
       {canEdit && (
         <div className="flex flex-wrap gap-2">
-          {canMarkReady && (
-            <Button onClick={() => markReady.mutate()} loading={markReady.isPending}>
-              Marcar listo para publicar
-            </Button>
-          )}
-          {canPublish && (
-            <Button onClick={() => publish.mutate()} loading={publish.isPending}>
-              Publicar
-            </Button>
-          )}
-          {canUnpublish && (
-            <Button variant="secondary" onClick={() => unpublish.mutate()} loading={unpublish.isPending}>
-              Despublicar
-            </Button>
-          )}
-          {canSchedule && (
-            <Button variant="secondary" onClick={() => setScheduleOpen(true)}>
-              Programar
-            </Button>
+          {actionButton('PREPARE')}
+          {actionButton('SCHEDULE')}
+          {actionButton('CANCEL_SCHEDULE')}
+          {actionButton('PUBLISH')}
+          {actionButton('HIDE')}
+          {actionButton('SHOW')}
+          {actionButton('UNPUBLISH')}
+          {actionButton('DISCONTINUE')}
+          {actionButton('REACTIVATE')}
+          {actionButton('ARCHIVE')}
+          {actionButton('RESTORE')}
+          {hasPermission('products:delete') && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={onDelete}
+              className="px-3 py-2 text-xs font-medium rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Eliminar
+            </button>
           )}
         </div>
       )}
-
-      {publish.isError && !isNotImplemented(publish.error) && (
-        <Alert variant="error">
-          {getApiErrorMessage(publish.error, 'No se pudo publicar el producto.')}
-        </Alert>
-      )}
-      {unpublish.isError && !isNotImplemented(unpublish.error) && (
-        <Alert variant="error">
-          {getApiErrorMessage(unpublish.error, 'No se pudo despublicar el producto.')}
-        </Alert>
-      )}
-      {markReady.isError && !isNotImplemented(markReady.error) && (
-        <Alert variant="error">
-          {getApiErrorMessage(markReady.error, 'No se pudo marcar el producto como listo.')}
-        </Alert>
-      )}
-
-      <ScheduleModal
-        open={scheduleOpen}
-        loading={schedule.isPending}
-        error={schedule.isError && !isNotImplemented(schedule.error) ? schedule.error : null}
-        onClose={() => setScheduleOpen(false)}
-        onConfirm={(payload) => schedule.mutate(payload)}
-      />
     </div>
   )
 }
 
+// ------------------------------ Modal de motivo/confirmación ------------------------------
+const LIFECYCLE_MODAL_META: Record<
+  LifecycleActionEvent,
+  { title: string; description: string; confirmLabel: string }
+> = {
+  UNPUBLISH: {
+    title: 'Despublicar producto',
+    description: 'El producto volverá a estado Borrador y dejará de mostrarse comercialmente.',
+    confirmLabel: 'Despublicar',
+  },
+  DISCONTINUE: {
+    title: 'Dar de baja producto',
+    description: 'El producto quedará inactivo (baja comercial). Indica el motivo de la baja.',
+    confirmLabel: 'Dar de baja',
+  },
+  ARCHIVE: {
+    title: 'Archivar producto',
+    description:
+      'El producto se archivará y dejará de estar disponible comercialmente. Esta acción requiere motivo y confirmación.',
+    confirmLabel: 'Archivar',
+  },
+  RESTORE: {
+    title: 'Restaurar producto',
+    description:
+      'El producto saldrá del archivo y volverá a estar disponible para gestión. Esta acción requiere motivo y confirmación.',
+    confirmLabel: 'Restaurar',
+  },
+}
+
+function LifecycleConfirmModal({
+  event,
+  loading,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  event: LifecycleActionEvent
+  loading: boolean
+  error: unknown
+  onClose: () => void
+  onConfirm: (reason: string) => void
+}) {
+  const [reason, setReason] = useState('')
+  const [confirmed, setConfirmed] = useState(false)
+  const [formError, setFormError] = useState('')
+
+  // UNPUBLISH, DISCONTINUE, ARCHIVE y RESTORE exigen motivo en el backend.
+  const requiresReason = true
+  const requiresConfirm = event === 'ARCHIVE' || event === 'RESTORE'
+  const meta = LIFECYCLE_MODAL_META[event]
+
+  const handleConfirm = () => {
+    if (requiresReason && !reason.trim()) {
+      setFormError('El motivo es obligatorio.')
+      return
+    }
+    if (requiresConfirm && !confirmed) {
+      setFormError('Debes marcar la confirmación.')
+      return
+    }
+    setFormError('')
+    onConfirm(reason.trim())
+  }
+
+  const alertMessage =
+    formError || (error ? getApiErrorMessage(error, 'No se pudo completar la acción.') : '')
+
+  return (
+    <Modal
+      open
+      onClose={() => {
+        if (!loading) onClose()
+      }}
+      title={meta.title}
+      footer={
+        <>
+          <Button variant="secondary" disabled={loading} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button loading={loading} onClick={handleConfirm}>
+            {meta.confirmLabel}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {alertMessage && <Alert variant="error">{alertMessage}</Alert>}
+        <p className="text-sm text-neutral-600">{meta.description}</p>
+        {requiresReason && (
+          <div>
+            <label className="block text-sm font-medium text-neutral-800 mb-1.5">
+              Motivo <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className={`${inputClass} resize-none`}
+              rows={3}
+              maxLength={300}
+              placeholder="Indica el motivo de la acción"
+            />
+          </div>
+        )}
+        {requiresConfirm && (
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-[var(--color-primary)] border-neutral-300 rounded focus:ring-[var(--color-primary-focus-ring)]"
+            />
+            <span className="text-sm text-neutral-700">
+              Confirmo que entiendo que esta acción no se puede deshacer.
+            </span>
+          </label>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+// ------------------------------ Modal de programación ------------------------------
 function ScheduleModal({
   open,
   loading,
@@ -1606,6 +1743,10 @@ function ScheduleModal({
       setFormError('La fecha de publicación es requerida.')
       return
     }
+    if (new Date(publishAt) <= new Date()) {
+      setFormError('La fecha de publicación debe ser futura.')
+      return
+    }
     if (unpublishAt && unpublishAt < publishAt) {
       setFormError('La fecha de despublicación no puede ser anterior a la de publicación.')
       return
@@ -1620,7 +1761,9 @@ function ScheduleModal({
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={() => {
+        if (!loading) onClose()
+      }}
       title="Programar publicación"
       footer={
         <>
@@ -1657,6 +1800,133 @@ function ScheduleModal({
             className={inputClass}
           />
         </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ------------------------------ Modal de borrado físico ------------------------------
+function DeleteProductModal({
+  loading,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  loading: boolean
+  error: unknown
+  onClose: () => void
+  onConfirm: (opts: { clave?: string; masterKey?: string }) => void
+}) {
+  const [confirmed, setConfirmed] = useState(false)
+  const [clave, setClave] = useState('')
+  const [masterKey, setMasterKey] = useState('')
+  const [formError, setFormError] = useState('')
+
+  const status = getTransitionHttpStatus(error)
+  const errorCode = (error as { response?: { data?: { code?: string } } })?.response?.data?.code
+  const needsClave = errorCode === 'CLAVE_USUARIO_REQUERIDA' || errorCode === 'CLAVE_USUARIO_INCORRECTA'
+  const needsMasterKey = status === 409 || status === 403
+  const errorMessage = error ? getApiErrorMessage(error, 'No se pudo eliminar el producto.') : null
+
+  const handleConfirm = () => {
+    if (!confirmed) {
+      setFormError('Debes confirmar el borrado.')
+      return
+    }
+    if (needsClave && !clave.trim()) {
+      setFormError('La clave del usuario es obligatoria para eliminar este producto.')
+      return
+    }
+    if (needsMasterKey && !masterKey.trim()) {
+      setFormError('La clave maestra es obligatoria para eliminar este producto.')
+      return
+    }
+    setFormError('')
+    const opts: { clave?: string; masterKey?: string } = {}
+    if (needsClave) opts.clave = clave.trim()
+    if (needsMasterKey) opts.masterKey = masterKey.trim()
+    onConfirm(opts)
+  }
+
+  const alertMessage = formError || errorMessage || ''
+
+  return (
+    <Modal
+      open
+      onClose={() => {
+        if (!loading) onClose()
+      }}
+      title="Eliminar producto"
+      footer={
+        <>
+          <Button variant="secondary" disabled={loading} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="danger" loading={loading} onClick={handleConfirm}>
+            {needsClave || needsMasterKey ? 'Eliminar con clave' : 'Eliminar producto'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {alertMessage && <Alert variant="error">{alertMessage}</Alert>}
+        <p className="text-sm text-neutral-600">
+          Esta acción elimina el producto definitivamente (incluye precios e imágenes asociados).{' '}
+          <strong>No se puede deshacer.</strong>
+        </p>
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+            className="mt-0.5 w-4 h-4 text-[var(--color-primary)] border-neutral-300 rounded focus:ring-[var(--color-primary-focus-ring)]"
+          />
+          <span className="text-sm text-neutral-700">
+            Confirmo que entiendo el alcance de esta acción y que no se puede deshacer.
+          </span>
+        </label>
+
+        {needsClave && (
+          <div>
+            <label className="block text-sm font-medium text-neutral-800 mb-1.5">
+              Clave del usuario
+            </label>
+            <input
+              id="delete-product-clave"
+              type="password"
+              value={clave}
+              onChange={(e) => setClave(e.target.value)}
+              autoComplete="current-password"
+              placeholder="••••••"
+              className={inputClass}
+            />
+            <p className="text-xs text-neutral-500 mt-1.5">
+              {errorCode === 'CLAVE_USUARIO_INCORRECTA'
+                ? 'Clave incorrecta. Inténtalo de nuevo.'
+                : 'Ingresa tu clave para confirmar la eliminación.'}
+            </p>
+          </div>
+        )}
+
+        {needsMasterKey && (
+          <div>
+            <label className="block text-sm font-medium text-neutral-800 mb-1.5">
+              Clave maestra
+            </label>
+            <input
+              id="delete-product-master-key"
+              type="password"
+              value={masterKey}
+              onChange={(e) => setMasterKey(e.target.value)}
+              autoComplete="off"
+              placeholder="••••••"
+              className={inputClass}
+            />
+            <p className="text-xs text-neutral-500 mt-1.5">
+              El producto tiene datos asociados. Ingresa la clave maestra para eliminar.
+            </p>
+          </div>
+        )}
       </div>
     </Modal>
   )
@@ -1735,8 +2005,14 @@ function AuditTab({ product }: { product: Product }) {
 // ------------------------------ Página ------------------------------
 export default function ProductDetailPage() {
   const { productId } = useParams<{ productId: string }>()
+  const navigate = useNavigate()
   const [tab, setTab] = useState<DetailTab>('info')
   const [selectedImage, setSelectedImage] = useState(0)
+  const [lifecycleModal, setLifecycleModal] = useState<{ event: LifecycleActionEvent } | null>(null)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
+  const queryClient = useQueryClient()
 
   const { data: product, isLoading, error } = useQuery({
     queryKey: ['product', productId],
@@ -1764,8 +2040,20 @@ export default function ProductDetailPage() {
     },
   })
 
+  const transition = useTransitionProduct(productId)
+
+  const deleteMutation = useMutation({
+    mutationFn: (opts?: { clave?: string; masterKey?: string }) => {
+      if (!product) return Promise.reject(new Error('Producto no cargado'))
+      return deleteProduct(product.id, opts)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'], refetchType: 'all' })
+      navigate('/commercial/products')
+    },
+  })
+
   const { priceLists } = usePriceLists()
-  const { toggleActive, toggleVisibility } = useProductMutations()
   const canEdit = hasPermission('products:write')
 
   // El tab Precios exige ACL edit_prices en el backend (Super Admin + Admin Comercial);
@@ -1814,13 +2102,42 @@ export default function ProductDetailPage() {
 
   const orderedLists = orderedPriceLists(priceLists)
 
-  const detailAllowed = getAllowedActions(product)
+  const detailAllowed = product.allowedActions ?? []
+  const effectiveStatus = effectiveLifecycleStatus(product)
+
+  const runTransition = (payload: TransitionPayload) => {
+    transition.mutate(payload, {
+      onSuccess: () => {
+        setLifecycleModal(null)
+        setScheduleOpen(false)
+      },
+    })
+  }
+
   const canToggleActive = product.isActive
-    ? detailAllowed.includes('deactivate')
-    : detailAllowed.includes('activate')
+    ? detailAllowed.includes('DISCONTINUE')
+    : detailAllowed.includes('REACTIVATE')
   const canToggleVisibility = product.isVisible
-    ? detailAllowed.includes('hide')
-    : detailAllowed.includes('show')
+    ? detailAllowed.includes('HIDE')
+    : detailAllowed.includes('SHOW')
+
+  const handleToggleActive = () => {
+    if (!product) return
+    if (product.isActive) setLifecycleModal({ event: 'DISCONTINUE' })
+    else runTransition({ event: 'REACTIVATE' })
+  }
+
+  const handleToggleVisibility = () => {
+    if (!product) return
+    runTransition(product.isVisible ? { event: 'HIDE' } : { event: 'SHOW' })
+  }
+
+  const handleDeleteOpen = () => {
+    deleteMutation.reset()
+    setDeleteOpen(true)
+  }
+
+  const effectiveStatusBadgeClass = LIFECYCLE_STATUS_BG[effectiveStatus]
 
   const finalPrice = orderedLists.reduce<PriceList | null>((acc, list) => {
     if (acc) return acc
@@ -1881,23 +2198,15 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="absolute top-4 left-4 flex flex-col gap-1.5 z-10">
-              <span className={`px-2.5 py-1 text-white text-[11px] font-semibold rounded ${product.isActive ? 'bg-emerald-500' : 'bg-neutral-500'}`}>
+              <span className={`px-2.5 py-1 text-white text-[11px] font-semibold rounded ${product.isActive ? 'bg-emerald-700' : 'bg-neutral-500'}`}>
                 {product.isActive ? 'Activo' : 'Inactivo'}
               </span>
-              <span className={`px-2.5 py-1 text-white text-[11px] font-semibold rounded ${product.isVisible ? 'bg-security-600' : 'bg-neutral-400'}`}>
+              <span className={`px-2.5 py-1 text-white text-[11px] font-semibold rounded ${product.isVisible ? 'bg-security-600' : 'bg-neutral-600'}`}>
                 {product.isVisible ? 'Visible' : 'Oculto'}
               </span>
-              {product.publishStatus && (
-                <span className={`px-2.5 py-1 text-white text-[11px] font-semibold rounded ${
-                  product.publishStatus === 'publicado'
-                    ? 'bg-sky-500'
-                    : product.publishStatus === 'programado'
-                      ? 'bg-indigo-500'
-                      : 'bg-amber-500'
-                }`}>
-                  {product.publishStatus}
-                </span>
-              )}
+              <span className={`px-2.5 py-1 text-white text-[11px] font-semibold rounded ${effectiveStatusBadgeClass}`}>
+                {LIFECYCLE_STATUS_LABEL[effectiveStatus]}
+              </span>
             </div>
 
             {gallery.length > 1 && (
@@ -1944,7 +2253,7 @@ export default function ProductDetailPage() {
               <div className="mt-4 flex gap-2">
                 {canToggleActive && (
                   <button
-                    onClick={() => toggleActive.mutate(product.id)}
+                    onClick={handleToggleActive}
                     className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
                       product.isActive
                         ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
@@ -1956,7 +2265,7 @@ export default function ProductDetailPage() {
                 )}
                 {canToggleVisibility && (
                   <button
-                    onClick={() => toggleVisibility.mutate(product.id)}
+                    onClick={handleToggleVisibility}
                     className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
                       product.isVisible
                         ? 'bg-security-50 text-security-700 hover:bg-security-100'
@@ -2014,10 +2323,67 @@ export default function ProductDetailPage() {
           {effectiveTab === 'stock' && <StockTab product={product} />}
           {effectiveTab === 'suppliers' && <SuppliersTab product={product} />}
           {effectiveTab === 'access' && <AccessTab product={product} />}
-          {effectiveTab === 'publish' && <PublishTab product={product} />}
+          {effectiveTab === 'publish' && (
+            <PublishTab
+              product={product}
+              allowed={detailAllowed}
+              canEdit={canEdit || hasPermission('publish:manage')}
+              pending={transition.isPending}
+              error={transition.error}
+              onDirect={(event) => runTransition({ event })}
+              onOpenAction={(event) => setLifecycleModal({ event: event as LifecycleActionEvent })}
+              onOpenSchedule={() => setScheduleOpen(true)}
+              onDelete={handleDeleteOpen}
+            />
+          )}
           {effectiveTab === 'audit' && <AuditTab product={product} />}
         </div>
       </div>
+
+      {lifecycleModal && (
+        <LifecycleConfirmModal
+          event={lifecycleModal.event}
+          loading={transition.isPending}
+          error={transition.error}
+          onClose={() => setLifecycleModal(null)}
+          onConfirm={(reason) =>
+            runTransition({
+              event: lifecycleModal.event,
+              ...(reason ? { reason } : {}),
+              ...(lifecycleModal.event === 'ARCHIVE' || lifecycleModal.event === 'RESTORE'
+                ? { confirm: true }
+                : {}),
+            })
+          }
+        />
+      )}
+
+      {scheduleOpen && (
+        <ScheduleModal
+          open
+          loading={transition.isPending}
+          error={transition.error}
+          onClose={() => setScheduleOpen(false)}
+          onConfirm={(payload) =>
+            runTransition({
+              event: 'SCHEDULE',
+              publishAt: new Date(payload.publishAt).toISOString(),
+              ...(payload.unpublishAt
+                ? { unpublishAt: new Date(payload.unpublishAt).toISOString() }
+                : {}),
+            })
+          }
+        />
+      )}
+
+      {deleteOpen && (
+        <DeleteProductModal
+          loading={deleteMutation.isPending}
+          error={deleteMutation.error}
+          onClose={() => setDeleteOpen(false)}
+          onConfirm={(opts) => deleteMutation.mutate(opts)}
+        />
+      )}
     </div>
   )
 }

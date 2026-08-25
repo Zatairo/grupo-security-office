@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Product, ProductPrice } from '../types/product.types'
-import { getAllowedActions, canMarkReady } from '../lib/actionMatrix'
+import type { Product, ProductPrice, LifecycleEvent } from '../types/product.types'
+import { productAllowedActions, canMarkReady } from '../lib/lifecycle'
 import { ProductStatusBadge } from './ProductStatusBadge'
 import { ProductIndicators } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
 import { formatCurrency, formatDate } from '../../../lib/format'
+import { useAuthStore } from '../../../stores/auth.store'
 
 type SortDir = 'asc' | 'desc'
 type SortKey = 'sku' | 'product' | 'brand' | 'category' | 'updatedAt'
@@ -13,8 +14,7 @@ interface ProductSpreadsheetTableProps {
   products?: Product[]
   isLoading?: boolean
   onEdit: (product: Product) => void
-  onToggleActive: (id: string) => void
-  onToggleVisibility: (id: string) => void
+  onTransition: (id: string, event: LifecycleEvent) => void
   onDelete: (id: string) => void
   selectedProductIds?: Set<string>
   onToggleSelectProduct?: (id: string) => void
@@ -154,8 +154,7 @@ export function ProductSpreadsheetTable({
   products = [],
   isLoading = false,
   onEdit,
-  onToggleActive,
-  onToggleVisibility,
+  onTransition,
   onDelete,
   selectedProductIds,
   onToggleSelectProduct,
@@ -166,6 +165,7 @@ export function ProductSpreadsheetTable({
   onAccess,
   onMarkReady,
 }: ProductSpreadsheetTableProps) {
+  useAuthStore((s) => s.user?.roles ?? [])
   const canWrite = hasPermission('products:write')
   const canDelete = hasPermission('products:delete')
 
@@ -387,13 +387,10 @@ export function ProductSpreadsheetTable({
           {!isLoading &&
             sortedProducts.map((product) => {
               const selected = selectedIds.has(product.id)
-              const allowed = getAllowedActions(product)
-              const canToggleActive = product.isActive
-                ? allowed.includes('deactivate')
-                : allowed.includes('activate')
-              const canToggleVisibility = product.isVisible
-                ? allowed.includes('hide')
-                : allowed.includes('show')
+              const userRoles = useAuthStore.getState().user?.roles ?? []
+              const allowed = productAllowedActions(product, userRoles)
+              const canToggleActive = product.isActive ? allowed.includes('DISCONTINUE') : allowed.includes('REACTIVATE')
+              const canToggleVisibility = product.isVisible ? allowed.includes('HIDE') : allowed.includes('SHOW')
               const activeClass = product.isActive
                 ? 'bg-emerald-100 text-emerald-700'
                 : 'bg-red-100 text-red-700'
@@ -487,7 +484,7 @@ export function ProductSpreadsheetTable({
                   >
                     <ProductStatusBadge
                       label={product.isVisible ? 'Visible' : 'Oculto'}
-                      onClick={canToggleVisibility ? () => onToggleVisibility(product.id) : undefined}
+                      onClick={canToggleVisibility ? () => onTransition(product.id, 'HIDE') : undefined}
                       className={`px-2 py-1 text-xs font-medium rounded whitespace-nowrap ${visibleClass}`}
                     />
                   </td>
@@ -498,7 +495,7 @@ export function ProductSpreadsheetTable({
                   >
                     <ProductStatusBadge
                       label={product.isActive ? 'Activo' : 'Inactivo'}
-                      onClick={canToggleActive ? () => onToggleActive(product.id) : undefined}
+                      onClick={canToggleActive ? () => onTransition(product.id, product.isActive ? 'DISCONTINUE' : 'REACTIVATE') : undefined}
                       className={`px-2 py-1 text-xs font-medium rounded whitespace-nowrap ${activeClass}`}
                     />
                   </td>

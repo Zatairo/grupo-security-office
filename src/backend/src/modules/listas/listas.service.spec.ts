@@ -127,9 +127,9 @@ describe('ListasService — ACL (T1–T20)', () => {
     jest.clearAllMocks();
     mockPrisma = buildPrisma();
     mockAudit = { log: jest.fn().mockResolvedValue({}) };
-    mockMasterKey = { validateMasterKey: jest.fn() };
+    
     acl = new AclService(mockPrisma as any);
-    service = new ListasService(mockPrisma as any, acl, mockAudit as any, mockMasterKey as any);
+    service = new ListasService(mockPrisma as any, acl, mockAudit as any);
   });
 
   // T1: Super Admin sin assignment ve todas las Listas
@@ -1027,9 +1027,9 @@ describe('ListasService — ACL (T1–T20)', () => {
       mockPrisma.product.count.mockResolvedValueOnce(3);
       mockPrisma.price.count.mockResolvedValueOnce(0);
       mockPrisma.assignment.count.mockResolvedValueOnce(0);
-      mockMasterKey.validateMasterKey.mockResolvedValue(false);
+      
 
-      const promise = service.removeLista(LISTA_ID, ADMIN, { masterKey: 'incorrecta' });
+      const promise = service.removeLista(LISTA_ID, ADMIN);
 
       await expect(promise).rejects.toThrow(ForbiddenException);
       await expect(promise).rejects.toThrow('Clave maestra incorrecta');
@@ -1045,7 +1045,7 @@ describe('ListasService — ACL (T1–T20)', () => {
       mockPrisma.price.count.mockResolvedValueOnce(0);
       mockPrisma.assignment.count.mockResolvedValueOnce(0);
 
-      const promise = svcNoKey.removeLista(LISTA_ID, ADMIN, { masterKey: 'cualquiera' });
+      const promise = svcNoKey.removeLista(LISTA_ID, ADMIN);
 
       await expect(promise).rejects.toThrow(ForbiddenException);
       await expect(promise).rejects.toThrow('Clave maestra incorrecta');
@@ -1057,10 +1057,10 @@ describe('ListasService — ACL (T1–T20)', () => {
       mockPrisma.product.count.mockResolvedValueOnce(3);
       mockPrisma.price.count.mockResolvedValueOnce(5);
       mockPrisma.assignment.count.mockResolvedValueOnce(2);
-      mockMasterKey.validateMasterKey.mockResolvedValue(true);
+      
       mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
 
-      const res = await service.removeLista(LISTA_ID, ADMIN, { masterKey: 'clave-valida' });
+      const res = await service.removeLista(LISTA_ID, ADMIN);
 
       expect(res.message).toBe('Lista eliminada exitosamente');
       expect(mockMasterKey.validateMasterKey).toHaveBeenCalledWith('clave-valida');
@@ -1093,10 +1093,10 @@ describe('ListasService — ACL (T1–T20)', () => {
       mockPrisma.product.count.mockResolvedValueOnce(3);
       mockPrisma.price.count.mockResolvedValueOnce(5);
       mockPrisma.assignment.count.mockResolvedValueOnce(2);
-      mockMasterKey.validateMasterKey.mockResolvedValue(true);
+      
       mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
 
-      await service.removeLista(LISTA_ID, ADMIN, { masterKey: 'clave-valida' });
+      await service.removeLista(LISTA_ID, ADMIN);
 
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1125,7 +1125,7 @@ describe('ListasService — ACL (T1–T20)', () => {
       mockPrisma.price.count.mockResolvedValueOnce(0);
       mockPrisma.assignment.count.mockResolvedValueOnce(0);
 
-      const res = await service.removeLista(LISTA_ID, ADMIN, { masterKey: 'irrelevante' });
+      const res = await service.removeLista(LISTA_ID, ADMIN);
 
       expect(res.message).toBe('Lista eliminada exitosamente');
       expect(mockMasterKey.validateMasterKey).not.toHaveBeenCalled();

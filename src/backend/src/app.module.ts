@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -12,7 +13,6 @@ import { BrandsModule } from './modules/brands/brands.module';
 import { AssignmentsModule } from './modules/assignments/assignments.module';
 import { PricesModule } from './modules/prices/prices.module';
 import { ListasModule } from './modules/listas/listas.module';
-import { MasterKeyModule } from './modules/master-key/master-key.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { HealthModule } from './modules/health/health.module';
@@ -21,6 +21,10 @@ import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Scheduler P6: cron interno del ciclo de vida de Product (tick cada minuto).
+    // Se registra a nivel raíz (ámbito global) porque el servicio que lo usa vive
+    // en ProductsModule; es el patrón estándar de @nestjs/schedule.
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -44,7 +48,7 @@ import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
     AssignmentsModule,
     PricesModule,
     ListasModule,
-    MasterKeyModule,
+    
     SuppliersModule,
     AuditModule,
     HealthModule,
