@@ -403,7 +403,7 @@ describe('ProductsService', () => {
   });
 
   describe('clave por usuario (assertClave)', () => {
-    it('update: NO exige clave si el usuario no tiene claveHash', async () => {
+    it('update: NO exige clave si el usuario no tiene password', async () => {
       mockPrisma.product.findUnique.mockResolvedValueOnce(mockProduct);
       mockPrisma.product.findUnique.mockResolvedValueOnce(null);
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1'});
@@ -414,9 +414,9 @@ describe('ProductsService', () => {
       expect(result.name).toBe('Cámara IP Pro');
     });
 
-    it('update: 409 CLAVE_USUARIO_REQUERIDA si tiene claveHash pero no envía clave', async () => {
+    it('update: 409 CLAVE_USUARIO_REQUERIDA si tiene password pero no envía clave', async () => {
       mockPrisma.product.findUnique.mockResolvedValueOnce(mockProduct);
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', claveHash: '$2b$10$hashvalido' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', password: '$2b$10$hashvalido' });
 
       await expect(
         service.update('prod-1', { name: 'Cámara IP Pro' }, { userId: 'u1', roles: ['Admin Comercial'] }),
@@ -425,7 +425,7 @@ describe('ProductsService', () => {
 
     it('update: 403 CLAVE_USUARIO_INCORRECTA si la clave enviada no coincide', async () => {
       mockPrisma.product.findUnique.mockResolvedValueOnce(mockProduct);
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', claveHash: '$2b$10$hashvalido' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', password: '$2b$10$hashvalido' });
 
       await expect(
         service.update('prod-1', { name: 'Cámara IP Pro'}, { userId: 'u1', roles: ['Admin Comercial'] }),
@@ -436,7 +436,7 @@ describe('ProductsService', () => {
       mockPrisma.product.findUnique.mockResolvedValueOnce(mockProduct);
       mockPrisma.product.findUnique.mockResolvedValueOnce(null);
       ;(bcrypt.compare as jest.Mock).mockResolvedValueOnce(true);
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', claveHash: '$2b$10$hashvalido' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', password: '$2b$10$hashvalido' });
       mockPrisma.product.update.mockResolvedValue({ ...mockProductWithRelations, name: 'Cámara IP Pro' });
 
       const result = await service.update('prod-1', { name: 'Cámara IP Pro'}, { userId: 'u1', roles: ['Admin Comercial'] });
@@ -446,7 +446,7 @@ describe('ProductsService', () => {
 
     it('remove: 409 CLAVE_USUARIO_REQUERIDA antes del chequeo de masterKey', async () => {
       mockPrisma.product.findUnique.mockResolvedValue({ ...mockProduct, listaId: 'lista-1' });
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', claveHash: '$2b$10$hashvalido' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', password: '$2b$10$hashvalido' });
 
       await expect(
         service.remove('prod-1', { confirm: true }, { userId: 'u1', roles: ['Admin Comercial'] }),
@@ -455,7 +455,7 @@ describe('ProductsService', () => {
 
     it('transition (FSM): 409 CLAVE_USUARIO_REQUERIDA si tiene clave y no la envía', async () => {
       mockPrisma.product.findUnique.mockResolvedValue({ ...mockProduct, listaId: 'lista-1' });
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', claveHash: '$2b$10$hashvalido' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', password: '$2b$10$hashvalido' });
 
       await expect(
         service.transition('prod-1', { event: 'PUBLISH' }, { userId: 'u1', roles: ['Admin Comercial'] }),

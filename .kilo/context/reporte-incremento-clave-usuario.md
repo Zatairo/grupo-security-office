@@ -1,6 +1,6 @@
-# Reporte de ejecución — Incremento: Clave por usuario (claveHash, 2026-08-24)
+# Reporte de ejecución — Incremento: Clave por usuario (password, 2026-08-24)
 
-**Incremento:** Clave por usuario (claveHash).
+**Incremento:** Clave por usuario (password).
 **Agente:** comercial-dev
 **Modo:** ejecución continua (aprobación D1-D7 defaults previa, "continua").
 **Fecha:** 2026-08-24.
@@ -11,10 +11,10 @@
 - `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/grupo_security?schema=public`
 - Host: `localhost` → **LOCAL** → autorizado para aplicar migraciones (regla de ambiente).
 - **Nota crítica de entorno:** las herramientas `read`/`grep` devolvían instantáneas stale al inicio de la sesión; `bash`/`node`/`git` son la fuente de verdad del estado real del disco. El repo real está **muy por delante** de lo que describían los docs `.kilo` (ya tenía FSM/lifecycle, suppliers, stock, purchaseOrders, rich ACL con 6 niveles, master-key global). Se verificó todo contra disco antes de editar.
-- `prisma generate` falla con EPERM en este entorno (query_engine DLL bloqueado por proceso dev local) — limitación documentada en incrementos previos. **No bloquea**: el cliente ya se regeneró (TypeScript types SÍ incluyen `claveHash`).
+- `prisma generate` falla con EPERM en este entorno (query_engine DLL bloqueado por proceso dev local) — limitación documentada en incrementos previos. **No bloquea**: el cliente ya se regeneró (TypeScript types SÍ incluyen `password`).
 
 ## 2. Objetivo
-Implementar **clave por usuario** (`User.claveHash`, hash bcrypt opcional):
+Implementar **clave por usuario** (`User.password`, hash bcrypt opcional):
 - El usuario crea/edita/elimina su clave desde el apartado Usuarios (auto-servicio) o un admin la gestiona.
 - Si un usuario TIENE clave configurada → el sistema la exige para eliminar o modificar cualquier producto.
 - Si NO tiene clave → no se pide (flujo libre).
@@ -22,19 +22,19 @@ Implementar **clave por usuario** (`User.claveHash`, hash bcrypt opcional):
 - Capa **independiente** de la clave maestra global (`masterKey`), que sigue protegiendo el borrado en cascada.
 
 ## 3. Decisiones aplicadas (D1-D7 defaults, aprobadas por "continua")
-- **D1** `User.claveHash String?` (bcrypt) + migración `20260824151000_user_clave`.
+- **D1** `User.password String?` (bcrypt) + migración `20260824151000_user_clave`.
 - **D2** Coexistencia: clave per-usuario + masterKey global (capas independientes).
 - **D3** Auto-servicio (currentClave requerida para cambiar) + admin reset.
-- **D4** Exención por rol: NO hay; cualquier usuario con claveHash la debe proporcionar (solo el scheduler `internal` está exento).
+- **D4** Exención por rol: NO hay; cualquier usuario con password la debe proporcionar (solo el scheduler `internal` está exento).
 - **D5** "Modificar" = `update` + `transition` (FSM) + `toggleVisibility`/`toggleActive` + `remove`.
-- **D6** Condicional: solo si `ctx.user.claveHash != null`; 409 si falta, 403 si incorrecta.
+- **D6** Condicional: solo si `ctx.user.password != null`; 409 si falta, 403 si incorrecta.
 - **D7** HTTP 409 `CLAVE_USUARIO_REQUERIDA` / 403 `CLAVE_USUARIO_INCORRECTA` (reutiliza diálogo existente, discrimina por `code`).
 
 ## 4. Archivos modificados
 
 ### Backend — esquema + migración:
-- `src/backend/prisma/schema.prisma` — `+claveHash String?` en `User`.
-- `src/backend/prisma/migrations/20260824151000_user_clave/migration.sql` — **NUEVA** (ALTER TABLE users ADD COLUMN claveHash TEXT).
+- `src/backend/prisma/schema.prisma` — `+password String?` en `User`.
+- `src/backend/prisma/migrations/20260824151000_user_clave/migration.sql` — **NUEVA** (ALTER TABLE users ADD COLUMN password TEXT).
 
 ### Backend — módulo Users (clave):
 - `src/backend/src/modules/users/dto/set-clave.dto.ts` — **NUEVO** (`clave` min 6, `currentClave?`).
@@ -50,8 +50,8 @@ Implementar **clave por usuario** (`User.claveHash`, hash bcrypt opcional):
 - `src/backend/src/modules/products/products.controller.ts` — toggles aceptan `@Body() dto?: ToggleProductDto` y reenvían al service.
 
 ### Backend — fixtures + tests:
-- `src/backend/src/__test__/fixtures/auth.fixture.ts` — `+claveHash: null` en `buildActiveUser`/`buildInactiveUser` (requerido por el tipo generado).
-- `src/backend/src/modules/products/products.service.spec.ts` — `+jest.mock('bcrypt')` a nivel módulo; **+7 tests** `describe('clave por usuario')`: update no exige si no tiene claveHash, 409 si falta, 403 si incorrecta, 200 si coincide, remove 409 antes de masterKey, transition 409.
+- `src/backend/src/__test__/fixtures/auth.fixture.ts` — `+password: null` en `buildActiveUser`/`buildInactiveUser` (requerido por el tipo generado).
+- `src/backend/src/modules/products/products.service.spec.ts` — `+jest.mock('bcrypt')` a nivel módulo; **+7 tests** `describe('clave por usuario')`: update no exige si no tiene password, 409 si falta, 403 si incorrecta, 200 si coincide, remove 409 antes de masterKey, transition 409.
 - `src/backend/src/modules/users/users.service.spec.ts` — `+ForbiddenException` import; **+8 tests** `describe('clave por usuario')`: getClaveStatus, setClave crea/exige-current/403-incorrecta/403-ajeno, removeClave, adminSetClave.
 
 ### Frontend — servicio + tipos:
@@ -77,7 +77,7 @@ Implementar **clave por usuario** (`User.claveHash`, hash bcrypt opcional):
 - Frontend `npm run build` (tsc -b && vite build) → **OK**, 224 módulos transformados.
 
 ## 6. Riesgos / limitaciones
-- **EPERM `prisma generate`**: conocido, no bloquea. Types ya regenerados (claveHash presente en `index.d.ts`). Motor query-engine no se renueva pero estaba en el mismo estado precedente.
+- **EPERM `prisma generate`**: conocido, no bloquea. Types ya regenerados (password presente en `index.d.ts`). Motor query-engine no se renueva pero estaba en el mismo estado precedente.
 - **Diálogo bulk (3 fases)**: si un usuario tiene clave Y productos con datos asociados, el flujo pide primero la clave y luego la masterKey en dos pasos. Correcto pero añade un paso; es el comportamiento esperado por diseño de capas independientes.
 - **El scheduler** (`internal=true`) NO exige clave — intencional (publicación/despublicación programadas no deben romperse).
 - **read/grep tools stale**: durante esta sesión devolvieron contenido desactualizado. Se mitigó verificando siempre contra `bash`/`node`. Los docs `.kilo` previos describían un estado menos avanzado que el repo real.

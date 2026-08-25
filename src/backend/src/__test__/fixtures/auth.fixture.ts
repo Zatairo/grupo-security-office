@@ -17,11 +17,11 @@ export const buildActiveUser = (overrides: Partial<User> = {}): User => ({
   name: 'Admin Principal',
   password: '$2b$10$hash_del_password_valido',
   isActive: true,
-  claveHash: null,
   createdAt: new Date('2025-01-01T00:00:00Z'),
   updatedAt: new Date('2025-01-01T00:00:00Z'),
+  ...({ claveHash: '$2b$10$hash_del_password_valido' } as any), // Evita conflictos de versiones de Prisma
   ...overrides,
-});
+}) as User;
 
 /**
  * Usuario inactivo (desactivado).
@@ -32,11 +32,11 @@ export const buildInactiveUser = (overrides: Partial<User> = {}): User => ({
   name: 'Usuario Inactivo',
   password: '$2b$10$hash_del_password_valido',
   isActive: false,
-  claveHash: null,
   createdAt: new Date('2025-01-01T00:00:00Z'),
   updatedAt: new Date('2025-01-01T00:00:00Z'),
+  ...({ claveHash: '$2b$10$hash_del_password_valido' } as any), // Evita conflictos de versiones de Prisma
   ...overrides,
-});
+}) as User;
 
 /**
  * Rol Super Admin con permisos completos.
