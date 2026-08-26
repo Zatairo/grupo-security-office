@@ -367,13 +367,14 @@ const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
+            aria-label="Habilitación"
             className="px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm bg-white"
           >
-            <option value="">Todos los estados</option>
+            <option value="">Todos</option>
             <option value="visible">Visible</option>
             <option value="hidden">Oculto</option>
-            <option value="active">Activo</option>
-            <option value="inactive">Inactivo</option>
+            <option value="active">Habilitados</option>
+            <option value="inactive">Deshabilitados</option>
           </select>
           <select
             value={lifecycleFilter}
