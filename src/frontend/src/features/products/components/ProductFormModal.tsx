@@ -135,6 +135,7 @@ export default function ProductFormModal({
 
   const [clave, setClave] = useState('')
   const [claveRequired, setClaveRequired] = useState(false)
+  const [formError, setFormError] = useState<string>('')
 
   const mutation = useMutation({
     mutationFn: async (data: ProductPayload & { clave?: string }) => {
@@ -151,6 +152,15 @@ export default function ProductFormModal({
       const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
       if (code === 'CLAVE_USUARIO_REQUERIDA' || code === 'CLAVE_USUARIO_INCORRECTA') {
         setClaveRequired(true)
+      } else {
+        let message = 'No fue posible guardar el producto. Intenta nuevamente.'
+        const apiErr = err as { response?: { data?: { message?: string | string[] } } }
+        if (apiErr.response?.data?.message) {
+          message = typeof apiErr.response.data.message === 'string'
+            ? apiErr.response.data.message
+            : apiErr.response.data.message.join('. ')
+        }
+        setFormError(message)
       }
     },
   })
@@ -201,14 +211,15 @@ export default function ProductFormModal({
       }
     }
     setPriceGateError('')
+    setFormError('')
     const payload: ProductPayload = {
       sku: form.sku,
       name: form.name,
       description: form.description,
       categoryId: form.categoryId,
       brandId: form.brandId,
-      isActive: form.isActive,
-      isVisible: form.isVisible,
+      ...(product ? {} : { isActive: form.isActive }),
+      ...(product ? {} : { isVisible: form.isVisible }),
       technicalSpecs: tech.value ?? undefined,
       extraAttributes: extra.value ?? undefined,
       prices: buildPricesPayload(),
@@ -274,6 +285,11 @@ export default function ProductFormModal({
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          {formError && (
+            <p className="text-xs text-red-600 mb-3" role="alert">
+              {formError}
+            </p>
+          )}
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
             {tab === 'basic' && (
               <>
