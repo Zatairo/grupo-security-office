@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors, GoneException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
@@ -101,21 +101,21 @@ export class ProductsController {
 
   @Patch(':id/toggle-visibility')
   @Roles('Super Admin', 'Admin Comercial')
-  @ApiOperation({ summary: 'Alternar visibilidad del producto' })
+  @ApiOperation({ summary: 'Obsoleto', deprecated: true, description: 'Adaptador legacy: DRAFT→PUBLISH, PUBLISHED→UNPUBLISH, ARCHIVED→400. No produce HIDDEN. Marcar reemplazado por POST /transition.' })
   toggleVisibility(@Param('id') id: string, @CurrentUser() user: any) {
     return this.productsService.toggleVisibility(id, this.ctx(user));
   }
 
   @Patch(':id/toggle-active')
   @Roles('Super Admin', 'Admin Comercial')
-  @ApiOperation({ summary: 'Alternar estado activo del producto' })
-  toggleActive(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.productsService.toggleActive(id, this.ctx(user));
+  @ApiOperation({ summary: 'Eliminado', deprecated: true, description: 'Obsoleto: devuelve 410 Gone sin modificar el producto. Usa ARCHIVE o RESTORE vía POST /transition o POST /bulk-transition.' })
+  toggleActive(@Param('id') _id: string) {
+    throw new GoneException('toggle-active está obsoleto. Usa la transición canónica ARCHIVE o RESTORE.');
   }
 
   @Patch(':id/publish')
   @Roles('Super Admin', 'Supervisor', 'Admin Comercial')
-  @ApiOperation({ summary: 'Publicar o programar publicación de un producto' })
+  @ApiOperation({ summary: 'Publicar o programar publicación de un producto (obsoleto)', deprecated: true, description: 'Sin publishAt futura: PUBLISH (DRAFT→PUBLISHED). Con publishAt futura: persiste programación sobre DRAFT (el scheduler aplicará PUBLISH). unpublishAt se ignora. Reemplazado por POST /transition.' })
   @ApiResponse({ status: 200, description: 'Producto publicado o programado' })
   @ApiResponse({ status: 400, description: 'Requisitos previos a publicación no cumplidos (detalle)' })
   @ApiResponse({ status: 409, description: 'El producto ya está publicado' })
@@ -129,7 +129,7 @@ export class ProductsController {
 
   @Patch(':id/unpublish')
   @Roles('Super Admin', 'Supervisor', 'Admin Comercial')
-  @ApiOperation({ summary: 'Despublicar un producto (pasa a borrador con razón)' })
+  @ApiOperation({ summary: 'Despublicar un producto (obsoleto)', deprecated: true, description: 'Ejecuta UNPUBLISH (PUBLISHED→DRAFT). Acepta reason opcional para auditoría. Reemplazado por POST /transition.' })
   @ApiResponse({ status: 200, description: 'Producto despublicado' })
   @ApiResponse({ status: 400, description: 'Motivo inválido' })
   unpublish(
@@ -142,7 +142,7 @@ export class ProductsController {
 
   @Post(':id/transition')
   @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
-  @ApiOperation({ summary: 'Transición de ciclo de vida FSM de un producto (PREPARE, SCHEDULE, PUBLISH, HIDE, SHOW, UNPUBLISH, DISCONTINUE, REACTIVATE, ARCHIVE, RESTORE)' })
+  @ApiOperation({ summary: 'Transición canónica de ciclo de vida de un producto (PUBLISH, UNPUBLISH, ARCHIVE, RESTORE)' })
   @ApiResponse({ status: 200, description: 'Transición aplicada. Devuelve el producto con allowedActions.' })
   @ApiResponse({ status: 400, description: 'Transición inválida, motivo/confirm/publishAt faltante o checklist de publicación incumplido.' })
   @ApiResponse({ status: 403, description: 'Sin permisos RBAC o nivel ACL insuficiente.' })

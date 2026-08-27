@@ -48,7 +48,6 @@ export interface SchedulerTickReport {
   skipped: boolean;
   publishOk: number;
   publishFailed: Array<{ id: string; reasons: string }>;
-  unpublishOk: number;
 }
 
 @Injectable()
@@ -180,10 +179,6 @@ export class ProductsService {
   ) {
     const { skip = 0, take = 50, search, categoryId, brandId, isVisible, isActive } = params || {};
 
-    // Lazy unpublish: si algún producto publicado venció su unpublishAt, se despublica
-    // en runtime (evaluación perezosa, sin cron). Ver autoUnpublishDueProducts().
-    await this.autoUnpublishDueProducts();
-
     // ACL por Lista (deny-by-default) cuando se provee contexto de usuario.
     // ctx opcional: los llamadores legacy/tests sin ctx conservan el comportamiento abierto.
     let allowedListaIds: string[] | null = null;
@@ -291,17 +286,6 @@ export class ProductsService {
 
     if (!product) throw new NotFoundException('Producto no encontrado');
 
-    // Lazy unpublish (sin cron): si el producto publicado venció su unpublishAt,
-    // se despublica en runtime antes de devolverlo.
-    if (product.publishStatus === 'publicado' && product.unpublishAt && product.unpublishAt <= new Date()) {
-      await this.autoUnpublishOne(product.id);
-      product.publishStatus = 'borrador';
-      product.lifecycleStatus = 'DRAFT';
-      product.unpublishReason = 'auto';
-      product.publishAt = null;
-      product.publishedAt = null;
-    }
-
     // Deny-by-default con restricción explícita por producto (checklist 17/31):
     // assertProductAccess evalúa assignments PRODUCT (deny prevalece) y cae a la
     // Lista dueña si no hay excepción por producto.
@@ -353,12 +337,11 @@ export class ProductsService {
         extraAttributes: dto.extraAttributes,
         ...(dto.documents !== undefined && { documents: dto.documents }),
         lifecycleStatus: 'DRAFT',
-        // DRAFT nace activo (FSM Etapa 2); publish exige isActive=true. El DTO puede sobreescribir.
-        isActive: dto.isActive ?? true,
-        isVisible: dto.isVisible ?? lista.defaultVisibility,
-        ...(dto.publishStatus !== undefined && { publishStatus: dto.publishStatus }),
-        ...(dto.publishAt !== undefined && { publishAt: dto.publishAt ? new Date(dto.publishAt) : null }),
-        ...(dto.unpublishAt !== undefined && { unpublishAt: dto.unpublishAt ? new Date(dto.unpublishAt) : null }),
+        // Un producto nuevo SIEMPRE nace en DRAFT (isActive=false, isVisible=false).
+        // Los campos legacy isActive/isVisible/publishStatus/publishAt/unpublishAt se
+        // ignoran/normalizan para conservar el estado inicial canónico (no generan legacy).
+        isActive: false,
+        isVisible: false,
       },
       include: {
         category: { select: { id: true, name: true } },
@@ -442,97 +425,24 @@ export class ProductsService {
     return updated;
   }
 
+  /**
+   * Adaptador legacy: alterna visibilidad traduciendo al contrato canónico.
+   * DRAFT → PUBLISH; PUBLISHED → UNPUBLISH; ARCHIVED → 400.
+   */
   async toggleVisibility(id: string, ctx?: AccessContext) {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
 
     const status = this.effectiveLifecycleStatus(product);
-    if (status === 'PUBLISHED') {
-      return this.transition(id, { event: 'HIDE' }, ctx);
+    if (status === 'DRAFT') {
+      return this.transition(id, { event: 'PUBLISH' }, ctx);
     }
-    if (status === 'HIDDEN') {
-      return this.transition(id, { event: 'SHOW' }, ctx);
+    if (status === 'PUBLISHED') {
+      return this.transition(id, { event: 'UNPUBLISH' }, ctx);
     }
     throw new BadRequestException(
       `No se puede alternar la visibilidad en estado ${status}`,
     );
-  }
-
-  async toggleActive(id: string, ctx?: AccessContext) {
-    const product = await this.prisma.product.findUnique({ where: { id } });
-    if (!product) throw new NotFoundException('Producto no encontrado');
-
-    // Legacy sin motivo: el FSM exige reason en DISCONTINUE; se propaga un
-    // motivo por defecto para conservar la firma del endpoint histórico.
-    if (product.isActive) {
-      return this.transition(id, { event: 'DISCONTINUE', reason: 'Desactivado manualmente' }, ctx);
-    }
-    return this.transition(id, { event: 'REACTIVATE' }, ctx);
-  }
-
-  /**
-   * Lazy unpublish (decisión documentada, sin cron):
-   * al leer productos (findOne/findAll) o al consultar publish-scheduled se evalúa
-   * en runtime si `unpublishAt <= now && publishStatus == 'publicado'`. Si aplica,
-   * el producto pasa a 'borrador' con unpublishReason 'auto'. Así la auto-despublicación
-   * se resuelve en la primera lectura posterior a la fecha límite.
-   */
-  private async autoUnpublishOne(id: string): Promise<void> {
-    await this.prisma.product.update({
-      where: { id },
-      data: {
-        lifecycleStatus: 'DRAFT',
-        publishStatus: 'borrador',
-        unpublishReason: 'auto',
-        publishAt: null,
-        publishedAt: null,
-      },
-    });
-    await this.audit.log({
-      action: 'unpublish',
-      entity: 'Product',
-      entityId: id,
-      oldValues: { lifecycleStatus: 'PUBLISHED', publishStatus: 'publicado', unpublishReason: null },
-      newValues: { lifecycleStatus: 'DRAFT', publishStatus: 'borrador', unpublishReason: 'auto' },
-    });
-  }
-
-  /**
-   * Lazy unpublish en lote: procesa todos los productos publicados cuya
-   * fecha de auto-despublicación ya venció (evaluación perezosa, sin cron).
-   */
-  private async autoUnpublishDueProducts(where: Prisma.ProductWhereInput = {}): Promise<void> {
-    const due = (await this.prisma.product.findMany({
-      where: {
-        ...where,
-        publishStatus: 'publicado',
-        unpublishAt: { lte: new Date() },
-      },
-      select: { id: true },
-    })) ?? [];
-
-    if (due.length === 0) return;
-
-    await this.prisma.product.updateMany({
-      where: { id: { in: due.map((d) => d.id) } },
-      data: {
-        lifecycleStatus: 'DRAFT',
-        publishStatus: 'borrador',
-        unpublishReason: 'auto',
-        publishAt: null,
-        publishedAt: null,
-      },
-    });
-
-    for (const d of due) {
-      await this.audit.log({
-        action: 'unpublish',
-        entity: 'Product',
-        entityId: d.id,
-        oldValues: { publishStatus: 'publicado', unpublishReason: null },
-        newValues: { publishStatus: 'borrador', unpublishReason: 'auto' },
-      });
-    }
   }
 
   /**
@@ -560,11 +470,6 @@ export class ProductsService {
     }
     if (!lista || !lista.isActive || lista.archivedAt) {
       failures.push('La lista destino no está activa o está archivada');
-    }
-
-    // (b) Producto activo.
-    if (!product.isActive) {
-      failures.push('El producto no está activo');
     }
 
     // (c) Al menos 1 precio vigente en la Lista.
@@ -615,35 +520,54 @@ export class ProductsService {
   }
 
   /**
-   * Publica o programa publicación de un producto (endpoint legacy delegado a la FSM).
-   *  - publishAt futuro → evento SCHEDULE (audit 'schedule_publish').
-   *  - sin publishAt → evento PUBLISH (audit 'publish').
-   * Si el producto ya está publicado/oculto → 409.
+   * Adaptador legacy de publicación/programación (obsoleto, se conserva transitoriamente):
+   * - Si `publishAt` es futura: el producto permanece en DRAFT y solo se persiste `publishAt`
+   *   (el scheduler aplicará PUBLISH al vencer la fecha).
+   * - Si no hay `publishAt` futura: ejecuta la transición canónica PUBLISH (DRAFT → PUBLISHED).
+   * - `unpublishAt` se ignora (no existe auto-despublicación).
    */
   async publish(id: string, dto: PublishProductDto, ctx?: AccessContext) {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
 
-    // Lazy unpublish primero: si venció su auto-despublicación, pasa a 'borrador'.
-    if (product.publishStatus === 'publicado' && product.unpublishAt && product.unpublishAt <= new Date()) {
-      await this.autoUnpublishOne(id);
-      product.publishStatus = 'borrador';
-      product.lifecycleStatus = 'DRAFT';
-      product.unpublishReason = 'auto';
-      product.publishAt = null;
-      product.publishedAt = null;
-    }
-
     const status = this.effectiveLifecycleStatus(product);
-    if (status === 'PUBLISHED' || status === 'HIDDEN') {
+    if (status === 'PUBLISHED') {
       throw new ConflictException('El producto ya está publicado');
     }
+    if (status === 'ARCHIVED') {
+      throw new BadRequestException('No se puede publicar un producto archivado');
+    }
 
-    return this.transition(
-      id,
-      { event: dto.publishAt ? 'SCHEDULE' : 'PUBLISH', publishAt: dto.publishAt, unpublishAt: dto.unpublishAt },
-      ctx,
-    );
+    const publishAt = dto.publishAt ? new Date(dto.publishAt) : null;
+    const isFuturePublish = !!publishAt && publishAt > new Date();
+
+    if (!isFuturePublish) {
+      return this.transition(id, { event: 'PUBLISH' }, ctx);
+    }
+
+    // Programación sobre DRAFT: persiste estado canónico DRAFT completo con publishAt.
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: {
+        lifecycleStatus: 'DRAFT',
+        isActive: false,
+        isVisible: false,
+        publishStatus: 'borrador',
+        publishAt,
+        unpublishAt: null,
+        publishedAt: null,
+        unpublishReason: null,
+      },
+    });
+    await this.audit.log({
+      userId: ctx?.userId,
+      action: 'schedule_publish',
+      entity: 'Product',
+      entityId: id,
+      oldValues: { lifecycleStatus: status, publishAt: product.publishAt ?? null },
+      newValues: { lifecycleStatus: status, publishAt, isActive: false, isVisible: false },
+    });
+    return updated;
   }
 
   /**
@@ -665,29 +589,39 @@ export class ProductsService {
     isVisible?: boolean;
     publishAt?: Date | null;
   }): LifecycleStatus {
-    if (product.lifecycleStatus && LIFECYCLE_STATUSES.includes(product.lifecycleStatus as LifecycleStatus)) {
-      return product.lifecycleStatus as LifecycleStatus;
+    const stored = product.lifecycleStatus;
+    if (stored) {
+      if (LIFECYCLE_STATUSES.includes(stored as LifecycleStatus)) {
+        return stored as LifecycleStatus;
+      }
+      const normalized = this.normalizeLegacyStored(stored);
+      if (normalized) return normalized;
     }
     return this.mapLegacyToLifecycle(product);
   }
 
+  /** Normaliza estados legacy almacenados (sin migración de datos) al canónico. */
+  private normalizeLegacyStored(status: string): LifecycleStatus | null {
+    switch (status.toUpperCase()) {
+      case 'READY':
+      case 'SCHEDULED':
+      case 'HIDDEN':
+        return 'DRAFT';
+      case 'DISCONTINUED':
+        return 'ARCHIVED';
+      default:
+        return null;
+    }
+  }
+
   private mapLegacyToLifecycle(product: {
     publishStatus?: string | null;
-    isVisible?: boolean;
     publishAt?: Date | null;
   }): LifecycleStatus {
     const ps = product.publishStatus;
-    if (ps === 'publicado') {
-      return product.isVisible === false ? 'HIDDEN' : 'PUBLISHED';
-    }
-    if (ps === 'listo') {
-      return product.publishAt ? 'SCHEDULED' : 'READY';
-    }
-    if (ps === 'archivado') {
-      return 'ARCHIVED';
-    }
-    // 'borrador' (o ausente) → DRAFT, aunque isActive sea false (un borrador
-    // puede estar inactivo; el discriminador real es publishStatus).
+    if (ps === 'archivado') return 'ARCHIVED';
+    if (ps === 'publicado') return 'PUBLISHED';
+    // 'listo' (READY/SCHEDULED) y 'borrador' → DRAFT.
     return 'DRAFT';
   }
 
@@ -727,16 +661,11 @@ export class ProductsService {
 
   /**
    * Dual-write: calcula los campos legacy que espejan el estado destino de la FSM.
-   * Mapa espejo (contrato fijado):
-   *  DRAFT → isActive=true, publishStatus='borrador'
-   *  READY → isActive=true, publishStatus='listo', publishAt=null
-   *  SCHEDULED → isActive=true, publishStatus='listo', publishAt=fecha
-   *  PUBLISHED → isActive=true, isVisible=true, publishStatus='publicado', publishedAt=now
-   *  HIDDEN → isVisible=false, publishStatus='publicado'
-   *  DISCONTINUED → isActive=false, publishStatus conservado
-   *  ARCHIVED → isActive=false, isVisible=false, publishStatus='archivado'
-   * REACTIVATE (P1): si legacy publishStatus === 'publicado' → PUBLISHED SIN tocar
-   * publishedAt existente; si no → DRAFT.
+   * Mapa espejo (contrato fijado para los 3 estados canónicos):
+   *  PUBLISH → isActive=true, isVisible=true, publishStatus='publicado', publishedAt=now
+   *  UNPUBLISH → isActive=false, isVisible=false, publishStatus='borrador'
+   *  ARCHIVE → isActive=false, isVisible=false, publishStatus='archivado'
+   *  RESTORE → isActive=false, isVisible=false, publishStatus='borrador'
    */
   private buildTransitionData(
     event: LifecycleEvent,
@@ -745,108 +674,32 @@ export class ProductsService {
     ctx?: AccessContext,
   ): Prisma.ProductUncheckedUpdateInput {
     const now = new Date();
-    const unpublishAt = dto.unpublishAt ? new Date(dto.unpublishAt) : null;
-    const publishedAt = product.publishedAt ?? now;
 
     switch (event) {
-      case 'PREPARE': // DRAFT → READY
-        return {
-          lifecycleStatus: 'READY',
-          isActive: true,
-          publishStatus: 'listo',
-          publishAt: null,
-        };
-      case 'SCHEDULE': // DRAFT/READY → SCHEDULED
-        return {
-          lifecycleStatus: 'SCHEDULED',
-          isActive: true,
-          publishStatus: 'listo',
-          publishAt: new Date(dto.publishAt as string),
-          unpublishAt,
-          publishedAt: null,
-          publishedById: ctx?.userId ?? null,
-        };
-      case 'CANCEL_SCHEDULE': // SCHEDULED → DRAFT
-        return {
-          lifecycleStatus: 'DRAFT',
-          isActive: true,
-          publishStatus: 'borrador',
-          publishAt: null,
-        };
-      case 'PUBLISH': // DRAFT/READY/SCHEDULED → PUBLISHED
+      case 'PUBLISH': // DRAFT → PUBLISHED
         return {
           lifecycleStatus: 'PUBLISHED',
           isActive: true,
           isVisible: true,
           publishStatus: 'publicado',
-          publishedAt,
-          publishAt: null,
-          unpublishAt,
-          unpublishReason: null,
-          publishedById: ctx?.userId ?? null,
-        };
-      case 'SCHEDULED_PUBLISH': // SCHEDULED → PUBLISHED (scheduler interno)
-        return {
-          lifecycleStatus: 'PUBLISHED',
-          isActive: true,
-          isVisible: true,
-          publishStatus: 'publicado',
-          publishedAt: now,
+          publishedAt: product.publishedAt ?? now,
           publishAt: null,
           unpublishAt: null,
           unpublishReason: null,
-          publishedById: null,
+          publishedById: ctx?.userId ?? null,
         };
-      case 'HIDE': // PUBLISHED → HIDDEN
-        return {
-          lifecycleStatus: 'HIDDEN',
-          isVisible: false,
-          publishStatus: 'publicado',
-        };
-      case 'SHOW': // HIDDEN → PUBLISHED
-        return {
-          lifecycleStatus: 'PUBLISHED',
-          isActive: true,
-          isVisible: true,
-          publishStatus: 'publicado',
-          publishedAt: publishedAt,
-        };
-      case 'UNPUBLISH': // → DRAFT (reason obligatoria)
+      case 'UNPUBLISH': // PUBLISHED → DRAFT (elimina programación futura; reason como auditoría)
         return {
           lifecycleStatus: 'DRAFT',
-          isActive: true,
-          publishStatus: 'borrador',
-          publishAt: null,
-          publishedAt: null,
-          unpublishAt: null,
-          unpublishReason: dto.reason as string,
-        };
-      case 'DISCONTINUE': // → DISCONTINUED (reason obligatoria, publishStatus conservado)
-        return {
-          lifecycleStatus: 'DISCONTINUED',
           isActive: false,
-          publishStatus: product.publishStatus ?? 'borrador',
-          unpublishReason: dto.reason as string,
-        };
-      case 'REACTIVATE': // P1: PUBLISHED si venía publicado, si no DRAFT
-        if (product.publishStatus === 'publicado') {
-          return {
-            lifecycleStatus: 'PUBLISHED',
-            isActive: true,
-            isVisible: true,
-            publishStatus: 'publicado',
-            // SIN tocar publishedAt existente (P1).
-          };
-        }
-        return {
-          lifecycleStatus: 'DRAFT',
-          isActive: true,
+          isVisible: false,
           publishStatus: 'borrador',
           publishAt: null,
           publishedAt: null,
           unpublishAt: null,
+          unpublishReason: dto.reason?.trim() ? dto.reason : null,
         };
-      case 'ARCHIVE': // → ARCHIVED (reason + confirm obligatorias)
+      case 'ARCHIVE': // DRAFT|PUBLISHED → ARCHIVED (elimina publishAt; motivo+confirm obligatorios)
         return {
           lifecycleStatus: 'ARCHIVED',
           isActive: false,
@@ -855,17 +708,18 @@ export class ProductsService {
           publishAt: null,
           publishedAt: null,
           unpublishAt: null,
-          unpublishReason: dto.reason as string,
+          unpublishReason: dto.reason?.trim() ? dto.reason : null,
         };
-      case 'RESTORE': // ARCHIVED → DRAFT (reason + confirm obligatorias)
+      case 'RESTORE': // ARCHIVED → DRAFT (nunca publica automáticamente)
         return {
           lifecycleStatus: 'DRAFT',
-          isActive: true,
+          isActive: false,
+          isVisible: false,
           publishStatus: 'borrador',
           publishAt: null,
           publishedAt: null,
           unpublishAt: null,
-          unpublishReason: dto.reason as string,
+          unpublishReason: dto.reason?.trim() ? dto.reason : null,
         };
       default:
         throw new BadRequestException(`Evento FSM sin datos de espejo: ${event}`);
@@ -898,7 +752,6 @@ export class ProductsService {
 
     for (const [event, rule] of Object.entries(TRANSITION_RULES)) {
       if (!rule) continue;
-      if (rule.guard.internalOnly) continue; // SCHEDULED_PUBLISH es del scheduler
       if (!rule.from.includes(status)) continue;
       if (!rule.guard.roles.some((r) => ctx.roles.includes(r))) continue;
       if (!(await this.hasAclLevel(product.id, ctx, rule.guard.aclLevel))) continue;
@@ -911,50 +764,41 @@ export class ProductsService {
   /**
    * Ejecuta un evento de la FSM sobre un producto. Fuente única de verdad para
    * el ciclo de vida. Guardas en orden: RBAC → ACL → reason/confirm/publishAt →
-   * transición válida → checklist (PUBLISH/SCHEDULE) → dual-write + auditoría.
+   * transición válida → checklist (PUBLISH) → dual-write + auditoría.
    */
   async transition(id: string, dto: TransitionProductDto, ctx?: AccessContext) {
     return this.doTransition(id, dto, ctx, false);
   }
 
   /**
-   * Punto de entrada del scheduler interno (próxima tanda): ejecuta
-   * SCHEDULED_PUBLISH re-validando el checklist. NO es invocable por API.
-   */
-  async applyScheduledPublish(id: string, ctx?: AccessContext) {
-    return this.doTransition(id, { event: 'SCHEDULED_PUBLISH' }, ctx, true);
-  }
-
-  /**
    * Scheduler P6 — tick del cron cada minuto.
-   *  1) SCHEDULED_PUBLISH: productos SCHEDULED con publishAt <= now.
-   *  2) Auto-despublicación: productos PUBLISHED con unpublishAt <= now.
+   * Publica los productos en DRAFT cuyo publishAt ya venció, aplicando
+   * internamente la transición canónica PUBLISH (re-valida el checklist).
    * Idempotencia: la query candidata es condicional (lifecycleStatus + fecha) y
-   * cada transición re-chequea el estado actual (doTransition → findUnique +
-   * rule.from) antes de escribir, así un producto ya procesado por otro tick no
-   * se vuelve a tocar. El lock en memoria descarta ticks solapados.
+   * cada transición re-chequea el estado actual antes de escribir (doTransition →
+   * rule.from). El lock en memoria descarta ticks solapados. NO existe
+   * auto-despublicación (unpublishAt se conserva como columna sin uso).
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async handleLifecycleTick(): Promise<SchedulerTickReport> {
     const runAt = new Date();
     if (this.lifecycleTickRunning) {
       this.logger.warn('[scheduler] tick anterior aún en curso; se descarta este tick');
-      return { runAt, skipped: true, publishOk: 0, publishFailed: [], unpublishOk: 0 };
+      return { runAt, skipped: true, publishOk: 0, publishFailed: [] };
     }
     this.lifecycleTickRunning = true;
     try {
       const publishes = await this.processScheduledPublishes();
-      const unpublishes = await this.processAutoUnpublishes();
-      return { runAt, skipped: false, ...publishes, ...unpublishes };
+      return { runAt, skipped: false, ...publishes };
     } finally {
       this.lifecycleTickRunning = false;
     }
   }
 
   /**
-   * Publica (SCHEDULED → PUBLISHED) los productos programados con publishAt
-   * vencido. `applyScheduledPublish` re-valida el checklist: si falla, NO cambia
-   * estado y se registra `logger.warn` con los motivos + se cuenta en el reporte.
+   * Publica los productos programados (DRAFT con publishAt vencido) aplicando
+   * la transición canónica PUBLISH. `doTransition` re-valida el checklist: si
+   * falla, NO cambia estado y se cuenta en el reporte con los motivos.
    */
   async processScheduledPublishes(): Promise<{
     publishOk: number;
@@ -962,7 +806,7 @@ export class ProductsService {
   }> {
     const now = new Date();
     const due = (await this.prisma.product.findMany({
-      where: { lifecycleStatus: 'SCHEDULED', publishAt: { lte: now } },
+      where: { lifecycleStatus: 'DRAFT', publishAt: { lte: now } },
       select: { id: true, sku: true, name: true },
     })) ?? [];
 
@@ -971,13 +815,13 @@ export class ProductsService {
 
     for (const product of due) {
       try {
-        await this.applyScheduledPublish(product.id);
+        await this.doTransition(product.id, { event: 'PUBLISH' }, undefined, true);
         publishOk += 1;
       } catch (error) {
         const reasons = error instanceof Error ? error.message : 'Error interno';
         publishFailed.push({ id: product.id, reasons });
         this.logger.warn(
-          `[scheduler] auto-publicación diferida de "${product.name}" (${product.sku}): ${reasons}`,
+          `[scheduler] publicación programada de "${product.name}" (${product.sku}): ${reasons}`,
         );
       }
     }
@@ -985,38 +829,11 @@ export class ProductsService {
     return { publishOk, publishFailed };
   }
 
-  /**
-   * Despublica (PUBLISHED → DRAFT) los productos cuyo unpublishAt ya venció,
-   * con reason 'auto' y audit 'unpublish'. Es el homólogo proactivo del lazy
-   * read-repair `autoUnpublishDueProducts` (que SE MANTIENE como fallback).
-   */
-  async processAutoUnpublishes(): Promise<{ unpublishOk: number }> {
-    const now = new Date();
-    const due = (await this.prisma.product.findMany({
-      where: { lifecycleStatus: 'PUBLISHED', unpublishAt: { lte: now } },
-      select: { id: true, sku: true, name: true },
-    })) ?? [];
-
-    let unpublishOk = 0;
-    for (const product of due) {
-      try {
-        await this.doTransition(product.id, { event: 'UNPUBLISH', reason: 'auto' }, undefined, true);
-        unpublishOk += 1;
-      } catch (error) {
-        this.logger.warn(
-          `[scheduler] auto-despublicación fallida de "${product.name}" (${product.sku}): ${error instanceof Error ? error.message : 'Error interno'}`,
-        );
-      }
-    }
-
-    return { unpublishOk };
-  }
-
   private async doTransition(
     id: string,
     dto: TransitionProductDto,
     ctx?: AccessContext,
-    internal = false,
+    skipHumanAccessChecks = false,
   ) {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
@@ -1025,64 +842,41 @@ export class ProductsService {
     const rule = TRANSITION_RULES[event];
 
     if (!rule) {
-      if (event === 'CREATE') {
-        throw new BadRequestException('El evento CREATE se aplica al crear el producto');
-      }
-      if (event === 'DELETE') {
-        throw new BadRequestException('El evento DELETE se implementa en la siguiente tanda');
-      }
       throw new BadRequestException(`Evento FSM inválido: ${event}`);
     }
 
     const status = this.effectiveLifecycleStatus(product);
 
-    // Evento interno del scheduler: rechazado por API pública.
-    if (rule.guard.internalOnly && !internal) {
-      throw new BadRequestException('El evento SCHEDULED_PUBLISH es interno del scheduler');
-    }
-
     // Guarda RBAC (roles con el permiso del evento).
-    if (ctx && !rule.guard.roles.some((r) => ctx.roles.includes(r))) {
+    // Se omite cuando el scheduler o proceso interno invoca la transición
+    // sin contexto de usuario humano (skipHumanAccessChecks=true).
+    if (!skipHumanAccessChecks && ctx && !rule.guard.roles.some((r) => ctx.roles.includes(r))) {
       throw new ForbiddenException(`No tienes permisos para ejecutar el evento ${event}`);
     }
 
-    // Guarda ACL (nivel sobre el producto/Lista). Sch on skip si listaId null.
-    if (ctx && product.listaId && !rule.guard.internalOnly) {
+    // Guarda ACL (nivel sobre el producto/Lista). Skip si listaId null.
+    // Se omite cuando skipHumanAccessChecks=true (ruta interna del scheduler).
+    if (!skipHumanAccessChecks && ctx && product.listaId) {
       await this.acl.assertProductAccess(id, ctx, rule.guard.aclLevel);
     }
 
-    // Guardas de datos: reason / confirm / publishAt.
+    // Guardas de datos: reason / confirm.
     if (rule.guard.reasonRequired && !dto.reason?.trim()) {
       throw new BadRequestException(`El evento ${event} requiere un motivo (reason)`);
     }
     if (rule.guard.confirmRequired && dto.confirm !== true) {
       throw new BadRequestException(`El evento ${event} requiere confirmación (confirm: true)`);
     }
-    if (rule.guard.publishAtRequired) {
-      if (!dto.publishAt) {
-        throw new BadRequestException(`El evento ${event} requiere publishAt`);
-      }
-      const publishAt = new Date(dto.publishAt);
-      if (isNaN(publishAt.getTime())) {
-        throw new BadRequestException('publishAt no es una fecha válida');
-      }
-      if (publishAt <= new Date()) {
-        throw new BadRequestException('publishAt debe ser una fecha futura');
-      }
-    }
 
     // Transición válida según estado actual.
     if (!rule.from.includes(status)) {
-      const target = event === 'REACTIVATE'
-        ? (product.publishStatus === 'publicado' ? 'PUBLISHED' : 'DRAFT')
-        : rule.to;
       throw new BadRequestException(
-        `No se puede pasar de ${status} a ${target} con el evento ${event}`,
+        `No se puede pasar de ${status} a ${rule.to} con el evento ${event}`,
       );
     }
 
-    // Checklist de publicación (P5): PUBLISH y SCHEDULE validan requisitos.
-    if (event === 'PUBLISH' || event === 'SCHEDULE' || event === 'SCHEDULED_PUBLISH') {
+    // Checklist de publicación (P5): solo PUBLISH valida requisitos comerciales.
+    if (event === 'PUBLISH') {
       const failures = await this.validatePublishRequirements(product);
       if (failures.length > 0) {
         const detail = failures.map((f, i) => `${i + 1}) ${f}`).join('; ');
@@ -1138,15 +932,13 @@ export class ProductsService {
    * [from, to]. Si no vienen from/to, usa [now, now+7 días]. También aplica lazy unpublish.
    */
   async findPublishScheduled(from?: string, to?: string) {
-    await this.autoUnpublishDueProducts();
-
     const now = new Date();
     const fromDate = from ? new Date(from) : now;
     const toDate = to ? new Date(to) : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     const products = (await this.prisma.product.findMany({
       where: {
-        publishStatus: 'listo',
+        lifecycleStatus: 'DRAFT',
         publishAt: { gte: fromDate, lte: toDate },
       },
       select: {
@@ -1154,7 +946,6 @@ export class ProductsService {
         sku: true,
         name: true,
         publishAt: true,
-        unpublishAt: true,
         lista: { select: { id: true, name: true, code: true } },
       },
       orderBy: { publishAt: 'asc' },
@@ -1612,7 +1403,8 @@ export class ProductsService {
              categoryId,
              brandId,
              listaId: defaultListaId,
-             isActive: true,
+             lifecycleStatus: 'DRAFT',
+             isActive: false,
              isVisible: false,
            },
          });

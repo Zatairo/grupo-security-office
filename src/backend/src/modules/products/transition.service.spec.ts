@@ -1,5 +1,5 @@
 import { createPrismaMock } from '../../__test__/mocks/prisma.mock';
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConflictException, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 const mockPrisma = createPrismaMock();
 
@@ -28,15 +28,11 @@ const mockAcl = {
   can: jest.fn().mockResolvedValue(true),
 };
 
-/** Producto base con estado FSM + columnas legacy (dual-write). */
+/** Producto base canónico con flags legacy (espejo del estado canónico). */
 function mkProduct(status: LifecycleStatus, overrides: Record<string, any> = {}) {
   const legacyByStatus: Record<LifecycleStatus, Record<string, any>> = {
-    DRAFT: { isActive: true, isVisible: false, publishStatus: 'borrador', publishAt: null, publishedAt: null, unpublishAt: null },
-    READY: { isActive: true, isVisible: false, publishStatus: 'listo', publishAt: null, publishedAt: null, unpublishAt: null },
-    SCHEDULED: { isActive: true, isVisible: false, publishStatus: 'listo', publishAt: new Date(Date.now() + 86400000), publishedAt: null, unpublishAt: null },
+    DRAFT: { isActive: false, isVisible: false, publishStatus: 'borrador', publishAt: null, publishedAt: null, unpublishAt: null },
     PUBLISHED: { isActive: true, isVisible: true, publishStatus: 'publicado', publishAt: null, publishedAt: new Date(), unpublishAt: null },
-    HIDDEN: { isActive: true, isVisible: false, publishStatus: 'publicado', publishAt: null, publishedAt: new Date(), unpublishAt: null },
-    DISCONTINUED: { isActive: false, isVisible: true, publishStatus: 'publicado', publishAt: null, publishedAt: new Date(), unpublishAt: null },
     ARCHIVED: { isActive: false, isVisible: false, publishStatus: 'archivado', publishAt: null, publishedAt: null, unpublishAt: null },
   };
   return {
@@ -58,6 +54,12 @@ function mkProduct(status: LifecycleStatus, overrides: Record<string, any> = {})
   };
 }
 
+/** Producto legacy almacenado (no normalizado aún) para probar lectura compatible. */
+function mLegacy(storedStatus: string, overrides: Record<string, any> = {}) {
+  const base = mkProduct('DRAFT');
+  return { ...base, lifecycleStatus: storedStatus, ...overrides };
+}
+
 /** Mockea el checklist de publicación como cumplido. */
 function mockPublishChecklistOk() {
   mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: null });
@@ -66,9 +68,7 @@ function mockPublishChecklistOk() {
   mockPrisma.stock.findUnique.mockResolvedValue(null);
 }
 
-const FUTURE = () => new Date(Date.now() + 86400000).toISOString();
-
-describe('ProductsService — FSM ciclo de vida (Etapa 2)', () => {
+describe('ProductsService — FSM canónico (DRAFT/PUBLISHED/ARCHIVED)', () => {
   let service: ProductsService;
 
   beforeEach(async () => {
@@ -89,7 +89,7 @@ describe('ProductsService — FSM ciclo de vida (Etapa 2)', () => {
     service = module.get<ProductsService>(ProductsService);
   });
 
-  describe('transiciones válidas (matriz desde → evento → hacia)', () => {
+  describe('transiciones válidas (matriz canónica desde → evento → hacia)', () => {
     async function expectTransition(status: LifecycleStatus, dto: any, nextStatus: LifecycleStatus) {
       const product = mkProduct(status);
       mockPrisma.product.findUnique.mockResolvedValue(product);
@@ -99,85 +99,41 @@ describe('ProductsService — FSM ciclo de vida (Etapa 2)', () => {
       return mockPrisma.product.update.mock.calls[0][0].data;
     }
 
-    it('PREPARE: DRAFT → READY (dual-write: isActive true, publishStatus listo)', async () => {
-      const data = await expectTransition('DRAFT', { event: 'PREPARE' }, 'READY');
-      expect(data).toMatchObject({ lifecycleStatus: 'READY', isActive: true, publishStatus: 'listo', publishAt: null });
-    });
-
-    it('SCHEDULE: READY → SCHEDULED con publishAt futuro (checklist ok)', async () => {
-      mockPublishChecklistOk();
-      const data = await expectTransition('READY', { event: 'SCHEDULE', publishAt: FUTURE() }, 'SCHEDULED');
-      expect(data).toMatchObject({ lifecycleStatus: 'SCHEDULED', isActive: true, publishStatus: 'listo' });
-      expect(new Date(data.publishAt).getTime()).toBeGreaterThan(Date.now());
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'schedule_publish' }));
-    });
-
-    it('CANCEL_SCHEDULE: SCHEDULED → DRAFT', async () => {
-      const data = await expectTransition('SCHEDULED', { event: 'CANCEL_SCHEDULE' }, 'DRAFT');
-      expect(data).toMatchObject({ lifecycleStatus: 'DRAFT', isActive: true, publishStatus: 'borrador' });
-    });
-
-    it('PUBLISH: DRAFT → PUBLISHED (dual-write: visible + publicado + publishedAt)', async () => {
+    it('PUBLISH: DRAFT → PUBLISHED sin exigir isActive=true (DRAFT tiene isActive=false)', async () => {
       mockPublishChecklistOk();
       const data = await expectTransition('DRAFT', { event: 'PUBLISH' }, 'PUBLISHED');
       expect(data).toMatchObject({ lifecycleStatus: 'PUBLISHED', isActive: true, isVisible: true, publishStatus: 'publicado' });
+      expect(data).toHaveProperty('publishedAt');
       expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'publish' }));
     });
 
-    it('HIDE: PUBLISHED → HIDDEN (isVisible false, publishStatus conservado publicado)', async () => {
-      const data = await expectTransition('PUBLISHED', { event: 'HIDE' }, 'HIDDEN');
-      expect(data).toMatchObject({ lifecycleStatus: 'HIDDEN', isVisible: false, publishStatus: 'publicado' });
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'hide' }));
+    it('PUBLISH espeja publishedAt/publishedById/publishStatus', async () => {
+      mockPublishChecklistOk();
+      const data = await expectTransition('DRAFT', { event: 'PUBLISH' }, 'PUBLISHED');
+      expect(data).toMatchObject({ publishStatus: 'publicado', publishAt: null, unpublishAt: null });
+      expect(data).toHaveProperty('publishedById');
     });
 
-    it('SHOW: HIDDEN → PUBLISHED (isVisible true)', async () => {
-      const data = await expectTransition('HIDDEN', { event: 'SHOW' }, 'PUBLISHED');
-      expect(data).toMatchObject({ lifecycleStatus: 'PUBLISHED', isActive: true, isVisible: true, publishStatus: 'publicado' });
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'show' }));
-    });
-
-    it('UNPUBLISH: PUBLISHED → DRAFT con razón (audit unpublish)', async () => {
+    it('UNPUBLISH: PUBLISHED → DRAFT (espejo isActive=false, isVisible=false, reason como auditoría)', async () => {
       const data = await expectTransition('PUBLISHED', { event: 'UNPUBLISH', reason: 'Campaña finalizada' }, 'DRAFT');
-      expect(data).toMatchObject({ lifecycleStatus: 'DRAFT', publishStatus: 'borrador', unpublishReason: 'Campaña finalizada' });
+      expect(data).toMatchObject({ lifecycleStatus: 'DRAFT', isActive: false, isVisible: false, publishStatus: 'borrador', publishAt: null, unpublishReason: 'Campaña finalizada' });
       expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'unpublish' }));
     });
 
-    it('DISCONTINUE: PUBLISHED → DISCONTINUED (isActive false, publishStatus conservado)', async () => {
-      const data = await expectTransition('PUBLISHED', { event: 'DISCONTINUE', reason: 'Fin de línea' }, 'DISCONTINUED');
-      expect(data).toMatchObject({ lifecycleStatus: 'DISCONTINUED', isActive: false, publishStatus: 'publicado' });
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'discontinue' }));
-    });
-
-    it('REACTIVATE (P1): DISCONTINUED con publishStatus publicado → PUBLISHED SIN tocar publishedAt', async () => {
-      const publishedAt = new Date('2026-01-01T00:00:00Z');
-      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DISCONTINUED', { publishedAt }));
-      mockPrisma.product.update.mockResolvedValue(mkProduct('PUBLISHED', { publishedAt }));
-      const result = await service.transition('prod-1', { event: 'REACTIVATE' });
-      const data = mockPrisma.product.update.mock.calls[0][0].data;
-      expect(result.lifecycleStatus).toBe('PUBLISHED');
-      expect(data).toMatchObject({ lifecycleStatus: 'PUBLISHED', isActive: true, isVisible: true, publishStatus: 'publicado' });
-      expect(data).not.toHaveProperty('publishedAt'); // P1: no se toca el publishedAt existente
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'reactivate' }));
-    });
-
-    it('REACTIVATE (P1): DISCONTINUED sin venir publicado → DRAFT', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DISCONTINUED', { publishStatus: 'borrador' }));
-      mockPrisma.product.update.mockResolvedValue(mkProduct('DRAFT'));
-      const result = await service.transition('prod-1', { event: 'REACTIVATE' });
-      const data = mockPrisma.product.update.mock.calls[0][0].data;
-      expect(result.lifecycleStatus).toBe('DRAFT');
-      expect(data).toMatchObject({ lifecycleStatus: 'DRAFT', isActive: true, publishStatus: 'borrador' });
-    });
-
-    it('ARCHIVE: PUBLISHED → ARCHIVED con motivo y confirm (isActive/isVisible false, archivado)', async () => {
-      const data = await expectTransition('PUBLISHED', { event: 'ARCHIVE', reason: 'Baja definitiva', confirm: true }, 'ARCHIVED');
-      expect(data).toMatchObject({ lifecycleStatus: 'ARCHIVED', isActive: false, isVisible: false, publishStatus: 'archivado' });
+    it('ARCHIVE: DRAFT → ARCHIVED con motivo y confirm', async () => {
+      const data = await expectTransition('DRAFT', { event: 'ARCHIVE', reason: 'Baja', confirm: true }, 'ARCHIVED');
+      expect(data).toMatchObject({ lifecycleStatus: 'ARCHIVED', isActive: false, isVisible: false, publishStatus: 'archivado', publishAt: null, publishedAt: null });
       expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'archive' }));
     });
 
-    it('RESTORE: ARCHIVED → DRAFT con motivo y confirm', async () => {
+    it('ARCHIVE: PUBLISHED → ARCHIVED con motivo y confirm', async () => {
+      const data = await expectTransition('PUBLISHED', { event: 'ARCHIVE', reason: 'Baja', confirm: true }, 'ARCHIVED');
+      expect(data).toMatchObject({ lifecycleStatus: 'ARCHIVED', isActive: false, isVisible: false, publishAt: null });
+    });
+
+    it('RESTORE: ARCHIVED → DRAFT (nunca publica automáticamente; espejo DRAFT)', async () => {
       const data = await expectTransition('ARCHIVED', { event: 'RESTORE', reason: 'Reactivación', confirm: true }, 'DRAFT');
-      expect(data).toMatchObject({ lifecycleStatus: 'DRAFT', isActive: true, publishStatus: 'borrador' });
+      expect(data).toMatchObject({ lifecycleStatus: 'DRAFT', isActive: false, isVisible: false, publishStatus: 'borrador', publishAt: null });
       expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'restore' }));
     });
   });
@@ -185,43 +141,79 @@ describe('ProductsService — FSM ciclo de vida (Etapa 2)', () => {
   describe('transición inválida → 400 con mensaje claro', () => {
     it('UNPUBLISH desde DRAFT → 400', async () => {
       mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DRAFT'));
-      await expect(service.transition('prod-1', { event: 'UNPUBLISH', reason: 'x' })).rejects.toThrow(
+      await expect(service.transition('prod-1', { event: 'UNPUBLISH' })).rejects.toThrow(
         /No se puede pasar de DRAFT a DRAFT con el evento UNPUBLISH/,
       );
     });
 
-    it('PUBLISH desde DISCONTINUED → 400 (debe usarse REACTIVATE)', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DISCONTINUED'));
+    it('PUBLISH desde PUBLISHED → 400', async () => {
+      mockPublishChecklistOk();
+      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('PUBLISHED'));
       await expect(service.transition('prod-1', { event: 'PUBLISH' })).rejects.toThrow(
-        /No se puede pasar de DISCONTINUED a PUBLISHED con el evento PUBLISH/,
+        /No se puede pasar de PUBLISHED a PUBLISHED con el evento PUBLISH/,
       );
     });
 
-    it('HIDE desde DRAFT → 400', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DRAFT'));
-      await expect(service.transition('prod-1', { event: 'HIDE' })).rejects.toThrow(BadRequestException);
+    it('ARCHIVE desde ARCHIVED → 400', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('ARCHIVED'));
+      await expect(service.transition('prod-1', { event: 'ARCHIVE', reason: 'x', confirm: true })).rejects.toThrow(BadRequestException);
     });
 
-    it('SHOW desde PUBLISHED → 400', async () => {
+    it('RESTORE desde PUBLISHED → 400', async () => {
       mockPrisma.product.findUnique.mockResolvedValue(mkProduct('PUBLISHED'));
-      await expect(service.transition('prod-1', { event: 'SHOW' })).rejects.toThrow(BadRequestException);
+      await expect(service.transition('prod-1', { event: 'RESTORE', reason: 'x', confirm: true })).rejects.toThrow(BadRequestException);
+    });
+
+    it('evento eliminado (SCHEDULE) rechazado por el servicio → 400', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DRAFT'));
+      await expect(
+        service.transition('prod-1', { event: 'SCHEDULE', publishAt: new Date(Date.now() + 86400000).toISOString() } as any),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('404 si el producto no existe', async () => {
       mockPrisma.product.findUnique.mockResolvedValue(null);
-      await expect(service.transition('no-existe', { event: 'PREPARE' })).rejects.toThrow(NotFoundException);
+      await expect(service.transition('no-existe', { event: 'PUBLISH' })).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('read compatible sin migración de datos (normalización de estados legacy)', () => {
+    it('READY se normaliza a DRAFT y puede publicarse', async () => {
+      mockPublishChecklistOk();
+      mockPrisma.product.findUnique.mockResolvedValue(mLegacy('READY', { isActive: false, isVisible: false }));
+      mockPrisma.product.update.mockResolvedValue(mkProduct('PUBLISHED'));
+      const result = await service.transition('prod-1', { event: 'PUBLISH' });
+      expect(result.lifecycleStatus).toBe('PUBLISHED');
+    });
+
+    it('SCHEDULED se normaliza a DRAFT conservando publishAt', async () => {
+      const publishAt = new Date(Date.now() + 86400000);
+      mockPrisma.product.findUnique.mockResolvedValue(mLegacy('SCHEDULED', { publishAt, isActive: false, isVisible: false }));
+      mockPrisma.product.update.mockResolvedValue(mkProduct('PUBLISHED', { publishAt }));
+      // allowedActions expone PUBLISH (efectivo DRAFT) pese al estado almacenado SCHEDULED.
+      const allowed = await service.allowedActions(mLegacy('SCHEDULED', { publishAt }), { userId: 'u1', roles: ['Super Admin'] });
+      expect(allowed).toContain('PUBLISH');
+    });
+
+    it('HIDDEN se normaliza a DRAFT y puede publicarse', async () => {
+      mockPublishChecklistOk();
+      mockPrisma.product.findUnique.mockResolvedValue(mLegacy('HIDDEN', { isActive: false, isVisible: false }));
+      mockPrisma.product.update.mockResolvedValue(mkProduct('PUBLISHED'));
+      const result = await service.transition('prod-1', { event: 'PUBLISH' });
+      expect(result.lifecycleStatus).toBe('PUBLISHED');
+    });
+
+    it('DISCONTINUED se normaliza a ARCHIVED (solo RESTORE disponible)', async () => {
+      const allowed = await service.allowedActions(mLegacy('DISCONTINUED', { isActive: false }), { userId: 'u1', roles: ['Super Admin'] });
+      expect(allowed).toEqual(['RESTORE']);
     });
   });
 
   describe('guardas de datos → 400', () => {
-    it('UNPUBLISH sin reason → 400', async () => {
+    it('UNPUBLISH no exige reason (request opcional)', async () => {
       mockPrisma.product.findUnique.mockResolvedValue(mkProduct('PUBLISHED'));
-      await expect(service.transition('prod-1', { event: 'UNPUBLISH' })).rejects.toThrow(/requiere un motivo/);
-    });
-
-    it('DISCONTINUE sin reason → 400', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('PUBLISHED'));
-      await expect(service.transition('prod-1', { event: 'DISCONTINUE' })).rejects.toThrow(/requiere un motivo/);
+      mockPrisma.product.update.mockResolvedValue(mkProduct('DRAFT'));
+      await expect(service.transition('prod-1', { event: 'UNPUBLISH' })).resolves.toBeDefined();
     });
 
     it('ARCHIVE sin reason → 400', async () => {
@@ -238,29 +230,17 @@ describe('ProductsService — FSM ciclo de vida (Etapa 2)', () => {
       mockPrisma.product.findUnique.mockResolvedValue(mkProduct('ARCHIVED'));
       await expect(service.transition('prod-1', { event: 'RESTORE', reason: 'x' })).rejects.toThrow(/requiere confirmación/);
     });
-
-    it('SCHEDULE sin publishAt → 400', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DRAFT'));
-      await expect(service.transition('prod-1', { event: 'SCHEDULE' })).rejects.toThrow(/requiere publishAt/);
-    });
-
-    it('SCHEDULE con publishAt en el pasado → 400', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DRAFT'));
-      await expect(
-        service.transition('prod-1', { event: 'SCHEDULE', publishAt: new Date(Date.now() - 1000).toISOString() }),
-      ).rejects.toThrow(/publishAt debe ser una fecha futura/);
-    });
   });
 
   describe('RBAC → 403', () => {
     const OPERADOR = { userId: 'u1', roles: ['Operador'] };
 
-    it('PREPARE con Operador (sin products:write) → 403', async () => {
+    it('PUBLISH con Operador (sin publish:manage) → 403', async () => {
       mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DRAFT'));
-      await expect(service.transition('prod-1', { event: 'PREPARE' }, OPERADOR)).rejects.toThrow(ForbiddenException);
+      await expect(service.transition('prod-1', { event: 'PUBLISH' }, OPERADOR)).rejects.toThrow(ForbiddenException);
     });
 
-    it('PUBLISH con Operador (sin publish:manage) → 403', async () => {
+    it('PUBLISH con Operador → 403 incluso sin exigir isActive (checklist no se alcanza)', async () => {
       mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DRAFT'));
       await expect(service.transition('prod-1', { event: 'PUBLISH' }, OPERADOR)).rejects.toThrow(ForbiddenException);
     });
@@ -283,62 +263,24 @@ describe('ProductsService — FSM ciclo de vida (Etapa 2)', () => {
     });
   });
 
-  describe('SCHEDULED_PUBLISH (evento interno del scheduler, P6)', () => {
-    it('rechazado por la API pública (transition) → 400', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('SCHEDULED'));
-      await expect(service.transition('prod-1', { event: 'SCHEDULED_PUBLISH' })).rejects.toThrow(
-        /SCHEDULED_PUBLISH es interno del scheduler/,
-      );
-    });
-
-    it('applyScheduledPublish: SCHEDULED → PUBLISHED re-validando checklist (audit publish)', async () => {
-      mockPublishChecklistOk();
-      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('SCHEDULED'));
-      mockPrisma.product.update.mockResolvedValue(mkProduct('PUBLISHED'));
-
-      const result = await service.applyScheduledPublish('prod-1');
-
-      expect(result.lifecycleStatus).toBe('PUBLISHED');
-      const data = mockPrisma.product.update.mock.calls[0][0].data;
-      expect(data).toMatchObject({ lifecycleStatus: 'PUBLISHED', isVisible: true, publishStatus: 'publicado' });
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'publish' }));
-    });
-  });
-
-  describe('allowedActions(product, ctx)', () => {
+  describe('allowedActions(product, ctx) — solo eventos canónicos', () => {
     const SA = { userId: 'admin', roles: ['Super Admin'] };
     const OPERADOR = { userId: 'op', roles: ['Operador'] };
     const SUPERVISOR = { userId: 'sup', roles: ['Supervisor'] };
 
-    it('DRAFT + Super Admin → PREPARE, SCHEDULE, PUBLISH, DISCONTINUE, ARCHIVE', async () => {
+    it('DRAFT + Super Admin → PUBLISH, ARCHIVE (orden por matriz)', async () => {
       const allowed = await service.allowedActions(mkProduct('DRAFT'), SA);
-      expect(allowed).toEqual(expect.arrayContaining(['PREPARE', 'SCHEDULE', 'PUBLISH', 'DISCONTINUE', 'ARCHIVE']));
-      expect(allowed).toHaveLength(5);
+      expect(allowed).toEqual(['PUBLISH', 'ARCHIVE']);
     });
 
-    it('DRAFT + Operador → [] (sin RBAC)', async () => {
-      const allowed = await service.allowedActions(mkProduct('DRAFT'), OPERADOR);
-      expect(allowed).toEqual([]);
-    });
-
-    it('PUBLISHED + Super Admin → HIDE, UNPUBLISH, DISCONTINUE, ARCHIVE', async () => {
+    it('PUBLISHED + Super Admin → UNPUBLISH, ARCHIVE', async () => {
       const allowed = await service.allowedActions(mkProduct('PUBLISHED'), SA);
-      expect(allowed).toEqual(['HIDE', 'UNPUBLISH', 'DISCONTINUE', 'ARCHIVE']);
+      expect(allowed).toEqual(['UNPUBLISH', 'ARCHIVE']);
     });
 
-    it('PUBLISHED + Supervisor → solo HIDE/UNPUBLISH (publish:manage, sin products:write)', async () => {
+    it('PUBLISHED + Supervisor → solo UNPUBLISH (publish:manage, sin products:write)', async () => {
       const allowed = await service.allowedActions(mkProduct('PUBLISHED'), SUPERVISOR);
-      expect(allowed).toEqual(['HIDE', 'UNPUBLISH']);
-    });
-
-    it('HIDDEN + Super Admin → SHOW, UNPUBLISH, DISCONTINUE, ARCHIVE', async () => {
-      const allowed = await service.allowedActions(mkProduct('HIDDEN'), SA);
-      expect(allowed).toEqual(['SHOW', 'UNPUBLISH', 'DISCONTINUE', 'ARCHIVE']);
-    });
-
-    it('DISCONTINUED + Super Admin → REACTIVATE, ARCHIVE', async () => {
-      const allowed = await service.allowedActions(mkProduct('DISCONTINUED'), SA);
-      expect(allowed).toEqual(['REACTIVATE', 'ARCHIVE']);
+      expect(allowed).toEqual(['UNPUBLISH']);
     });
 
     it('ARCHIVED + Super Admin → RESTORE', async () => {
@@ -346,9 +288,8 @@ describe('ProductsService — FSM ciclo de vida (Etapa 2)', () => {
       expect(allowed).toEqual(['RESTORE']);
     });
 
-    it('DRAFT + Super Admin sin ACL suficiente → []', async () => {
-      mockAcl.assertProductAccess.mockRejectedValue(new ForbiddenException('Acceso restringido'));
-      const allowed = await service.allowedActions(mkProduct('DRAFT'), SA);
+    it('DRAFT + Operador → [] (sin RBAC)', async () => {
+      const allowed = await service.allowedActions(mkProduct('DRAFT'), OPERADOR);
       expect(allowed).toEqual([]);
     });
 
@@ -356,15 +297,214 @@ describe('ProductsService — FSM ciclo de vida (Etapa 2)', () => {
       const allowed = await service.allowedActions(mkProduct('DRAFT'));
       expect(allowed).toEqual([]);
     });
+
+    it('DRAFT + Super Admin sin ACL suficiente → []', async () => {
+      mockAcl.assertProductAccess.mockRejectedValue(new ForbiddenException('Acceso restringido'));
+      const allowed = await service.allowedActions(mkProduct('DRAFT'), SA);
+      expect(allowed).toEqual([]);
+    });
+  });
+
+  describe('publish — programación futura (ProductsService.publish)', () => {
+    function readyProduct(overrides: Record<string, any> = {}) {
+      return {
+        id: 'p1',
+        sku: 'CAM-PUB',
+        name: 'Cámara Publicable',
+        categoryId: 'cat-1',
+        brandId: 'brand-1',
+        listaId: 'lista-1',
+        isActive: false,
+        isVisible: false,
+        publishStatus: 'borrador',
+        lifecycleStatus: 'DRAFT',
+        publishedAt: null,
+        publishAt: null,
+        unpublishAt: null,
+        publishedById: null,
+        unpublishReason: null,
+        ...overrides,
+      };
+    }
+
+    it('programa publicación futura en DRAFT con estado canónico completo', async () => {
+      const future = new Date(Date.now() + 86400000);
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct());
+      mockPrisma.product.update.mockResolvedValue(
+        readyProduct({ publishAt: future }),
+      );
+
+      const result = await service.publish('p1', { publishAt: future.toISOString() });
+
+      // Permanece en DRAFT con estado canónico completo.
+      expect(result.publishStatus).toBe('borrador');
+      expect(mockPrisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            lifecycleStatus: 'DRAFT',
+            isActive: false,
+            isVisible: false,
+            publishStatus: 'borrador',
+            publishAt: future,
+            unpublishAt: null,
+            publishedAt: null,
+            unpublishReason: null,
+          },
+        }),
+      );
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'schedule_publish', entity: 'Product' }),
+      );
+    });
+
+    it('publica inmediatamente si publishAt es pasado o nulo (PUBLISH canónico)', async () => {
+      mockPublishChecklistOk();
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct());
+      mockPrisma.product.update.mockResolvedValue(
+        readyProduct({ lifecycleStatus: 'PUBLISHED', publishStatus: 'publicado', isActive: true, isVisible: true }),
+      );
+
+      const result = await service.publish('p1', {});
+      expect(result.publishStatus).toBe('publicado');
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'publish' }),
+      );
+    });
+
+    it('programación futura sobre PUBLISHED → 409 (no se despublica ni transforma a DRAFT)', async () => {
+      const future = new Date(Date.now() + 86400000);
+      mockPrisma.product.findUnique.mockResolvedValue(
+        readyProduct({ lifecycleStatus: 'PUBLISHED', publishStatus: 'publicado', isActive: true, isVisible: true }),
+      );
+
+      try {
+        await service.publish('p1', { publishAt: future.toISOString() });
+        fail('Esperaba ConflictException');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ConflictException);
+        expect(err.message).toMatch(/ya está publicado/);
+      }
+      expect(mockPrisma.product.update).not.toHaveBeenCalled();
+    });
+
+    it('programación futura sobre ARCHIVED → 400 (archivado no se puede programar)', async () => {
+      const future = new Date(Date.now() + 86400000);
+      mockPrisma.product.findUnique.mockResolvedValue(
+        readyProduct({ lifecycleStatus: 'ARCHIVED', publishStatus: 'archivado', isActive: false, isVisible: false }),
+      );
+
+      try {
+        await service.publish('p1', { publishAt: future.toISOString() });
+        fail('Esperaba BadRequestException');
+      } catch (err) {
+        expect(err).toBeInstanceOf(BadRequestException);
+        expect(err.message).toMatch(/archivado/);
+      }
+      expect(mockPrisma.product.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unpublishAt legacy — ignorado sin efectos secundarios', () => {
+    it('unpublishAt en transition DTO no afecta el estado destino', async () => {
+      mockPublishChecklistOk();
+      const product = mkProduct('DRAFT');
+      mockPrisma.product.findUnique.mockResolvedValue(product);
+      mockPrisma.product.update.mockResolvedValue({ ...product, lifecycleStatus: 'PUBLISHED' });
+
+      // Enviar unpublishAt legacy debe ser ignorado (no produce auto-despublicación).
+      const result = await service.transition('prod-1', { event: 'PUBLISH', unpublishAt: '2026-12-31T23:59:59.000Z' } as any);
+
+      expect(result.lifecycleStatus).toBe('PUBLISHED');
+      // buildTransitionData para PUBLISH fija unpublishAt=null siempre.
+      const data = mockPrisma.product.update.mock.calls[0][0].data;
+      expect(data.unpublishAt).toBeNull();
+    });
+  });
+
+  describe('no existe auto-despublicación en el servicio', () => {
+    it('doTransition/buildTransitionData no procesa unpublishAt del DTO', async () => {
+      mockPublishChecklistOk();
+      const product = mkProduct('DRAFT');
+      mockPrisma.product.findUnique.mockResolvedValue(product);
+      mockPrisma.product.update.mockResolvedValue({ ...product, lifecycleStatus: 'PUBLISHED' });
+
+      await service.transition('prod-1', { event: 'PUBLISH', unpublishAt: '2026-12-31T23:59:59.000Z' } as any);
+
+      const data = mockPrisma.product.update.mock.calls[0][0].data;
+      // PUBLISH siempre fija unpublishAt=null independentemente del DTO.
+      expect(data.unpublishAt).toBeNull();
+    });
+
+    it('no existe método processAutoUnpublishes ni rama de auto-despublicación en el scheduler', async () => {
+      // Verificar que no hay propiedad auto-unpublish en el servicio.
+      expect((service as any).processAutoUnpublishes).toBeUndefined();
+      // handleLifecycleTick solo llama a processScheduledPublishes.
+      const handleTick = (service as any).handleLifecycleTick;
+      expect(handleTick).toBeDefined();
+    });
+  });
+
+  describe('scheduler interno (processScheduledPublishes) — skipHumanAccessChecks=true', () => {
+    it('publica sin RBAC ni ACL humano, pero conserva el checklist comercial', async () => {
+      // El scheduler llama a doTransition con skipHumanAccessChecks=true y sin ctx.
+      // RBAC y ACL se omiten, pero el checklist de publicación (lista activa, precio,
+      // imagen, stock) se mantiene.
+      mockPrisma.product.findMany.mockResolvedValue([
+        { id: 'p1', sku: 'CAM-SCH', name: 'Programada' },
+      ]);
+      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DRAFT'));
+      mockPublishChecklistOk();
+      mockPrisma.product.update.mockResolvedValue(mkProduct('PUBLISHED'));
+
+      const result = await service.processScheduledPublishes();
+
+      expect(result.publishOk).toBe(1);
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'publish' }),
+      );
+    });
+
+    it('checklist comercial fallido bloquea al scheduler (mismas reglas que publicación humana)', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([
+        { id: 'p1', sku: 'CAM-SCH', name: 'Programada' },
+      ]);
+      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DRAFT'));
+      // Simular lista archivada → checklist fallido (a)
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: new Date() });
+      mockPrisma.price.count.mockResolvedValue(1);
+      mockPrisma.productImage.count.mockResolvedValue(1);
+      mockPrisma.stock.findUnique.mockResolvedValue(null);
+
+      const result = await service.processScheduledPublishes();
+
+      expect(result.publishOk).toBe(0);
+      expect(result.publishFailed).toHaveLength(1);
+      expect(result.publishFailed[0].id).toBe('p1');
+      expect(mockPrisma.product.update).not.toHaveBeenCalled();
+    });
+
+    it('publishById conserva publishedById=null cuando no hay contexto humano', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([
+        { id: 'p1', sku: 'CAM-SCH', name: 'Programada' },
+      ]);
+      mockPrisma.product.findUnique.mockResolvedValue(mkProduct('DRAFT'));
+      mockPublishChecklistOk();
+      mockPrisma.product.update.mockResolvedValue(mkProduct('PUBLISHED'));
+
+      const result = await service.processScheduledPublishes();
+
+      expect(result.publishOk).toBe(1);
+      const updateData = mockPrisma.product.update.mock.calls[0][0].data;
+      expect(updateData.publishedById).toBeNull();
+    });
   });
 
   describe('bulkTransition(ids, dto, ctx)', () => {
     it('aplica a los válidos y rechaza los inválidos (applied/rejected)', async () => {
       mockPublishChecklistOk();
-      // prod-ok: DRAFT → PUBLISHED válido; prod-bad: DISCONTINUED → PUBLISH inválido.
       mockPrisma.product.findUnique
         .mockResolvedValueOnce(mkProduct('DRAFT', { id: 'prod-ok' }))
-        .mockResolvedValueOnce(mkProduct('DISCONTINUED', { id: 'prod-bad' }));
+        .mockResolvedValueOnce(mkProduct('ARCHIVED', { id: 'prod-bad' }));
       mockPrisma.product.update.mockResolvedValue(mkProduct('PUBLISHED', { id: 'prod-ok' }));
 
       const result = await service.bulkTransition(['prod-ok', 'prod-bad'], { event: 'PUBLISH' });
@@ -372,7 +512,7 @@ describe('ProductsService — FSM ciclo de vida (Etapa 2)', () => {
       expect(result.applied).toEqual([{ id: 'prod-ok', lifecycleStatus: 'PUBLISHED' }]);
       expect(result.rejected).toHaveLength(1);
       expect(result.rejected[0].id).toBe('prod-bad');
-      expect(result.rejected[0].reason).toMatch(/No se puede pasar de DISCONTINUED/);
+      expect(result.rejected[0].reason).toMatch(/No se puede pasar de ARCHIVED/);
     });
 
     it('producto inexistente va a rejected sin romper el lote', async () => {

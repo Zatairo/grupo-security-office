@@ -304,20 +304,21 @@ describe('ProductsService', () => {
       );
     });
 
-    it('debe usar defaultVisibility de la Lista como isVisible cuando no se envía isVisible explícito', async () => {
+    it('crea en DRAFT ignorando defaultVisibility de la Lista (isVisible siempre false)', async () => {
       mockPrisma.product.findUnique.mockResolvedValueOnce(null); // sku libre
       mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
       mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
       mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-v', code: 'LISTA-VISIBLE', defaultVisibility: true });
       mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
 
-      const dto = { sku: 'CAM-013', name: 'Cámara', categoryId: 'cat-1', brandId: 'brand-1', listaId: 'lista-v' };
+      const dto = { sku: 'CAM-013', name: 'Cámara', categoryId: 'cat-1', brandId: 'brand-1', listaId: 'lista-v', isVisible: true };
 
       await service.create(dto as any);
 
+      // El contrato canónico fija DRAFT → isActive=false, isVisible=false (ignora input legacy).
       expect(mockPrisma.product.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ listaId: 'lista-v', isVisible: true })}),
+          data: expect.objectContaining({ listaId: 'lista-v', isVisible: false, isActive: false, lifecycleStatus: 'DRAFT' })}),
       );
     });
 
@@ -335,6 +336,51 @@ describe('ProductsService', () => {
       expect(mockPrisma.product.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ listaId: 'lista-v', isVisible: false })}),
+      );
+    });
+
+    it('publishStatus="listo" legacy se acepta en DTO pero el producto nace en DRAFT', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
+
+      await service.create({ sku: 'CAM-LISTO', name: 'Listo', categoryId: 'cat-1', brandId: 'brand-1', publishStatus: 'listo' } as any);
+
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ lifecycleStatus: 'DRAFT', isActive: false, isVisible: false }),
+        }),
+      );
+    });
+
+    it('publishStatus="publicado" legacy se acepta en DTO pero el producto nace en DRAFT', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
+
+      await service.create({ sku: 'CAM-PUB', name: 'Publicado', categoryId: 'cat-1', brandId: 'brand-1', publishStatus: 'publicado' } as any);
+
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ lifecycleStatus: 'DRAFT', isActive: false, isVisible: false }),
+        }),
+      );
+    });
+
+    it('publishStatus="archivado" legacy se acepta en DTO pero el producto nace en DRAFT', async () => {
+      mockPrisma.product.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-1', name: 'CCTV' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', name: 'Hikvision' });
+      mockPrisma.product.create.mockResolvedValue(mockProductWithRelations);
+
+      await service.create({ sku: 'CAM-ARCH', name: 'Archivado', categoryId: 'cat-1', brandId: 'brand-1', publishStatus: 'archivado' } as any);
+
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ lifecycleStatus: 'DRAFT', isActive: false, isVisible: false }),
+        }),
       );
     });
   });
@@ -463,27 +509,64 @@ describe('ProductsService', () => {
     });
   });
 
-  describe('toggleVisibility', () => {
-    it('oculta un producto publicado (PUBLISHED → HIDDEN) vía FSM', async () => {
-      const published = { ...mockProduct, publishStatus: 'publicado', isVisible: true, lifecycleStatus: 'PUBLISHED' };
-      mockPrisma.product.findUnique.mockResolvedValue(published);
-      mockPrisma.product.update.mockResolvedValue({ ...published, isVisible: false, lifecycleStatus: 'HIDDEN' });
+  describe('toggleVisibility (adaptador legacy: DRAFT→PUBLISH, PUBLISHED→UNPUBLISH, ARCHIVED→400)', () => {
+    it('DRAFT → ejecuta PUBLISH (isVisible pasará a true sin producir HIDDEN)', async () => {
+      // Producto DRAFT con Lista asociada (listId exige existencia real en DB).
+      mockPrisma.product.findUnique.mockResolvedValue({
+        ...mockProduct,
+        listaId: 'lista-1',
+        lifecycleStatus: 'DRAFT',
+        isActive: false,
+        isVisible: false,
+        publishStatus: 'borrador',
+      });
+      // Checklist comercial cumplido: lista activa, precio vigente, imagen y sin stock bloqueante.
+      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: null });
+      mockPrisma.price.count.mockResolvedValue(1);
+      mockPrisma.productImage.count.mockResolvedValue(1);
+      mockPrisma.stock.findUnique.mockResolvedValue(null);
+      mockPrisma.product.update.mockResolvedValue({
+        ...mockProduct,
+        listaId: 'lista-1',
+        lifecycleStatus: 'PUBLISHED',
+        isActive: true,
+        isVisible: true,
+        publishStatus: 'publicado',
+      });
 
       const result = await service.toggleVisibility('prod-1');
 
-      expect(result.lifecycleStatus).toBe('HIDDEN');
-      expect(result.isVisible).toBe(false);
+      expect(result.lifecycleStatus).toBe('PUBLISHED');
+      expect(result.isActive).toBe(true);
+      expect(result.isVisible).toBe(true);
+      expect(result.publishStatus).toBe('publicado');
       expect(mockPrisma.product.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ lifecycleStatus: 'HIDDEN', isVisible: false, publishStatus: 'publicado' })}),
+          data: expect.objectContaining({ lifecycleStatus: 'PUBLISHED', isActive: true, isVisible: true, publishStatus: 'publicado' })}),
       );
       expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'hide', entity: 'Product', entityId: 'prod-1' }),
+        expect.objectContaining({ action: 'publish', entity: 'Product', entityId: 'prod-1' }),
       );
     });
 
-    it('no alterna visibilidad si el producto no está publicado (400)', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue({ ...mockProduct, lifecycleStatus: 'DRAFT' });
+    it('PUBLISHED → ejecuta UNPUBLISH (DRAFT, sin producir HIDDEN)', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ ...mockProduct, publishStatus: 'publicado', isVisible: true, lifecycleStatus: 'PUBLISHED' });
+      mockPrisma.product.update.mockResolvedValue({ ...mockProduct, lifecycleStatus: 'DRAFT', isVisible: false, isActive: false });
+
+      const result = await service.toggleVisibility('prod-1');
+
+      expect(result.lifecycleStatus).toBe('DRAFT');
+      expect(mockPrisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ lifecycleStatus: 'DRAFT', isVisible: false, isActive: false })}),
+      );
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'unpublish', entity: 'Product', entityId: 'prod-1' }),
+      );
+    });
+
+    it('ARCHIVED → 400 (no se alterna)', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ ...mockProduct, lifecycleStatus: 'ARCHIVED', isActive: false, isVisible: false });
 
       await expect(service.toggleVisibility('prod-1')).rejects.toThrow(BadRequestException);
     });
@@ -495,28 +578,9 @@ describe('ProductsService', () => {
     });
   });
 
-  describe('toggleActive', () => {
-    it('desactiva un producto activo (DRAFT → DISCONTINUED) vía FSM', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue({ ...mockProduct, lifecycleStatus: 'DRAFT' });
-      mockPrisma.product.update.mockResolvedValue({ ...mockProduct, isActive: false, lifecycleStatus: 'DISCONTINUED' });
-
-      const result = await service.toggleActive('prod-1');
-
-      expect(result.isActive).toBe(false);
-      expect(result.lifecycleStatus).toBe('DISCONTINUED');
-      expect(mockPrisma.product.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ isActive: false, lifecycleStatus: 'DISCONTINUED' })}),
-      );
-      expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'discontinue', entity: 'Product', entityId: 'prod-1' }),
-      );
-    });
-
-    it('debe lanzar NotFoundException si el producto no existe', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(null);
-
-      await expect(service.toggleActive('no-existe')).rejects.toThrow(NotFoundException);
+  describe('toggleActive (removido del servicio: el controller responde 410 Gone)', () => {
+    it('no existe el método en ProductsService (el endpoint legacy responde 410 en controller)', async () => {
+      expect((service as any).toggleActive).toBeUndefined();
     });
   });
 
@@ -754,7 +818,8 @@ describe('ProductsService', () => {
 
     it('rechaza publicación con 400 listando TODOS los requisitos incumplidos', async () => {
       mockPrisma.product.findUnique.mockResolvedValue(readyProduct({ isActive: false }));
-      // Lista archivada y sin precios ni imágenes: fallan (a),(b),(c),(d).
+      // Lista archivada y sin precios ni imágenes: fallan (a),(c),(d). El estado no
+      // se bloquea por isActive: la FSM ya validó que el producto es DRAFT publicable.
       mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: new Date() });
       mockPrisma.price.count.mockResolvedValue(0);
       mockPrisma.productImage.count.mockResolvedValue(0);
@@ -762,7 +827,7 @@ describe('ProductsService', () => {
 
       await expect(service.publish('p1', {})).rejects.toThrow(BadRequestException);
       await expect(service.publish('p1', {})).rejects.toThrow(
-        /lista destino|no está activo|precio vigente|imagen/,
+        /lista destino|precio vigente|imagen/,
       );
       expect(mockPrisma.product.update).not.toHaveBeenCalled();
     });
@@ -797,21 +862,28 @@ describe('ProductsService', () => {
       await expect(service.publish('p1', {})).rejects.toThrow(/stock/);
     });
 
-    it('programa publicación futura dejando el producto en listo', async () => {
+    it('programa publicación futura dejando el producto en DRAFT y persistiendo estado canónico completo', async () => {
       mockPrisma.product.findUnique.mockResolvedValue(readyProduct());
-      mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: null });
-      mockPrisma.price.count.mockResolvedValue(1);
-      mockPrisma.productImage.count.mockResolvedValue(1);
-      mockPrisma.stock.findUnique.mockResolvedValue(null);
-      const future = new Date(Date.now() + 86400000).toISOString();
-      mockPrisma.product.update.mockResolvedValue(readyProduct({ publishStatus: 'listo' }));
+      const future = new Date(Date.now() + 86400000);
+      mockPrisma.product.update.mockResolvedValue(readyProduct({ publishAt: future }));
 
-      const result = await service.publish('p1', { publishAt: future });
+      const result = await service.publish('p1', { publishAt: future.toISOString() });
 
-      expect(result.publishStatus).toBe('listo');
+      // Permanece en DRAFT; se persiste estado canónico completo. Sin estado SCHEDULED.
+      expect(result.publishStatus).toBe('borrador');
       expect(mockPrisma.product.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ publishStatus: 'listo', publishedAt: null })}),
+          data: {
+            lifecycleStatus: 'DRAFT',
+            isActive: false,
+            isVisible: false,
+            publishStatus: 'borrador',
+            publishAt: future,
+            unpublishAt: null,
+            publishedAt: null,
+            unpublishReason: null,
+          },
+        }),
       );
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'schedule_publish', entity: 'Product' }),
@@ -857,6 +929,24 @@ describe('ProductsService', () => {
       await expect(service.publish('p1', {})).rejects.toThrow(BadRequestException);
       await expect(service.publish('p1', {})).rejects.toThrow(/precio vigente/);
     });
+
+    it('rechaza 409 si PUBLISHED y se intenta programar publicación futura (no se despublica)', async () => {
+      const future = new Date(Date.now() + 86400000);
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct({ lifecycleStatus: 'PUBLISHED', publishStatus: 'publicado', isActive: true, isVisible: true }));
+
+      await expect(service.publish('p1', { publishAt: future.toISOString() })).rejects.toThrow(ConflictException);
+      await expect(service.publish('p1', { publishAt: future.toISOString() })).rejects.toThrow(/ya está publicado/);
+      expect(mockPrisma.product.update).not.toHaveBeenCalled();
+    });
+
+    it('rechaza 400 si ARCHIVED y se intenta programar publicación futura', async () => {
+      const future = new Date(Date.now() + 86400000);
+      mockPrisma.product.findUnique.mockResolvedValue(readyProduct({ lifecycleStatus: 'ARCHIVED', publishStatus: 'archivado', isActive: false, isVisible: false }));
+
+      await expect(service.publish('p1', { publishAt: future.toISOString() })).rejects.toThrow(BadRequestException);
+      await expect(service.publish('p1', { publishAt: future.toISOString() })).rejects.toThrow(/archivado/);
+      expect(mockPrisma.product.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('unpublish', () => {
@@ -890,37 +980,11 @@ describe('ProductsService', () => {
     });
   });
 
-  describe('lazy unpublish (runtime, sin cron)', () => {
-    it('findOne despublica en runtime si unpublishAt ya venció', async () => {
-      const expired = { ...mockProduct, id: 'p1', listaId: 'lista-1', publishStatus: 'publicado', unpublishAt: new Date(Date.now() - 1000) };
-      mockPrisma.product.findUnique.mockResolvedValue(expired);
-      mockPrisma.product.update.mockResolvedValue({ ...expired, publishStatus: 'borrador', unpublishReason: 'auto' });
-
-      const result = await service.findOne('p1');
-
-      expect(result.publishStatus).toBe('borrador');
-      expect(result.unpublishReason).toBe('auto');
-      expect(mockPrisma.product.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ publishStatus: 'borrador', unpublishReason: 'auto' }) }),
-      );
-      expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'unpublish', entity: 'Product', entityId: 'p1' }),
-      );
-    });
-
-    it('findOne no toca un producto publicado sin vencer', async () => {
-      const active = { ...mockProduct, id: 'p1', listaId: 'lista-1', publishStatus: 'publicado', unpublishAt: new Date(Date.now() + 86400000) };
-      mockPrisma.product.findUnique.mockResolvedValue(active);
-
-      const result = await service.findOne('p1');
-
-      expect(result.publishStatus).toBe('publicado');
-      expect(mockPrisma.product.update).not.toHaveBeenCalled();
-    });
-  });
+  // La auto-despublicación por unpublishAt fue eliminada del contrato: findOne/findAll
+  // ya no despublican en runtime ni consultan unpublishAt para reglas comerciales.
 
   describe('findPublishScheduled', () => {
-    it('lista productos programados entre from y to', async () => {
+    it('lista productos programados (DRAFT con publishAt) entre from y to', async () => {
       mockPrisma.product.findMany.mockResolvedValue([
         { id: 'p1', sku: 'CAM-001', name: 'Cámara', publishAt: new Date('2026-09-01'), unpublishAt: null, lista: { id: 'l1', name: 'Lista 1', code: 'L1' } },
       ]);
@@ -931,7 +995,7 @@ describe('ProductsService', () => {
       expect(result.data[0]).toHaveProperty('sku', 'CAM-001');
       expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ publishStatus: 'listo' })}),
+          where: expect.objectContaining({ lifecycleStatus: 'DRAFT' })}),
       );
     });
   });

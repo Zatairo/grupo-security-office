@@ -28,6 +28,7 @@ const mockAcl = {
   can: jest.fn().mockResolvedValue(false),
 };
 
+/** Producto en DRAFT con programación de publicación (publishAt vencido por defecto). */
 function scheduledProduct(overrides: Record<string, any> = {}) {
   return {
     id: 'p1',
@@ -36,10 +37,10 @@ function scheduledProduct(overrides: Record<string, any> = {}) {
     categoryId: 'cat-1',
     brandId: 'brand-1',
     listaId: 'lista-1',
-    isActive: true,
+    isActive: false,
     isVisible: false,
-    publishStatus: 'listo',
-    lifecycleStatus: 'SCHEDULED',
+    publishStatus: 'borrador',
+    lifecycleStatus: 'DRAFT',
     publishedAt: null,
     publishAt: new Date(Date.now() - 2 * 60 * 1000),
     unpublishAt: null,
@@ -49,7 +50,7 @@ function scheduledProduct(overrides: Record<string, any> = {}) {
   };
 }
 
-describe('ProductsService — scheduler P6 (cron cada minuto)', () => {
+describe('ProductsService — scheduler P6 (cron cada minuto, programación sobre DRAFT)', () => {
   let service: ProductsService;
   let loggerWarnSpy: jest.SpyInstance;
 
@@ -77,7 +78,7 @@ describe('ProductsService — scheduler P6 (cron cada minuto)', () => {
   });
 
   describe('processScheduledPublishes', () => {
-    it('publica los SCHEDULED vencidos, audita publish y reporta publishOk', async () => {
+    it('publica los DRAFT con publishAt vencido aplicando PUBLISH (audit publish, sin SCHEDULED)', async () => {
       mockPrisma.product.findMany.mockResolvedValue([
         { id: 'p1', sku: 'CAM-SCH', name: 'Cámara Programada' },
       ]);
@@ -92,11 +93,11 @@ describe('ProductsService — scheduler P6 (cron cada minuto)', () => {
       expect(result.skipped).toBe(false);
       expect(result.publishOk).toBe(1);
       expect(result.publishFailed).toHaveLength(0);
-      // Query candidata condicional: solo SCHEDULED con publishAt <= now.
+      // Query candidata condicional: solo DRAFT con publishAt <= now.
       expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            lifecycleStatus: 'SCHEDULED',
+            lifecycleStatus: 'DRAFT',
             publishAt: { lte: expect.any(Date) },
           }),
         }),
@@ -107,7 +108,7 @@ describe('ProductsService — scheduler P6 (cron cada minuto)', () => {
       expect(mockPrisma.product.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'p1' },
-          data: expect.objectContaining({ lifecycleStatus: 'PUBLISHED' }),
+          data: expect.objectContaining({ lifecycleStatus: 'PUBLISHED', isVisible: true }),
         }),
       );
     });
@@ -116,8 +117,8 @@ describe('ProductsService — scheduler P6 (cron cada minuto)', () => {
       mockPrisma.product.findMany.mockResolvedValue([
         { id: 'p1', sku: 'CAM-SCH', name: 'Cámara Programada' },
       ]);
-      mockPrisma.product.findUnique.mockResolvedValue(scheduledProduct({ isActive: false }));
-      // Lista archivada + sin precios ni imágenes: fallan (a),(b),(c),(d).
+      mockPrisma.product.findUnique.mockResolvedValue(scheduledProduct());
+      // Lista archivada + sin precios ni imágenes: fallan (a),(c),(d).
       mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-1', isActive: true, archivedAt: new Date() });
       mockPrisma.price.count.mockResolvedValue(0);
       mockPrisma.productImage.count.mockResolvedValue(0);
@@ -128,7 +129,7 @@ describe('ProductsService — scheduler P6 (cron cada minuto)', () => {
       expect(result.publishOk).toBe(0);
       expect(result.publishFailed).toHaveLength(1);
       expect(result.publishFailed[0].id).toBe('p1');
-      expect(result.publishFailed[0].reasons).toMatch(/lista destino|no está activo|precio vigente|imagen/);
+      expect(result.publishFailed[0].reasons).toMatch(/lista destino|precio vigente|imagen/);
       expect(mockPrisma.product.update).not.toHaveBeenCalled();
       expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('[scheduler]'));
     });
@@ -142,7 +143,7 @@ describe('ProductsService — scheduler P6 (cron cada minuto)', () => {
       expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            lifecycleStatus: 'SCHEDULED',
+            lifecycleStatus: 'DRAFT',
             publishAt: { lte: expect.any(Date) },
           }),
         }),
@@ -150,54 +151,68 @@ describe('ProductsService — scheduler P6 (cron cada minuto)', () => {
       expect(mockPrisma.product.update).not.toHaveBeenCalled();
     });
 
-    it('idempotencia: un producto ya publicado no se vuelve a procesar en el siguiente tick', async () => {
+    it('idempotencia: un producto ya publicado (nuevo DRAFT sin publishAt) no se vuelve a procesar', async () => {
       mockPrisma.product.findMany
         .mockResolvedValueOnce([{ id: 'p1', sku: 'CAM-SCH', name: 'Cámara Programada' }]) // tick 1
-        .mockResolvedValueOnce([]); // tick 2: ya no es SCHEDULED (publishAt null), no matchea
+        .mockResolvedValueOnce([]); // tick 2: PUBLISH dejó publishAt null, no matchea DRAFT+publishAt
       mockPrisma.product.findUnique.mockResolvedValue(scheduledProduct());
       mockPrisma.price.count.mockResolvedValue(1);
       mockPrisma.productImage.count.mockResolvedValue(1);
       mockPrisma.stock.findUnique.mockResolvedValue(null);
-      mockPrisma.product.update.mockResolvedValue(scheduledProduct({ lifecycleStatus: 'PUBLISHED' }));
+      mockPrisma.product.update.mockResolvedValue(scheduledProduct({ lifecycleStatus: 'PUBLISHED', publishAt: null }));
 
       const first = await service.handleLifecycleTick();
       const second = await service.handleLifecycleTick();
 
       expect(first.publishOk).toBe(1);
       expect(second.publishOk).toBe(0);
-      // Solo un update (la doble ejecución no pisa: la query condicional no lo re-pickea).
       expect(mockPrisma.product.update).toHaveBeenCalledTimes(1);
       expect(mockAudit.log).toHaveBeenCalledTimes(1);
     });
-  });
 
-  describe('processAutoUnpublishes', () => {
-    it('despublica PUBLISHED con unpublishAt vencido (reason auto + audit unpublish)', async () => {
+    it('scheduler ejecuta PUBLISH por vía interna (skipHumanAccessChecks=true) omitiendo RBAC/ACL humano', async () => {
+      // La ruta pública (transition/doTransition con skipHumanAccessChecks=false) exige
+      // RBAC y ACL. El scheduler la invoca con skipHumanAccessChecks=true y sin ctx,
+      // por lo que un producto programado se publica incluso si el usuario humano no
+      // tendría permiso (el scheduler no es humano). Se verifica que la transición
+      // avanza hasta el checklist y update, sin depender de roles/ACL.
       mockPrisma.product.findMany.mockResolvedValue([
         { id: 'p1', sku: 'CAM-SCH', name: 'Cámara Programada' },
       ]);
-      mockPrisma.product.findUnique.mockResolvedValue(
-        scheduledProduct({ lifecycleStatus: 'PUBLISHED', publishStatus: 'publicado', unpublishAt: new Date(Date.now() - 1000) }),
+      mockPrisma.product.findUnique.mockResolvedValue(scheduledProduct());
+      mockPrisma.price.count.mockResolvedValue(1);
+      mockPrisma.productImage.count.mockResolvedValue(1);
+      mockPrisma.stock.findUnique.mockResolvedValue(null);
+      mockPrisma.product.update.mockResolvedValue(scheduledProduct({ lifecycleStatus: 'PUBLISHED' }));
+
+      const result = await service.processScheduledPublishes();
+
+      expect(result.publishOk).toBe(1);
+      // Se ejecuta sin pasar ctx (undefined), lo que sumado a skipHumanAccessChecks=true
+      // hace que RBAC y ACL se omitan explícitamente.
+      expect(mockPrisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ lifecycleStatus: 'PUBLISHED' }),
+        }),
       );
-      mockPrisma.product.update.mockResolvedValue(
-        scheduledProduct({ lifecycleStatus: 'DRAFT', publishStatus: 'borrador', unpublishReason: 'auto' }),
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'publish', entityId: 'p1' }),
       );
+    });
+  });
+
+  describe('no existe auto-despublicación por unpublishAt', () => {
+    it('handleLifecycleTick no consulta unpublishAt ni produce unpublishOk', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([]);
 
       const result = await service.handleLifecycleTick();
 
-      expect(result.unpublishOk).toBe(1);
+      expect(result).not.toHaveProperty('unpublishOk');
+      // No hubo query por PUBLISHED + unpublishAt (el reporte no incluye la rama).
       expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({
-            lifecycleStatus: 'PUBLISHED',
-            unpublishAt: { lte: expect.any(Date) },
-          }),
+          where: expect.objectContaining({ lifecycleStatus: 'DRAFT' }),
         }),
-      );
-      const data = mockPrisma.product.update.mock.calls[0][0].data;
-      expect(data).toMatchObject({ lifecycleStatus: 'DRAFT', unpublishReason: 'auto' });
-      expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'unpublish', entity: 'Product', entityId: 'p1' }),
       );
     });
   });

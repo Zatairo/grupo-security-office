@@ -62,31 +62,35 @@ export class CreateProductDto {
   @IsOptional()
   prices?: PriceInputDto[];
 
-  @ApiPropertyOptional({ example: false })
+  // Campos legacy de compatibilidad. Un producto SIEMPRE se crea en estado
+  // canónico DRAFT con isActive=false e isVisible=false (la FSM es la fuente de
+  // verdad). Cualquier valor enviado aquí se ignora/normaliza en el servicio
+  // para conservar el estado inicial definido; no generan estados legacy.
+  @ApiPropertyOptional({ example: false, deprecated: true, description: 'Legacy: ignorado. La FSM fija isActive=false en DRAFT.' })
   @IsBoolean()
   @IsOptional()
-  // En Etapa 7 este campo saldrá del DTO: la FSM derivará isActive del lifecycleStatus.
   isActive?: boolean;
 
-  @ApiPropertyOptional({ example: false })
+  @ApiPropertyOptional({ example: false, deprecated: true, description: 'Legacy: ignorado. La FSM fija isVisible=false en DRAFT.' })
   @IsBoolean()
   @IsOptional()
   isVisible?: boolean;
 
   @ApiPropertyOptional({
     example: 'borrador',
-    description: "Estado de publicación: 'borrador' | 'listo' | 'publicado' | 'archivado'.",
+    deprecated: true,
+    description: 'Legacy: se acepta cualquiera de los cuatro valores históricos ("borrador", "listo", "publicado", "archivado") para compatibilidad de entrada, pero el servicio lo ignora/normaliza. El producto SIEMPRE se crea en estado canónico DRAFT (publishStatus="borrador"). La FSM es la única fuente de verdad del estado.',
   })
   @IsIn(['borrador', 'listo', 'publicado', 'archivado'])
   @IsOptional()
   publishStatus?: string;
 
-  @ApiPropertyOptional({ example: '2026-09-01T08:00:00.000Z', description: 'Fecha ISO programada de publicación.' })
+  @ApiPropertyOptional({ example: '2026-09-01T08:00:00.000Z', deprecated: true, description: 'Legacy: ignorado al crear. La programación se gestiona vía PATCH /publish.' })
   @IsISO8601()
   @IsOptional()
   publishAt?: string;
 
-  @ApiPropertyOptional({ example: '2026-12-31T23:59:59.000Z', description: 'Fecha ISO opcional de auto-despublicación.' })
+  @ApiPropertyOptional({ example: '2026-12-31T23:59:59.000Z', deprecated: true, description: 'Legacy: ignorado al crear. No existe auto-despublicación.' })
   @IsISO8601()
   @IsOptional()
   unpublishAt?: string;
