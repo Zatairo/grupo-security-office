@@ -115,7 +115,7 @@ export default function ProductFormModal({
   const uploadImage = useMutation({
     mutationFn: ({ file, isPrimary }: { file: File; isPrimary: boolean }) => {
       const fd = new FormData()
-      fd.append('file', file)
+      fd.append('file', file, file.name)
       if (isPrimary) fd.append('isPrimary', 'true')
       return api.post(`/products/${product!.id}/images`, fd)
     },
@@ -611,7 +611,7 @@ export default function ProductFormModal({
                         disabled={uploadImage.isPending}
                         onChange={(e) => {
                           const file = e.target.files?.[0]
-                          if (file) {
+                          if (file instanceof File) {
                             uploadImage.mutate({ file, isPrimary: images.length === 0 })
                           }
                           e.target.value = ''
