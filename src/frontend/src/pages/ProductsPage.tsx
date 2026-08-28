@@ -13,7 +13,6 @@ import { useAccessMatrix } from '../features/products/hooks/useAccessMatrix'
 import { useBulkTransition } from '../features/products/hooks/useProductTransition'
 import { ProductCard } from '../features/products/components/ProductCard'
 import { ProductTableRow } from '../features/products/components/ProductTableRow'
-import { ProductSpreadsheetTable } from '../features/products/components/ProductSpreadsheetTable'
 import ProductFormModal from '../features/products/components/ProductFormModal'
 import { MoveCategoryModal, type MoveCategoryTarget } from '../features/products/components/MoveCategoryModal'
 import { BulkPriceUpdateModal } from '../features/products/components/BulkPriceUpdateModal'
@@ -64,7 +63,7 @@ export default function ProductsPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
+const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
   const [createListaId, setCreateListaId] = useState('')
   const [showListaSelector, setShowListaSelector] = useState(false)
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(() => new Set())
@@ -358,19 +357,6 @@ const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
             </svg>
           </button>
-          <button
-            onClick={() => setViewMode('table')}
-            title="Vista de tabla (prices)"
-            className={`p-2.5 rounded-lg border transition-colors ${
-              viewMode === 'table'
-                ? 'bg-security-500 text-white border-security-500'
-                : 'bg-white text-neutral-500 border-neutral-300 hover:bg-neutral-50'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4h16a1 1 0 011 1v14a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1zM4 9h16M4 14h16M9 4v16" />
-            </svg>
-          </button>
         </div>
         <ProductPagination
           page={page}
@@ -492,7 +478,7 @@ onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEve
             ))
           )}
         </div>
-      ) : viewMode === 'list' ? (
+      ) : (
         <div className="overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -554,21 +540,6 @@ onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEve
             </tbody>
           </table>
         </div>
-      ) : (
-        <ProductSpreadsheetTable
-          products={currentProducts}
-          isLoading={isLoading}
-          onEdit={setEditingProduct}
-          onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEvent })}
-          onDelete={(id) => deleteProductWithMasterKey.mutate({ id })}
-          selectedProductIds={canBulkManage ? selectedProductIds : undefined}
-          onToggleSelectProduct={canBulkManage ? toggleSelectProduct : undefined}
-          onToggleSelectAllProducts={canBulkManage ? toggleSelectAllPage : undefined}
-          accessRestrictedIds={accessRestrictedIds}
-          accessUnavailable={accessUnavailable}
-          onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
-          onAccess={setAccessProduct}
-        />
       )}
 
       {/* Pagination */}

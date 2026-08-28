@@ -16,6 +16,9 @@ import {
   LIFECYCLE_EVENT_LABEL,
   LIFECYCLE_STATUS_LABEL,
   effectiveLifecycleStatus,
+  hasActiveScheduling,
+  toDatetimeLocal,
+  fromDatetimeLocal,
 } from '../features/products/lib/lifecycle'
 import { usePriceLists } from '../features/products/hooks/usePriceLists'
 import { getApiErrorMessage } from '../lib/apiError'
@@ -37,6 +40,8 @@ import {
   updateProductImageAlt,
   deleteProduct,
   isNotImplemented,
+  schedulePublish,
+  cancelScheduledPublish,
   type TransitionPayload,
   type ProductStock,
   type AuditLog,
@@ -111,6 +116,16 @@ function orderedPriceLists(lists: PriceList[]): PriceList[] {
   ) as PriceList[]
   const extras = lists.filter((l) => !PRICE_LIST_ORDER.includes(l.code))
   return [...ordered, ...extras]
+}
+
+/** Formatea una fecha/hora de programación en horario local con locale es-CO (sin librerías). */
+function formatScheduleDatetime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('es-CO', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
 }
 
 function ComingSoon({ title, message }: { title: string; message: string }) {
@@ -1484,6 +1499,11 @@ function PublishTab({
   onDirect,
   onOpenAction,
   onDelete,
+  scheduleActive,
+  scheduledAt,
+  onSchedule,
+  onReprogram,
+  onCancelSchedule,
 }: {
   product: Product
   allowed: LifecycleEvent[]
@@ -1493,6 +1513,11 @@ function PublishTab({
   onDirect: (event: LifecycleEvent) => void
   onOpenAction: (event: LifecycleEvent) => void
   onDelete: () => void
+  scheduleActive: boolean
+  scheduledAt: string | null
+  onSchedule: () => void
+  onReprogram: () => void
+  onCancelSchedule: () => void
 }) {
   const status = effectiveLifecycleStatus(product)
   const hasError = Boolean(error)
@@ -1505,6 +1530,7 @@ function PublishTab({
   )
 
   const can = (event: LifecycleEvent) => allowed.includes(event)
+  const canSchedule = status === 'DRAFT' && can('PUBLISH')
 
   const actionButton = (event: LifecycleEvent) => {
     const enabled = can(event)
@@ -1541,6 +1567,12 @@ function PublishTab({
         {statusBadge}
       </div>
 
+      {scheduleActive && scheduledAt && (
+        <p className="text-xs text-neutral-600" role="status">
+          Publicación programada: {formatScheduleDatetime(scheduledAt)}
+        </p>
+      )}
+
       {hasError && (
         <Alert variant="error">{getApiErrorMessage(error, 'No se pudo aplicar la acción.')}</Alert>
       )}
@@ -1548,6 +1580,36 @@ function PublishTab({
       {canEdit && (
         <div className="flex flex-wrap gap-2">
           {actionButton('PUBLISH')}
+          {canSchedule &&
+            (scheduleActive ? (
+              <>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={onReprogram}
+                  className="px-3 py-2 text-xs font-medium rounded-lg border border-neutral-300 text-neutral-700 bg-white hover:bg-neutral-50 hover:border-security-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Reprogramar publicación
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={onCancelSchedule}
+                  className="px-3 py-2 text-xs font-medium rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancelar programación
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={onSchedule}
+                className="px-3 py-2 text-xs font-medium rounded-lg border border-neutral-300 text-neutral-700 bg-white hover:bg-neutral-50 hover:border-security-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Programar publicación
+              </button>
+            ))}
           {actionButton('UNPUBLISH')}
           {actionButton('ARCHIVE')}
           {actionButton('RESTORE')}
@@ -1564,6 +1626,150 @@ function PublishTab({
         </div>
       )}
     </div>
+  )
+}
+
+// ------------------------------ Modal de programar/reprogramar ------------------------------
+function SchedulePublishModal({
+  open,
+  initialValue,
+  isReprogram,
+  loading,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean
+  initialValue: string
+  isReprogram: boolean
+  loading: boolean
+  error: unknown
+  onClose: () => void
+  onConfirm: (iso: string) => void
+}) {
+  const [value, setValue] = useState(initialValue)
+  const [localError, setLocalError] = useState('')
+
+  const title = isReprogram ? 'Reprogramar publicación' : 'Programar publicación'
+  const confirmLabel = isReprogram ? 'Reprogramar' : 'Programar'
+
+  const handleConfirm = () => {
+    if (!value) {
+      setLocalError('Selecciona una fecha y hora de publicación.')
+      return
+    }
+    const when = new Date(value)
+    if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+      setLocalError('La fecha y hora debe ser posterior al momento actual.')
+      return
+    }
+    setLocalError('')
+    onConfirm(fromDatetimeLocal(value))
+  }
+
+  const apiMessage = error ? getApiErrorMessage(error, 'No se pudo guardar la programación.') : ''
+
+  return (
+    <Modal
+      open={open}
+      onClose={() => {
+        if (!loading) onClose()
+      }}
+      title={title}
+      footer={
+        <>
+          <Button type="button" variant="secondary" disabled={loading} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button loading={loading} disabled={loading} onClick={handleConfirm}>
+            {confirmLabel}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-neutral-600">
+          El producto seguirá en Borrador hasta la fecha seleccionada.
+        </p>
+        {localError && (
+          <div role="alert" aria-live="polite">
+            <Alert variant="error">{localError}</Alert>
+          </div>
+        )}
+        {apiMessage && (
+          <div role="alert" aria-live="polite">
+            <Alert variant="error">{apiMessage}</Alert>
+          </div>
+        )}
+        <div>
+          <label htmlFor="schedule-publish-datetime" className="block text-sm font-medium text-neutral-800 mb-1.5">
+            Fecha y hora de publicación
+          </label>
+          <input
+            id="schedule-publish-datetime"
+            type="datetime-local"
+            value={value}
+            disabled={loading}
+            onChange={(e) => {
+              setValue(e.target.value)
+              setLocalError('')
+            }}
+            className={inputClass}
+            required
+          />
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ------------------------------ Modal de cancelación de programación ------------------------------
+function CancelScheduleModal({
+  open,
+  loading,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean
+  loading: boolean
+  error: unknown
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const apiMessage = error ? getApiErrorMessage(error, 'No se pudo cancelar la programación.') : ''
+
+  return (
+    <Modal
+      open={open}
+      onClose={() => {
+        if (!loading) onClose()
+      }}
+      title="Cancelar publicación programada"
+      footer={
+        <>
+          <Button type="button" variant="secondary" disabled={loading} onClick={onClose}>
+            Volver
+          </Button>
+          <Button type="button" variant="danger" loading={loading} disabled={loading} onClick={onConfirm}>
+            Cancelar programación
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-neutral-600">
+          ¿Cancelar la publicación programada?
+          <br />
+          El producto continuará en Borrador y no se publicará automáticamente en la fecha programada.
+        </p>
+        {apiMessage && (
+          <div role="alert" aria-live="polite">
+            <Alert variant="error">{apiMessage}</Alert>
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
 
@@ -1886,6 +2092,8 @@ export default function ProductDetailPage() {
   const [selectedImage, setSelectedImage] = useState(0)
   const [lifecycleModal, setLifecycleModal] = useState<{ event: LifecycleModalEvent } | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [scheduleModal, setScheduleModal] = useState<{ isReprogram: boolean } | null>(null)
+  const [cancelScheduleOpen, setCancelScheduleOpen] = useState(false)
 
   const queryClient = useQueryClient()
 
@@ -1992,6 +2200,41 @@ export default function ProductDetailPage() {
     deleteMutation.reset()
     setDeleteOpen(true)
   }
+
+  const scheduleActive = hasActiveScheduling(product)
+  const scheduledAt = product.publishAt && hasActiveScheduling(product) ? product.publishAt : null
+
+  const scheduleMutation = useMutation({
+    mutationFn: (iso: string) => schedulePublish(product.id, { publishAt: iso }),
+    onSuccess: () => {
+      setScheduleModal(null)
+      queryClient.invalidateQueries({ queryKey: ['products'], refetchType: 'all' })
+      queryClient.invalidateQueries({ queryKey: ['product', product.id] })
+    },
+  })
+
+  const cancelScheduleMutation = useMutation({
+    mutationFn: () => cancelScheduledPublish(product.id),
+    onSuccess: () => {
+      setCancelScheduleOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['products'], refetchType: 'all' })
+      queryClient.invalidateQueries({ queryKey: ['product', product.id] })
+    },
+  })
+
+  const openSchedule = () => {
+    scheduleMutation.reset()
+    setScheduleModal({ isReprogram: false })
+  }
+  const openReprogram = () => {
+    scheduleMutation.reset()
+    setScheduleModal({ isReprogram: true })
+  }
+  const openCancelSchedule = () => {
+    cancelScheduleMutation.reset()
+    setCancelScheduleOpen(true)
+  }
+  const confirmCancelSchedule = () => cancelScheduleMutation.mutate()
 
   const effectiveStatusBadgeClass = LIFECYCLE_STATUS_BG[effectiveStatus]
 
@@ -2160,11 +2403,42 @@ export default function ProductDetailPage() {
               onDirect={(event) => runTransition({ event })}
               onOpenAction={(event) => setLifecycleModal({ event: event as LifecycleModalEvent })}
               onDelete={handleDeleteOpen}
+              scheduleActive={scheduleActive}
+              scheduledAt={scheduledAt}
+              onSchedule={openSchedule}
+              onReprogram={openReprogram}
+              onCancelSchedule={openCancelSchedule}
             />
           )}
           {effectiveTab === 'audit' && <AuditTab product={product} />}
         </div>
       </div>
+
+      {scheduleModal && (
+        <SchedulePublishModal
+          open
+          initialValue={scheduleModal.isReprogram && product.publishAt ? toDatetimeLocal(product.publishAt) : ''}
+          isReprogram={scheduleModal.isReprogram}
+          loading={scheduleMutation.isPending}
+          error={scheduleMutation.error}
+          onClose={() => {
+            if (!scheduleMutation.isPending) setScheduleModal(null)
+          }}
+          onConfirm={(iso) => scheduleMutation.mutate(iso)}
+        />
+      )}
+
+      {cancelScheduleOpen && (
+        <CancelScheduleModal
+          open
+          loading={cancelScheduleMutation.isPending}
+          error={cancelScheduleMutation.error}
+          onClose={() => {
+            if (!cancelScheduleMutation.isPending) setCancelScheduleOpen(false)
+          }}
+          onConfirm={confirmCancelSchedule}
+        />
+      )}
 
       {lifecycleModal && (
         <LifecycleConfirmModal

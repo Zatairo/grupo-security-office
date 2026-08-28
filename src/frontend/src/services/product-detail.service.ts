@@ -145,11 +145,15 @@ export const fetchProductSuppliers = async (productId: string): Promise<ProductS
 }
 
 // ------------------------------ Publicación (defensivo) ------------------------------
+export interface PublishProductPayload {
+  publishAt?: string | null
+}
+
 export const publishProduct = async (
   productId: string,
-  payload?: { publishAt?: string }
+  payload: PublishProductPayload = {}
 ) => {
-  const res = await api.patch(`/products/${productId}/publish`, payload ?? {})
+  const res = await api.patch(`/products/${productId}/publish`, payload)
   return res.data
 }
 
@@ -158,11 +162,22 @@ export const unpublishProduct = async (productId: string, reason?: string) => {
   return res.data
 }
 
+/** Programa (o reprograma) una publicación futura: PATCH publish con publishAt ISO. */
 export const schedulePublish = async (
   productId: string,
   payload: { publishAt: string }
 ) => {
   const res = await api.patch(`/products/${productId}/publish`, payload)
+  return res.data
+}
+
+/**
+ * Cancela una publicación programada activa en un producto DRAFT:
+ * PATCH publish con publishAt null. Solo válido si el producto está en DRAFT
+ * con publishAt futura (validado por el backend).
+ */
+export const cancelScheduledPublish = async (productId: string) => {
+  const res = await api.patch(`/products/${productId}/publish`, { publishAt: null })
   return res.data
 }
 

@@ -134,3 +134,31 @@ export function getProductActions(
   }
   return result
 }
+
+/** Convierte un string ISO (p.ej. de `publishAt`) a valor válido para `<input type="datetime-local">` en hora local. */
+export function toDatetimeLocal(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`
+}
+
+/** Convierte el valor de `<input type="datetime-local">` (hora local) a string ISO. */
+export function fromDatetimeLocal(value: string): string {
+  return new Date(value).toISOString()
+}
+
+/**
+ * Indica si existe una programación de publicación ACTIVA (solo lectura):
+ * estado efectivo DRAFT + `publishAt` como string válido estrictamente futuro.
+ * No representa `SCHEDULED`: es una condición calculada sobre el contrato canónico.
+ */
+export function hasActiveScheduling(product: Pick<Product, 'lifecycleStatus' | 'publishAt'>): boolean {
+  if (effectiveLifecycleStatus(product) !== 'DRAFT') return false
+  if (typeof product.publishAt !== 'string' || !product.publishAt) return false
+  const when = new Date(product.publishAt)
+  if (Number.isNaN(when.getTime())) return false
+  return when.getTime() > Date.now()
+}
