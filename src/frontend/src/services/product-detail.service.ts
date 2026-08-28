@@ -44,8 +44,6 @@ export function isNotImplemented(error: unknown): boolean {
 export interface TransitionPayload {
   event: LifecycleEvent
   reason?: string
-  publishAt?: string
-  unpublishAt?: string
   confirm?: boolean
 }
 
@@ -149,7 +147,7 @@ export const fetchProductSuppliers = async (productId: string): Promise<ProductS
 // ------------------------------ Publicación (defensivo) ------------------------------
 export const publishProduct = async (
   productId: string,
-  payload?: { publishAt?: string; unpublishAt?: string }
+  payload?: { publishAt?: string }
 ) => {
   const res = await api.patch(`/products/${productId}/publish`, payload ?? {})
   return res.data
@@ -162,7 +160,7 @@ export const unpublishProduct = async (productId: string, reason?: string) => {
 
 export const schedulePublish = async (
   productId: string,
-  payload: { publishAt: string; unpublishAt?: string }
+  payload: { publishAt: string }
 ) => {
   const res = await api.patch(`/products/${productId}/publish`, payload)
   return res.data

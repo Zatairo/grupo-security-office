@@ -33,34 +33,14 @@ export interface PriceList {
 }
 
 /** Estados de la FSM de ciclo de vida (fuente de verdad, etapa 2 backend). */
-export type LifecycleStatus =
-  | 'DRAFT'
-  | 'READY'
-  | 'SCHEDULED'
-  | 'PUBLISHED'
-  | 'HIDDEN'
-  | 'DISCONTINUED'
-  | 'ARCHIVED'
+export type LifecycleStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
 
 /**
- * Eventos de negocio de la FSM que un usuario puede disparar (12; excluye
- * CREATE y SCHEDULED_PUBLISH que son del sistema/scheduler). DELETE se declara
- * aquí porque el borrado físico usa la misma semántica, aunque el backend no lo
- * incluye en allowedActions (está fuera de la matriz de transiciones).
+ * Eventos de negocio de la FSM que un usuario puede disparar. Solo el contrato
+ * canónico del backend. DELETE se gestiona aparte (borrado físico), no como
+ * evento de transición.
  */
-export type LifecycleEvent =
-  | 'PREPARE'
-  | 'SCHEDULE'
-  | 'CANCEL_SCHEDULE'
-  | 'PUBLISH'
-  | 'HIDE'
-  | 'SHOW'
-  | 'UNPUBLISH'
-  | 'DISCONTINUE'
-  | 'REACTIVATE'
-  | 'ARCHIVE'
-  | 'RESTORE'
-  | 'DELETE'
+export type LifecycleEvent = 'PUBLISH' | 'UNPUBLISH' | 'ARCHIVE' | 'RESTORE'
 
 export interface Product {
   id: string

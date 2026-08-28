@@ -31,49 +31,26 @@ import { BulkDeleteModal } from '../features/products/components/BulkDeleteModal
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const DEFAULT_PAGE_SIZE = 20
 
-/** Acciones bulk legacy → evento FSM (Etapa 5). */
-type BulkEventKind =
-  | 'activate'
-  | 'deactivate'
-  | 'show'
-  | 'hide'
-  | 'archive'
-  | 'restore'
-  | 'publish'
-  | 'unpublish'
-  | 'schedule'
+/** Acciones bulk → evento FSM canónico (Etapa 5). */
+type BulkEventKind = 'archive' | 'restore' | 'publish' | 'unpublish'
 
 const KIND_TO_EVENT: Record<BulkEventKind, LifecycleEvent> = {
-  activate: 'REACTIVATE',
-  deactivate: 'DISCONTINUE',
-  show: 'SHOW',
-  hide: 'HIDE',
   archive: 'ARCHIVE',
   restore: 'RESTORE',
   publish: 'PUBLISH',
   unpublish: 'UNPUBLISH',
-  schedule: 'SCHEDULE',
 }
 
 const BULK_LABELS: Record<BulkEventKind, string> = {
-  activate: 'Activar',
-  deactivate: 'Desactivar',
-  show: 'Mostrar',
-  hide: 'Ocultar',
   archive: 'Archivar',
   restore: 'Restaurar',
   publish: 'Publicar',
   unpublish: 'Despublicar',
-  schedule: 'Programar',
 }
 
 const LIFECYCLE_FILTER_OPTIONS: LifecycleStatus[] = [
   'DRAFT',
-  'READY',
-  'SCHEDULED',
   'PUBLISHED',
-  'HIDDEN',
-  'DISCONTINUED',
   'ARCHIVED',
 ]
 
@@ -82,7 +59,6 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [brandId, setBrandId] = useState('')
-  const [status, setStatus] = useState('')
   const [lifecycleFilter, setLifecycleFilter] = useState<'' | LifecycleStatus>('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
@@ -95,7 +71,6 @@ const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
   const [bulkNotice, setBulkNotice] = useState<string | null>(null)
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [bulkModal, setBulkModal] = useState<{ kind: BulkEventKind } | null>(null)
-  const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [moveCategoryTarget, setMoveCategoryTarget] = useState<MoveCategoryTarget | null>(null)
   const [accessProduct, setAccessProduct] = useState<Product | null>(null)
   const [showBulkPrices, setShowBulkPrices] = useState(false)
@@ -112,8 +87,6 @@ const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
     search,
     categoryId,
     brandId,
-    isVisible: status === 'visible' ? true : status === 'hidden' ? false : undefined,
-    isActive: status === 'active' ? true : status === 'inactive' ? false : undefined,
   }
 
   const { products, categories, brands, total, isLoading } = useProducts({
@@ -121,7 +94,7 @@ const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
     page,
     pageSize,
   })
-  const { deleteProductWithMasterKey, markReady } = useProductMutations()
+  const { deleteProductWithMasterKey } = useProductMutations()
   const transitionProduct = useTransitionProduct()
   const bulkTransition = useBulkTransition()
   const currentUser = useAuthStore((s) => s.user)
@@ -205,7 +178,6 @@ const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
         }
         setSelectedProductIds(new Set())
         setBulkModal(null)
-        setShowScheduleModal(false)
         setPage(1)
         queryClient.invalidateQueries({ queryKey: ['products'], refetchType: 'all' })
       },
@@ -231,36 +203,20 @@ const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
   }
 
   const handleBulkClick = (kind: BulkEventKind) => {
-    if (kind === 'schedule') {
-      setShowScheduleModal(true)
-      return
-    }
     const event = KIND_TO_EVENT[kind]
-    if (event === 'ARCHIVE' || event === 'RESTORE' || event === 'DISCONTINUE' || event === 'UNPUBLISH') {
+    if (event === 'ARCHIVE' || event === 'RESTORE') {
       setBulkModal({ kind })
       return
     }
+    // PUBLISH y UNPUBLISH se ejecutan directamente; ARCHIVE/RESTORE abren
+    // modal de motivo y confirmación.
     runBulkTransition(kind)
-  }
-
-  const runBulkSchedule = (publishAt: string, unpublishAt?: string) => {
-    const ids = Array.from(selectedProductIds)
-    if (ids.length === 0) return
-    submitBulk(
-      {
-        ids,
-        event: 'SCHEDULE',
-        publishAt: new Date(publishAt).toISOString(),
-        ...(unpublishAt ? { unpublishAt: new Date(unpublishAt).toISOString() } : {}),
-      },
-      'Programar'
-    )
   }
 
   useEffect(() => {
     setPage(1)
     setSelectedProductIds(new Set())
-  }, [search, categoryId, brandId, status, lifecycleFilter])
+  }, [search, categoryId, brandId, lifecycleFilter])
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
@@ -268,15 +224,10 @@ const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
   const selectedCan = (event: LifecycleEvent) =>
     selectedProducts.some((p) => productAllowedActions(p, userRoles).includes(event))
   const bulkAvailability: Record<BulkEventKind, boolean> = {
-    activate: selectedCan('REACTIVATE'),
-    deactivate: selectedCan('DISCONTINUE'),
-    show: selectedCan('SHOW'),
-    hide: selectedCan('HIDE'),
     archive: selectedCan('ARCHIVE'),
     restore: selectedCan('RESTORE'),
     publish: selectedCan('PUBLISH'),
     unpublish: selectedCan('UNPUBLISH'),
-    schedule: selectedCan('SCHEDULE'),
   }
 
   return (
@@ -363,18 +314,6 @@ const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
                 {brand.name}
               </option>
             ))}
-          </select>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            aria-label="Habilitación"
-            className="px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm bg-white"
-          >
-            <option value="">Todos</option>
-            <option value="visible">Visible</option>
-            <option value="hidden">Oculto</option>
-            <option value="active">Habilitados</option>
-            <option value="inactive">Deshabilitados</option>
           </select>
           <select
             value={lifecycleFilter}
@@ -465,15 +404,10 @@ const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('table')
               <div className="ml-auto flex flex-wrap items-center gap-2">
                 {canBulkManage && (
                   <>
-                    <BulkButton label="Activar" disabled={bulkTransition.isPending || !bulkAvailability.activate} onClick={() => handleBulkClick('activate')} />
-                    <BulkButton label="Desactivar" disabled={bulkTransition.isPending || !bulkAvailability.deactivate} onClick={() => handleBulkClick('deactivate')} />
-                    <BulkButton label="Mostrar" disabled={bulkTransition.isPending || !bulkAvailability.show} onClick={() => handleBulkClick('show')} />
-                    <BulkButton label="Ocultar" disabled={bulkTransition.isPending || !bulkAvailability.hide} onClick={() => handleBulkClick('hide')} />
-                    <BulkButton label="Archivar" disabled={bulkTransition.isPending || !bulkAvailability.archive} onClick={() => handleBulkClick('archive')} />
-                    <BulkButton label="Restaurar" disabled={bulkTransition.isPending || !bulkAvailability.restore} onClick={() => handleBulkClick('restore')} />
                     <BulkButton label="Publicar" disabled={bulkTransition.isPending || !bulkAvailability.publish} onClick={() => handleBulkClick('publish')} />
                     <BulkButton label="Despublicar" disabled={bulkTransition.isPending || !bulkAvailability.unpublish} onClick={() => handleBulkClick('unpublish')} />
-                    <BulkButton label="Programar" disabled={bulkTransition.isPending || !bulkAvailability.schedule} onClick={() => handleBulkClick('schedule')} />
+                    <BulkButton label="Archivar" disabled={bulkTransition.isPending || !bulkAvailability.archive} onClick={() => handleBulkClick('archive')} />
+                    <BulkButton label="Restaurar" disabled={bulkTransition.isPending || !bulkAvailability.restore} onClick={() => handleBulkClick('restore')} />
                     <BulkButton
                       label="Mover categoría"
                       disabled={bulkTransition.isPending}
@@ -554,9 +488,6 @@ onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEve
                 onDelete={(id) => deleteProductWithMasterKey.mutate({ id })}
                 onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
                 onAccess={setAccessProduct}
-                onMarkReady={(p) => {
-                  if (window.confirm(`¿Marcar "${p.name}" como listo para publicar?`)) markReady.mutate(p.id)
-                }}
               />
             ))
           )}
@@ -617,9 +548,6 @@ onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEve
                     accessUnavailable={accessUnavailable}
                     onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
                     onAccess={setAccessProduct}
-                    onMarkReady={(p) => {
-                      if (window.confirm(`¿Marcar "${p.name}" como listo para publicar?`)) markReady.mutate(p.id)
-                    }}
                   />
                 ))
               )}
@@ -640,9 +568,6 @@ onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEve
           accessUnavailable={accessUnavailable}
           onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
           onAccess={setAccessProduct}
-          onMarkReady={(p) => {
-            if (window.confirm(`¿Marcar "${p.name}" como listo para publicar?`)) markReady.mutate(p.id)
-          }}
         />
       )}
 
@@ -690,14 +615,6 @@ onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEve
             setShowCreateModal(true)
           }}
           onClose={() => setShowListaSelector(false)}
-        />
-      )}
-
-      {showScheduleModal && (
-        <SchedulePublishModal
-          count={selectedProductIds.size}
-          onConfirm={runBulkSchedule}
-          onClose={() => setShowScheduleModal(false)}
         />
       )}
 
@@ -776,77 +693,6 @@ function BulkButton({
     >
       {label}
     </button>
-  )
-}
-
-function SchedulePublishModal({
-  count,
-  onConfirm,
-  onClose,
-}: {
-  count: number
-  onConfirm: (publishAt: string, unpublishAt?: string) => void
-  onClose: () => void
-}) {
-  const [publishAt, setPublishAt] = useState('')
-  const [unpublishAt, setUnpublishAt] = useState('')
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-md shadow-2xl">
-        <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between">
-          <h2 className="text-lg font-condensed font-semibold text-neutral-800">Programar publicación</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-colors"
-            aria-label="Cerrar"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="p-6 space-y-4">
-          <p className="text-sm text-neutral-500">
-            Programar la publicación de <strong>{count}</strong> producto(s) seleccionado(s). Hasta que llegue la
-            fecha, quedarán en estado LISTO.
-          </p>
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Fecha y hora de publicación *</label>
-            <input
-              type="datetime-local"
-              value={publishAt}
-              onChange={(e) => setPublishAt(e.target.value)}
-              className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Despublicación automática (opcional)</label>
-            <input
-              type="datetime-local"
-              value={unpublishAt}
-              onChange={(e) => setUnpublishAt(e.target.value)}
-              className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm"
-            />
-            {unpublishAt && publishAt && new Date(unpublishAt) <= new Date(publishAt) && (
-              <p className="mt-1 text-xs text-red-600">La despublicación debe ser posterior a la publicación.</p>
-            )}
-          </div>
-          <div className="flex gap-3 justify-end pt-2">
-            <Button type="button" variant="secondary" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              disabled={!publishAt || (!!unpublishAt && !!publishAt && new Date(unpublishAt) <= new Date(publishAt))}
-              onClick={() => onConfirm(publishAt, unpublishAt || undefined)}
-            >
-              Programar
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
   )
 }
 

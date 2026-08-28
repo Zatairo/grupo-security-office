@@ -87,31 +87,16 @@ const PRICE_LIST_ORDER = [
 const inputClass =
   'w-full px-3 py-2.5 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm'
 
-/** Evento de ciclo de vida con motivo + confirmación (modales del detalle). */
-type LifecycleActionEvent = 'UNPUBLISH' | 'DISCONTINUE' | 'ARCHIVE' | 'RESTORE'
-
 /** Eventos FSM que se disparan de forma directa (sin modal). */
-const DIRECT_TRANSITIONS: LifecycleEvent[] = [
-  'PREPARE',
-  'CANCEL_SCHEDULE',
-  'PUBLISH',
-  'HIDE',
-  'SHOW',
-  'REACTIVATE',
-]
+const DIRECT_TRANSITIONS: LifecycleEvent[] = ['PUBLISH', 'UNPUBLISH']
 
 /**
  * Colores de fondo sólido por estado de ciclo de vida (WCAG AA ≥ 4.5:1 con
- * texto blanco). Todos los tonos son ≥ 600 de la escala Tailwind (o grises
- * institucionales de la paleta `security`/`neutral` del proyecto).
+ * texto blanco). Solo los tres estados canónicos.
  */
 const LIFECYCLE_STATUS_BG: Record<LifecycleStatus, string> = {
   DRAFT: 'bg-amber-700', // #b45309 · blanco = 5.02:1
-  READY: 'bg-emerald-700', // #047857 · blanco = 5.48:1
-  SCHEDULED: 'bg-indigo-600', // #4f46e5 · blanco = 6.29:1
   PUBLISHED: 'bg-sky-700', // #0369a1 · blanco = 5.93:1
-  HIDDEN: 'bg-neutral-600', // #5c5b5c · blanco = 6.76:1
-  DISCONTINUED: 'bg-red-700', // #b91c1c · blanco = 6.47:1
   ARCHIVED: 'bg-gray-700', // #374151 · blanco = 10.31:1
 }
 
@@ -1498,7 +1483,6 @@ function PublishTab({
   error,
   onDirect,
   onOpenAction,
-  onOpenSchedule,
   onDelete,
 }: {
   product: Product
@@ -1508,7 +1492,6 @@ function PublishTab({
   error: unknown
   onDirect: (event: LifecycleEvent) => void
   onOpenAction: (event: LifecycleEvent) => void
-  onOpenSchedule: () => void
   onDelete: () => void
 }) {
   const status = effectiveLifecycleStatus(product)
@@ -1528,8 +1511,7 @@ function PublishTab({
     const label = LIFECYCLE_EVENT_LABEL[event]
     const hintId = `evt-hint-${event}`
     const handleClick = () => {
-      if (event === 'SCHEDULE') onOpenSchedule()
-      else if (DIRECT_TRANSITIONS.includes(event)) onDirect(event)
+      if (DIRECT_TRANSITIONS.includes(event)) onDirect(event)
       else onOpenAction(event)
     }
     return (
@@ -1559,28 +1541,14 @@ function PublishTab({
         {statusBadge}
       </div>
 
-      {(product.publishAt || product.unpublishAt) && (
-        <div className="text-xs text-neutral-500 space-y-1">
-          {product.publishAt && <p>Publicar programado: {formatDate(product.publishAt)}</p>}
-          {product.unpublishAt && <p>Despublicar programado: {formatDate(product.unpublishAt)}</p>}
-        </div>
-      )}
-
       {hasError && (
         <Alert variant="error">{getApiErrorMessage(error, 'No se pudo aplicar la acción.')}</Alert>
       )}
 
       {canEdit && (
         <div className="flex flex-wrap gap-2">
-          {actionButton('PREPARE')}
-          {actionButton('SCHEDULE')}
-          {actionButton('CANCEL_SCHEDULE')}
           {actionButton('PUBLISH')}
-          {actionButton('HIDE')}
-          {actionButton('SHOW')}
           {actionButton('UNPUBLISH')}
-          {actionButton('DISCONTINUE')}
-          {actionButton('REACTIVATE')}
           {actionButton('ARCHIVE')}
           {actionButton('RESTORE')}
           {hasPermission('products:delete') && (
@@ -1600,20 +1568,13 @@ function PublishTab({
 }
 
 // ------------------------------ Modal de motivo/confirmación ------------------------------
+/** Eventos que requieren modal de motivo/confirmación (solo ARCHIVE/RESTORE). */
+type LifecycleModalEvent = 'ARCHIVE' | 'RESTORE'
+
 const LIFECYCLE_MODAL_META: Record<
-  LifecycleActionEvent,
+  LifecycleModalEvent,
   { title: string; description: string; confirmLabel: string }
 > = {
-  UNPUBLISH: {
-    title: 'Despublicar producto',
-    description: 'El producto volverá a estado Borrador y dejará de mostrarse comercialmente.',
-    confirmLabel: 'Despublicar',
-  },
-  DISCONTINUE: {
-    title: 'Dar de baja producto',
-    description: 'El producto quedará inactivo (baja comercial). Indica el motivo de la baja.',
-    confirmLabel: 'Dar de baja',
-  },
   ARCHIVE: {
     title: 'Archivar producto',
     description:
@@ -1635,7 +1596,7 @@ function LifecycleConfirmModal({
   onClose,
   onConfirm,
 }: {
-  event: LifecycleActionEvent
+  event: LifecycleModalEvent
   loading: boolean
   error: unknown
   onClose: () => void
@@ -1645,9 +1606,9 @@ function LifecycleConfirmModal({
   const [confirmed, setConfirmed] = useState(false)
   const [formError, setFormError] = useState('')
 
-  // UNPUBLISH, DISCONTINUE, ARCHIVE y RESTORE exigen motivo en el backend.
+  // ARCHIVE y RESTORE exigen motivo y confirmación en el backend.
   const requiresReason = true
-  const requiresConfirm = event === 'ARCHIVE' || event === 'RESTORE'
+  const requiresConfirm = true
   const meta = LIFECYCLE_MODAL_META[event]
 
   const handleConfirm = () => {
@@ -1715,91 +1676,6 @@ function LifecycleConfirmModal({
             </span>
           </label>
         )}
-      </div>
-    </Modal>
-  )
-}
-
-// ------------------------------ Modal de programación ------------------------------
-function ScheduleModal({
-  open,
-  loading,
-  error,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean
-  loading: boolean
-  error: unknown
-  onClose: () => void
-  onConfirm: (payload: { publishAt: string; unpublishAt?: string }) => void
-}) {
-  const [publishAt, setPublishAt] = useState('')
-  const [unpublishAt, setUnpublishAt] = useState('')
-  const [formError, setFormError] = useState('')
-
-  const handleConfirm = () => {
-    if (!publishAt) {
-      setFormError('La fecha de publicación es requerida.')
-      return
-    }
-    if (new Date(publishAt) <= new Date()) {
-      setFormError('La fecha de publicación debe ser futura.')
-      return
-    }
-    if (unpublishAt && unpublishAt < publishAt) {
-      setFormError('La fecha de despublicación no puede ser anterior a la de publicación.')
-      return
-    }
-    setFormError('')
-    onConfirm({ publishAt, ...(unpublishAt ? { unpublishAt } : {}) })
-  }
-
-  const alertMessage =
-    formError || (error ? getApiErrorMessage(error, 'No se pudo programar la publicación.') : '')
-
-  return (
-    <Modal
-      open={open}
-      onClose={() => {
-        if (!loading) onClose()
-      }}
-      title="Programar publicación"
-      footer={
-        <>
-          <Button variant="secondary" disabled={loading} onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button loading={loading} onClick={handleConfirm}>
-            Programar
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {alertMessage && <Alert variant="error">{alertMessage}</Alert>}
-        <div>
-          <label className="block text-sm font-medium text-neutral-800 mb-1.5">
-            Publicar en <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="datetime-local"
-            value={publishAt}
-            onChange={(e) => setPublishAt(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-neutral-800 mb-1.5">
-            Despublicar en (opcional)
-          </label>
-          <input
-            type="datetime-local"
-            value={unpublishAt}
-            onChange={(e) => setUnpublishAt(e.target.value)}
-            className={inputClass}
-          />
-        </div>
       </div>
     </Modal>
   )
@@ -2008,8 +1884,7 @@ export default function ProductDetailPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<DetailTab>('info')
   const [selectedImage, setSelectedImage] = useState(0)
-  const [lifecycleModal, setLifecycleModal] = useState<{ event: LifecycleActionEvent } | null>(null)
-  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [lifecycleModal, setLifecycleModal] = useState<{ event: LifecycleModalEvent } | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   const queryClient = useQueryClient()
@@ -2109,27 +1984,8 @@ export default function ProductDetailPage() {
     transition.mutate(payload, {
       onSuccess: () => {
         setLifecycleModal(null)
-        setScheduleOpen(false)
       },
     })
-  }
-
-  const canToggleActive = product.isActive
-    ? detailAllowed.includes('DISCONTINUE')
-    : detailAllowed.includes('REACTIVATE')
-  const canToggleVisibility = product.isVisible
-    ? detailAllowed.includes('HIDE')
-    : detailAllowed.includes('SHOW')
-
-  const handleToggleActive = () => {
-    if (!product) return
-    if (product.isActive) setLifecycleModal({ event: 'DISCONTINUE' })
-    else runTransition({ event: 'REACTIVATE' })
-  }
-
-  const handleToggleVisibility = () => {
-    if (!product) return
-    runTransition(product.isVisible ? { event: 'HIDE' } : { event: 'SHOW' })
   }
 
   const handleDeleteOpen = () => {
@@ -2249,35 +2105,6 @@ export default function ProductDetailPage() {
               </p>
             )}
 
-            {canEdit && (
-              <div className="mt-4 flex gap-2">
-                {canToggleActive && (
-                  <button
-                    onClick={handleToggleActive}
-                    className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
-                      product.isActive
-                        ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                        : 'bg-red-50 text-red-700 hover:bg-red-100'
-                    }`}
-                  >
-                    {product.isActive ? 'Activo' : 'Inactivo'}
-                  </button>
-                )}
-                {canToggleVisibility && (
-                  <button
-                    onClick={handleToggleVisibility}
-                    className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
-                      product.isVisible
-                        ? 'bg-security-50 text-security-700 hover:bg-security-100'
-                        : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
-                    }`}
-                  >
-                    {product.isVisible ? 'Visible' : 'Oculto'}
-                  </button>
-                )}
-              </div>
-            )}
-
             <div className="mt-4 pt-4 border-t border-neutral-100 text-xs text-neutral-500 space-y-1">
               <div className="flex justify-between">
                 <span>Categoría</span>
@@ -2331,8 +2158,7 @@ export default function ProductDetailPage() {
               pending={transition.isPending}
               error={transition.error}
               onDirect={(event) => runTransition({ event })}
-              onOpenAction={(event) => setLifecycleModal({ event: event as LifecycleActionEvent })}
-              onOpenSchedule={() => setScheduleOpen(true)}
+              onOpenAction={(event) => setLifecycleModal({ event: event as LifecycleModalEvent })}
               onDelete={handleDeleteOpen}
             />
           )}
@@ -2352,24 +2178,6 @@ export default function ProductDetailPage() {
               ...(reason ? { reason } : {}),
               ...(lifecycleModal.event === 'ARCHIVE' || lifecycleModal.event === 'RESTORE'
                 ? { confirm: true }
-                : {}),
-            })
-          }
-        />
-      )}
-
-      {scheduleOpen && (
-        <ScheduleModal
-          open
-          loading={transition.isPending}
-          error={transition.error}
-          onClose={() => setScheduleOpen(false)}
-          onConfirm={(payload) =>
-            runTransition({
-              event: 'SCHEDULE',
-              publishAt: new Date(payload.publishAt).toISOString(),
-              ...(payload.unpublishAt
-                ? { unpublishAt: new Date(payload.unpublishAt).toISOString() }
                 : {}),
             })
           }

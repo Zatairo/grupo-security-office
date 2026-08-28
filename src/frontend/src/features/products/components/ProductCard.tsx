@@ -1,11 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import type { Product } from '../types/product.types'
-import { productAllowedActions, canMarkReady } from '../lib/lifecycle'
-import { ProductStatusBadge } from './ProductStatusBadge'
 import { StockBadge, PublishBadge } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
 import { formatCurrency } from '../../../lib/format'
-import { useAuthStore } from '../../../stores/auth.store'
 
 import type { LifecycleEvent } from '../types/product.types'
 
@@ -16,18 +13,10 @@ interface ProductCardProps {
   onDelete: (id: string) => void
   onMoveCategory?: (product: Product) => void
   onAccess?: (product: Product) => void
-  onMarkReady?: (product: Product) => void
 }
 
-export function ProductCard({ product, onEdit, onTransition, onDelete, onMoveCategory, onAccess, onMarkReady }: ProductCardProps) {
+export function ProductCard({ product, onEdit, onDelete, onMoveCategory, onAccess }: ProductCardProps) {
   const navigate = useNavigate()
-  const userRoles = useAuthStore((s) => s.user?.roles ?? [])
-  const allowed = productAllowedActions(product, userRoles)
-  const canReactivate = allowed.includes('REACTIVATE')
-  const canDiscontinue = allowed.includes('DISCONTINUE')
-  const canToggleActive = product.isActive ? canDiscontinue : canReactivate
-  const toggleLabel = product.isActive ? 'Inactivo' : 'Activo'
-  const toggleEvent = product.isActive ? 'DISCONTINUE' : 'REACTIVATE'
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button')) return
@@ -53,34 +42,11 @@ export function ProductCard({ product, onEdit, onTransition, onDelete, onMoveCat
         )}
         {/* Status badges */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
-          {product.isActive && (
-            <ProductStatusBadge
-              label="Activo"
-              className="px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-semibold rounded"
-            />
-          )}
-          {product.isVisible && (
-            <ProductStatusBadge
-              label="Visible"
-              className="px-2 py-0.5 bg-security-600 text-white text-[10px] font-semibold rounded"
-            />
-          )}
           <StockBadge product={product} />
           <PublishBadge product={product} />
         </div>
         {/* Actions */}
         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1">
-          {hasPermission('products:write') && onMarkReady && canMarkReady(product) && (
-            <button
-              onClick={() => onMarkReady(product)}
-              className="p-2 bg-white rounded-lg shadow hover:bg-amber-50 text-gray-600 hover:text-amber-600 transition-colors"
-              title="Marcar listo para publicar"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-          )}
           {hasPermission('products:write') && onMoveCategory && (
             <button
               onClick={() => onMoveCategory(product)}
@@ -131,18 +97,6 @@ export function ProductCard({ product, onEdit, onTransition, onDelete, onMoveCat
           )}
         </div>
         <div className="mt-3 flex items-center gap-2">
-          {hasPermission('products:write') && canToggleActive && onTransition && (
-            <button
-              onClick={() => onTransition(product.id, toggleEvent)}
-              className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
-                product.isActive
-                  ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-              }`}
-            >
-              {toggleLabel}
-            </button>
-          )}
           {hasPermission('products:delete') && (
             <button
               onClick={() => {

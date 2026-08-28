@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../../services/api'
-import { deleteProduct, transitionProduct } from '../../../services/product-detail.service'
+import { deleteProduct } from '../../../services/product-detail.service'
 
 export function useProductMutations() {
   const queryClient = useQueryClient()
@@ -26,11 +26,5 @@ export function useProductMutations() {
     onSuccess: invalidate,
   })
 
-  // "Marcar listo para publicar" -> evento PREPARE de la FSM
-  const markReady = useMutation({
-    mutationFn: (id: string) => transitionProduct(id, { event: 'PREPARE' }),
-    onSuccess: invalidate,
-  })
-
-  return { toggleVisibility, toggleActive, deleteProduct: undefined as any, deleteProductWithMasterKey, markReady }
+  return { toggleVisibility, toggleActive, deleteProduct: undefined as any, deleteProductWithMasterKey }
 }

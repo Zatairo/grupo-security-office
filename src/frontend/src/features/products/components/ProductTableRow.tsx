@@ -1,10 +1,9 @@
 import type { Product, LifecycleEvent } from '../types/product.types'
-import { productAllowedActions, canMarkReady } from '../lib/lifecycle'
+import { LIFECYCLE_STATUS_LABEL, effectiveLifecycleStatus } from '../lib/lifecycle'
 import { ProductStatusBadge } from './ProductStatusBadge'
 import { ProductIndicators } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
 import { formatCurrency } from '../../../lib/format'
-import { useAuthStore } from '../../../stores/auth.store'
 
 interface ProductTableRowProps {
   product: Product
@@ -17,13 +16,11 @@ interface ProductTableRowProps {
   accessUnavailable?: boolean
   onMoveCategory?: (product: Product) => void
   onAccess?: (product: Product) => void
-  onMarkReady?: (product: Product) => void
 }
 
 export function ProductTableRow({
   product,
   onEdit,
-  onTransition,
   onDelete,
   selected = false,
   onToggleSelect,
@@ -31,15 +28,7 @@ export function ProductTableRow({
   accessUnavailable,
   onMoveCategory,
   onAccess,
-  onMarkReady,
 }: ProductTableRowProps) {
-  const userRoles = useAuthStore((s) => s.user?.roles ?? [])
-  const allowed = productAllowedActions(product, userRoles)
-  const canToggleActive = product.isActive ? allowed.includes('DISCONTINUE') : allowed.includes('REACTIVATE')
-  const canToggleVisibility = product.isVisible ? allowed.includes('HIDE') : allowed.includes('SHOW')
-  const toggleActiveEvent = product.isActive ? 'DISCONTINUE' : 'REACTIVATE'
-  const toggleVisibilityEvent = product.isVisible ? 'HIDE' : 'SHOW'
-
   return (
     <tr className="hover:bg-gray-50 transition-colors">
       {onToggleSelect && (
@@ -84,18 +73,14 @@ export function ProductTableRow({
       <td className="px-6 py-4">
         <div className="flex items-center gap-2">
           <ProductStatusBadge
-            label={product.isActive ? 'Activo' : 'Inactivo'}
+            label={LIFECYCLE_STATUS_LABEL[effectiveLifecycleStatus(product)]}
             className={`px-2 py-1 text-xs font-medium rounded ${
-              product.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+              effectiveLifecycleStatus(product) === 'PUBLISHED'
+                ? 'bg-emerald-100 text-emerald-700'
+                : effectiveLifecycleStatus(product) === 'ARCHIVED'
+                  ? 'bg-gray-100 text-gray-600'
+                  : 'bg-amber-100 text-amber-700'
             }`}
-            onClick={canToggleActive ? () => onTransition(product.id, toggleActiveEvent) : undefined}
-          />
-          <ProductStatusBadge
-            label={product.isVisible ? 'Visible' : 'Oculto'}
-            className={`px-2 py-1 text-xs font-medium rounded ${
-              product.isVisible ? 'bg-security-100 text-security-700' : 'bg-gray-100 text-gray-600'
-            }`}
-            onClick={canToggleVisibility ? () => onTransition(product.id, toggleVisibilityEvent) : undefined}
           />
         </div>
         <div className="flex items-center gap-1 mt-1.5">
@@ -108,17 +93,6 @@ export function ProductTableRow({
       </td>
       <td className="px-6 py-4">
         <div className="flex items-center gap-1">
-          {hasPermission('products:write') && onMarkReady && canMarkReady(product) && (
-            <button
-              onClick={() => onMarkReady(product)}
-              className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-              title="Marcar listo para publicar"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-          )}
           {hasPermission('products:write') && onMoveCategory && (
             <button
               onClick={() => onMoveCategory(product)}

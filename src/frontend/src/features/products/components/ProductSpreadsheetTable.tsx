@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Product, ProductPrice, LifecycleEvent } from '../types/product.types'
-import { productAllowedActions, canMarkReady } from '../lib/lifecycle'
+import { LIFECYCLE_STATUS_LABEL, effectiveLifecycleStatus } from '../lib/lifecycle'
 import { ProductStatusBadge } from './ProductStatusBadge'
 import { ProductIndicators } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
 import { formatCurrency, formatDate } from '../../../lib/format'
-import { useAuthStore } from '../../../stores/auth.store'
 
 type SortDir = 'asc' | 'desc'
 type SortKey = 'sku' | 'product' | 'brand' | 'category' | 'updatedAt'
@@ -23,7 +22,6 @@ interface ProductSpreadsheetTableProps {
   accessUnavailable?: boolean
   onMoveCategory?: (product: Product) => void
   onAccess?: (product: Product) => void
-  onMarkReady?: (product: Product) => void
 }
 
 const COLUMN_WIDTHS = {
@@ -33,8 +31,7 @@ const COLUMN_WIDTHS = {
   brand: 140,
   category: 160,
   price: 136,
-  visible: 96,
-  active: 96,
+  lifecycle: 120,
   updated: 140,
   indicators: 200,
   actions: 168,
@@ -154,7 +151,6 @@ export function ProductSpreadsheetTable({
   products = [],
   isLoading = false,
   onEdit,
-  onTransition,
   onDelete,
   selectedProductIds,
   onToggleSelectProduct,
@@ -163,9 +159,7 @@ export function ProductSpreadsheetTable({
   accessUnavailable,
   onMoveCategory,
   onAccess,
-  onMarkReady,
 }: ProductSpreadsheetTableProps) {
-  useAuthStore((s) => s.user?.roles ?? [])
   const canWrite = hasPermission('products:write')
   const canDelete = hasPermission('products:delete')
 
@@ -265,7 +259,7 @@ export function ProductSpreadsheetTable({
 
   const visiblePriceColumns = getVisiblePriceColumns(products)
   const priceColCount = visiblePriceColumns.length
-  const TOTAL_COLS = 5 + priceColCount + 5
+  const TOTAL_COLS = 5 + priceColCount + 4
   const widthStyle = baseWidthStyle
 
   return (
@@ -341,11 +335,8 @@ export function ProductSpreadsheetTable({
                 {spec.label}
               </th>
             ))}
-            <th scope="col" style={widthStyle(COLUMN_WIDTHS.visible)} className={`${thBase} text-center`}>
-              Visible
-            </th>
-            <th scope="col" style={widthStyle(COLUMN_WIDTHS.active)} className={`${thBase} text-center`}>
-              Activo
+            <th scope="col" style={widthStyle(COLUMN_WIDTHS.lifecycle)} className={`${thBase} text-center`}>
+              Ciclo de vida
             </th>
             <th
               scope="col"
@@ -387,16 +378,6 @@ export function ProductSpreadsheetTable({
           {!isLoading &&
             sortedProducts.map((product) => {
               const selected = selectedIds.has(product.id)
-              const userRoles = useAuthStore.getState().user?.roles ?? []
-              const allowed = productAllowedActions(product, userRoles)
-              const canToggleActive = product.isActive ? allowed.includes('DISCONTINUE') : allowed.includes('REACTIVATE')
-              const canToggleVisibility = product.isVisible ? allowed.includes('HIDE') : allowed.includes('SHOW')
-              const activeClass = product.isActive
-                ? 'bg-emerald-100 text-emerald-700'
-                : 'bg-red-100 text-red-700'
-              const visibleClass = product.isVisible
-                ? 'bg-security-100 text-security-700'
-                : 'bg-gray-100 text-gray-600'
               const prices = resolvePriceColumns(product)
 
               return (
@@ -478,25 +459,19 @@ export function ProductSpreadsheetTable({
                     </td>
                   ))}
                   <td
-                    style={widthStyle(COLUMN_WIDTHS.visible)}
+                    style={widthStyle(COLUMN_WIDTHS.lifecycle)}
                     className={`${cellBase} px-2 py-3 text-center`}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <ProductStatusBadge
-                      label={product.isVisible ? 'Visible' : 'Oculto'}
-                      onClick={canToggleVisibility ? () => onTransition(product.id, 'HIDE') : undefined}
-                      className={`px-2 py-1 text-xs font-medium rounded whitespace-nowrap ${visibleClass}`}
-                    />
-                  </td>
-                  <td
-                    style={widthStyle(COLUMN_WIDTHS.active)}
-                    className={`${cellBase} px-2 py-3 text-center`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ProductStatusBadge
-                      label={product.isActive ? 'Activo' : 'Inactivo'}
-                      onClick={canToggleActive ? () => onTransition(product.id, product.isActive ? 'DISCONTINUE' : 'REACTIVATE') : undefined}
-                      className={`px-2 py-1 text-xs font-medium rounded whitespace-nowrap ${activeClass}`}
+                      label={LIFECYCLE_STATUS_LABEL[effectiveLifecycleStatus(product)]}
+                      className={`px-2 py-1 text-xs font-medium rounded whitespace-nowrap ${
+                        effectiveLifecycleStatus(product) === 'PUBLISHED'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : effectiveLifecycleStatus(product) === 'ARCHIVED'
+                            ? 'bg-gray-100 text-gray-600'
+                            : 'bg-amber-100 text-amber-700'
+                      }`}
                     />
                   </td>
                   <td style={widthStyle(COLUMN_WIDTHS.updated)} className={`${cellBase} px-3 py-3`}>
@@ -515,17 +490,6 @@ export function ProductSpreadsheetTable({
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex items-center justify-center gap-1">
-                      {canWrite && onMarkReady && canMarkReady(product) && (
-                        <button
-                          onClick={() => onMarkReady(product)}
-                          className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                          title="Marcar listo para publicar"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                      )}
                       {canWrite && onMoveCategory && (
                         <button
                           onClick={() => onMoveCategory(product)}
