@@ -1,8 +1,8 @@
 # Arquitectura Técnica - Grupo Security
 ## Fase 1: Sistema Interno Modular
 
-**Versión:** 1.0  
-**Fecha:** 2026-07-22  
+**Versión:** 1.0
+**Fecha:** 2026-07-22 (Contrato FSM canónico de products: 2026-08-28)
 **Estado:** Aprobado
 
 ---
@@ -369,8 +369,11 @@ model Product {
   brandId     String
   prices      Price[]
   images      ProductImage[]
-  isActive    Boolean        @default(false)  // Habilitado
-  isVisible   Boolean        @default(false)  // Visible en catálogo
+  lifecycleStatus String     @default("DRAFT") // Fuente de verdad: DRAFT|PUBLISHED|ARCHIVED
+  isActive    Boolean        @default(false)  // Legacy (espejo): derivada del estado canónico
+  isVisible   Boolean        @default(false)  // Legacy (espejo): derivada del estado canónico
+  publishAt   DateTime?      // Legacy: solo publicación programada (DRAFT)
+  unpublishAt DateTime?      // Legacy obsoleto e ignorado
   auditLogs   AuditLog[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
@@ -501,7 +504,7 @@ model AuditLog {
 - **Marca**: Relación many-to-one con Brand
 - **Precios**: Relación one-to-many con Price
 - **Imágenes**: Relación one-to-many con ProductImage
-- **Estado**: isActive (habilitado), isVisible (visible en catálogo)
+- **Estado (ciclo de vida)**: FSM canónica de tres estados — `DRAFT` (Borrador), `PUBLISHED` (Publicado), `ARCHIVED` (Archivado). La fuente de verdad es `lifecycleStatus`; `isActive`/`isVisible` son columnas legacy espejo.
 
 ### 6.2 Categoría
 - **Nombre**: Nombre de la categoría
@@ -719,11 +722,20 @@ export class RolesGuard implements CanActivate {
 | GET | /audit | Listar logs de auditoría | Admin |
 | GET | /audit/:entity/:entityId | Logs de una entidad | Admin |
 
-### 8.10 Publicación
+### 8.10 Publicación — FSM canónica
+
+El ciclo de vida de Product usa los endpoints canónicos:
 
 | Método | Endpoint | Descripción | Auth |
 |--------|----------|-------------|------|
-| PATCH | /publish/product/:id | Toggle visibilidad | Admin, Gerente |
+| POST | /products/:id/transition | Transición canónica: `PUBLISH`, `UNPUBLISH`, `ARCHIVE`, `RESTORE` | Admin, Gerente, Operator* |
+| POST | /products/bulk-transition | Transición masiva (1..500) con `applied`/`rejected` | Admin, Gerente, Operator* |
+| PATCH | /products/:id/publish | **Legacy obsoleto**: publica o programa (`DRAFT + publishAt`) | Admin, Gerente |
+| PATCH | /products/:id/unpublish | **Legacy obsoleto**: ejecuta `UNPUBLISH` | Admin, Gerente |
+| PATCH | /products/:id/toggle-visibility | **Legacy obsoleto**: `DRAFT→PUBLISH`, `PUBLISHED→UNPUBLISH`, `ARCHIVED→400` | Admin, Gerente |
+| PATCH | /products/:id/toggle-active | **Eliminado**: responde `410 Gone` | — |
+
+\* `PUBLISH`/`UNPUBLISH` requieren roles con `publish:manage`; `ARCHIVE`/`RESTORE` requieren `Super Admin`/`Admin Comercial`. El backend valida permisos y checklist; `allowedActions` es la fuente de verdad para habilitación de UI.
 
 ---
 

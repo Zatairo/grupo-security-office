@@ -1,9 +1,11 @@
 # MVP Scope v1 - Grupo Security, Fase 1: Panel Administrativo Interno
 
-**Version:** 1.0  
-**Fecha:** 22 de julio de 2026  
+**Version:** 1.0
+**Fecha:** 22 de julio de 2026 (Revisión contrato FSM productos: 2026-08-28)
 **Estado:** Aprobado  
 **Alcance:** Cerrado
+
+> **Nota 2026-08-28:** La sección de Products (filtros `isActive`/`isVisible`) y el Publish Module descritos abajo corresponden al modelo **legacy**. El contrato vigente es la **FSM canónica de tres estados** (`DRAFT`, `PUBLISHED`, `ARCHIVED`; eventos `PUBLISH`, `UNPUBLISH`, `ARCHIVE`, `RESTORE`), con publicación programada solo vía `DRAFT + publishAt` y sin auto-despublicación. Ver `data-model-v1.md` y `04-Cierre-FSM-2026-08-20.md`.
 
 ---
 
@@ -62,10 +64,10 @@ Actualmente opera con el ERP **Yéminus** (gestión comercial, logística, inven
 
 #### 4. Products Module
 - CRUD de productos.
-- Filtros: categoría, marca, estado (isActive, isVisible), búsqueda por nombre/SKU.
-- Paginación con cursor o offset.
+- Filtros: categoría, marca, búsqueda por nombre/SKU. (El filtro por ciclo de vida usa el estado FSM canónico: `DRAFT`, `PUBLISHED`, `ARCHIVED`.)
+- Paginación con offset.
 - Auto-generación de SKU único.
-- Campos: id, name, description, slug, sku, categoryId, brandId, isActive, isVisible, images (JSON), createdAt, updatedAt.
+- Campos: id, name, description, slug, sku, categoryId, brandId, lifecycleStatus, isActive (legacy espejo), isVisible (legacy espejo), images (JSON), createdAt, updatedAt.
 
 #### 5. Categories Module
 - CRUD de categorías.
@@ -93,9 +95,11 @@ Actualmente opera con el ERP **Yéminus** (gestión comercial, logística, inven
 - Campos: id, userId, action, entity, entityId, changes (JSON diff), timestamp.
 - Consulta filtrada por entidad, usuario, fecha.
 
-#### 10. Publish Module
-- Toggle de visibilidad de productos (`isActive`, `isVisible`).
-- Endpoint para publicar/ocultar productos individualmente o en lote.
+#### 10. Publish Module (FSM canónica)
+- Gestión de ciclo de vida de productos vía `POST /products/:id/transition` y `POST /products/bulk-transition`: `PUBLISH`, `UNPUBLISH`, `ARCHIVE`, `RESTORE`.
+- `PUBLISH` habilita y muestra; `UNPUBLISH` deshabilita y oculta; `ARCHIVE`/`RESTORE` requieren motivo y confirmación.
+- Publicación programada: `DRAFT + publishAt` futura; el scheduler interno aplica `PUBLISH`. No hay estado `SCHEDULED` ni auto-despublicación.
+- Los endpoints legacy `toggle-visibility`/`toggle-active` quedan obsoletos (`toggle-active` responde `410 Gone`).
 
 ---
 

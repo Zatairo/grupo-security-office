@@ -1,7 +1,7 @@
 # Arquitectura Backend — Grupo Security Office
 
-> **Versión:** 1.0  
-> **Última actualización:** 2026-07-23  
+> **Versión:** 1.0
+> **Última actualización:** 2026-07-23 (Contrato FSM canónico de products: 2026-08-28)
 > **Stack:** NestJS 10 + TypeScript estricto + Prisma ORM + PostgreSQL 16  
 > **Propósito:** Panel administrativo interno para gestión de catálogo, precios, usuarios y publicación.
 
@@ -205,17 +205,23 @@ AppModule
 - **Roles requeridos:** Admin (escritura), Admin/Gerente (lectura)
 
 #### ProductsModule
-- **Responsabilidad:** CRUD de productos + importación masiva desde Excel
+- **Responsabilidad:** CRUD de productos + ciclo de vida (FSM canónica de 3 estados) + importación masiva desde Excel
 - **Endpoints:**
-  - `GET /api/products` — listar con filtros (search, categoryId, brandId, isVisible, isActive)
+  - `GET /api/products` — listar con filtros (search, categoryId, brandId)
   - `GET /api/products/:id` — obtener por ID con relaciones
-  - `POST /api/products` — crear
-  - `PUT /api/products/:id` — actualizar
-  - `PATCH /api/products/:id/toggle-visibility` — toggle visibilidad
-  - `PATCH /api/products/:id/toggle-active` — toggle activo
-  - `DELETE /api/products/:id` — eliminar (Admin)
+  - `POST /api/products` — crear (siempre nace en `DRAFT`)
+  - `PUT /api/products/:id` — actualizar (el estado se gestiona vía transition)
+  - `POST /api/products/:id/transition` — **canónico**: `PUBLISH`, `UNPUBLISH`, `ARCHIVE`, `RESTORE`
+  - `POST /api/products/bulk-transition` — **canónico**: transición masiva (1..500)
+  - `GET /api/products/publish-scheduled` — lista `DRAFT` con `publishAt` en rango
+  - `PATCH /api/products/:id/publish` — **legacy obsoleto**: publica de inmediato o programa (`DRAFT + publishAt`)
+  - `PATCH /api/products/:id/unpublish` — **legacy obsoleto**: ejecuta `UNPUBLISH`
+  - `PATCH /api/products/:id/toggle-visibility` — **legacy obsoleto**: `DRAFT→PUBLISH`, `PUBLISHED→UNPUBLISH`, `ARCHIVED→400`
+  - `PATCH /api/products/:id/toggle-active` — **eliminado**: responde `410 Gone`
+  - `DELETE /api/products/:id` — eliminar (Admin, con confirm + clave maestra)
   - `POST /api/products/import` — importar Excel (multipart/form-data)
-- **Roles requeridos:** Admin/Gerente (escritura), Admin/Gerente/Operator/Viewer (lectura)
+- **Roles requeridos:** Admin/Gerente (escritura), Admin/Gerente/Operator/Viewer (lectura); `PUBLISH`/`UNPUBLISH` requieren `publish:manage`, `ARCHIVE`/`RESTORE` requieren Super Admin/Admin Comercial
+- **Scheduler interno:** cron cada minuto publica `DRAFT` con `publishAt <= now` vía `PUBLISH` interno (sin auto-despublicación)
 
 #### CategoriesModule
 - **Responsabilidad:** CRUD de categorías con estructura jerárquica (auto-referencia)
@@ -839,13 +845,18 @@ O envuelto en `{ data: { ... } }` si se usa `TransformInterceptor`.
 | `PUT` | `/api/roles/:id` | JWT | Admin | `UpdateRoleDto` | Actualizar rol |
 | `DELETE` | `/api/roles/:id` | JWT | Admin | — | Eliminar rol |
 | **Products** | | | | | |
-| `GET` | `/api/products` | JWT | Admin, Gerente, Operator, Viewer | `?skip=&take=&search=&categoryId=&brandId=&isVisible=&isActive=` | Listar productos |
+| `GET` | `/api/products` | JWT | Admin, Gerente, Operator, Viewer | `?skip=&take=&search=&categoryId=&brandId=` | Listar productos |
 | `GET` | `/api/products/:id` | JWT | Admin, Gerente, Operator, Viewer | — | Obtener producto |
-| `POST` | `/api/products` | JWT | Admin, Gerente | `CreateProductDto` | Crear producto |
-| `PUT` | `/api/products/:id` | JWT | Admin, Gerente | `UpdateProductDto` | Actualizar producto |
-| `PATCH` | `/api/products/:id/toggle-visibility` | JWT | Admin, Gerente | — | Toggle visibilidad |
-| `PATCH` | `/api/products/:id/toggle-active` | JWT | Admin, Gerente | — | Toggle activo |
-| `DELETE` | `/api/products/:id` | JWT | Admin | — | Eliminar producto |
+| `POST` | `/api/products` | JWT | Admin, Gerente | `CreateProductDto` | Crear producto (nace en `DRAFT`) |
+| `PUT` | `/api/products/:id` | JWT | Admin, Gerente | `UpdateProductDto` | Actualizar producto (estado vía transition) |
+| `POST` | `/api/products/:id/transition` | JWT | Admin, Gerente, Operator, Viewer* | `{ event, reason?, confirm? }` | **Canónico**: `PUBLISH`, `UNPUBLISH`, `ARCHIVE`, `RESTORE` |
+| `POST` | `/api/products/bulk-transition` | JWT | Admin, Gerente, Operator, Viewer* | `{ ids, event, reason?, confirm? }` | **Canónico**: transición masiva |
+| `GET` | `/api/products/publish-scheduled` | JWT | Admin, Gerente, Supervisor, Operador, Consulta | `?from=&to=` | Lista `DRAFT` con `publishAt` en rango |
+| `PATCH` | `/api/products/:id/publish` | JWT | Admin, Gerente | `{ publishAt? }` | **Legacy obsoleto**: publicar o programar |
+| `PATCH` | `/api/products/:id/unpublish` | JWT | Admin, Gerente | `{ reason? }` | **Legacy obsoleto**: `UNPUBLISH` |
+| `PATCH` | `/api/products/:id/toggle-visibility` | JWT | Admin, Gerente | — | **Legacy obsoleto**: toggle hacia PUBLISH/UNPUBLISH |
+| `PATCH` | `/api/products/:id/toggle-active` | JWT | Admin, Gerente | — | **Eliminado**: `410 Gone` |
+| `DELETE` | `/api/products/:id` | JWT | Admin | `{ confirm, masterKey? }` | Eliminar producto |
 | `POST` | `/api/products/import` | JWT | Admin, Gerente | `multipart/form-data` | Importar Excel |
 | **Categories** | | | | | |
 | `GET` | `/api/categories` | JWT | Admin, Gerente, Operator, Viewer | — | Listar categorías |

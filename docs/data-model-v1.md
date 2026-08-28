@@ -98,6 +98,8 @@ Ver sección [5. Lista de Permisos](#5-lista-de-permisos) para el catálogo comp
 
 Entidad central del catálogo interno. Representa cada equipo de seguridad electrónica que ofrece Grupo Security.
 
+El **ciclo de vida** se gestiona mediante la FSM canónica de tres estados definida en la sección [4. Estados de Publicación](#4-estados-de-publicación). La fuente de verdad es `lifecycleStatus`; las columnas legacy (`isActive`, `isVisible`, `publishStatus`, `publishAt`, `unpublishAt`) se conservan y se escriben como espejo del estado canónico (dual-write) hasta su migración pendiente.
+
 | Campo | Tipo | Restricción | Descripción |
 |-------|------|-------------|-------------|
 | `id` | UUID | PK | Identificador único |
@@ -107,8 +109,9 @@ Entidad central del catálogo interno. Representa cada equipo de seguridad elect
 | `categoryId` | UUID | FK → Category.id, NOT NULL | Categoría principal |
 | `brandId` | UUID | FK → Brand.id, NOT NULL | Marca del fabricante |
 | `technicalSpecs` | JSONB | NULLABLE | Especificaciones técnicas (ver sección 7) |
-| `isActive` | BOOLEAN | NOT NULL, DEFAULT false | Habilitado para uso interno |
-| `isVisible` | BOOLEAN | NOT NULL, DEFAULT false | Visible en catálogo público (Fase 2) |
+| `lifecycleStatus` | STRING | NOT NULL | Estado canónico FSM: `DRAFT` \| `PUBLISHED` \| `ARCHIVED` (fuente de verdad) |
+| `isActive` | BOOLEAN | NOT NULL, DEFAULT false | **Legacy (espejo)**: habilitación; derivada del estado canónico |
+| `isVisible` | BOOLEAN | NOT NULL, DEFAULT false | **Legacy (espejo)**: visibilidad; derivada del estado canónico |
 | `createdAt` | TIMESTAMP | NOT NULL, DEFAULT NOW() | Fecha de creación |
 | `updatedAt` | TIMESTAMP | NOT NULL | Fecha de última actualización |
 
@@ -116,9 +119,11 @@ Entidad central del catálogo interno. Representa cada equipo de seguridad elect
 - `idx_product_sku` — UNIQUE en `sku`
 - `idx_product_category` — en `categoryId`
 - `idx_product_brand` — en `brandId`
-- `idx_product_active` — en `isActive` (filtros de publicación)
-- `idx_product_visible` — en `isVisible` (filtros de visibilidad)
+- `idx_product_active` — en `isActive` (filtros de publicación; legacy)
+- `idx_product_visible` — en `isVisible` (filtros de visibilidad; legacy)
 - `idx_product_name_search` — GIN/índice de texto en `name` para búsqueda
+
+> **Nota**: `isActive` y `isVisible` son columnas legacy conservadas como espejo del estado FSM. No son fuente de verdad para acciones ni estados; el contrato vigente se describe en la sección [4](#4-estados-de-publicación).
 
 ---
 
@@ -289,31 +294,45 @@ Cualquier entidad ──> AuditLog (via entity + entityId)
 
 ## 4. Estados de Publicación
 
-El sistema utiliza dos campos booleanos independientes para controlar la visibilidad de un producto en diferentes contextos.
+El ciclo de vida de un producto se rige por una **FSM canónica de tres estados** implementada en backend y frontend. La fuente de verdad es `lifecycleStatus`.
 
-### Modelo Actual: `isActive` + `isVisible`
+### Estados canónicos
 
-| isActive | isVisible | Estado | Descripción |
-|----------|-----------|--------|-------------|
-| `false` | `false` | **Borrador** | Producto en creación/edición, no accesible |
-| `true` | `false` | **Interno** | Visible solo en el panel administrativo |
-| `true` | `true` | **Publicado** | Visible en catálogo público (Fase 2) |
-| `false` | `true` | **No válido** | Estado inconsistente; el sistema debe evitarlo |
+| Estado | Etiqueta UI | Visible | Comercializable | Banderas legacy derivadas |
+|---|---|---:|---:|---|
+| `DRAFT` | Borrador | No | No | `isActive=false`, `isVisible=false` |
+| `PUBLISHED` | Publicado | Sí | Sí | `isActive=true`, `isVisible=true` |
+| `ARCHIVED` | Archivado | No | No | `isActive=false`, `isVisible=false` |
 
-**Regla de negocio:** `isVisible` solo puede ser `true` si `isActive` es `true`. Esta validación debe aplicarse tanto en backend como en la interfaz administrativa.
+### Eventos y transiciones
 
-### Nota sobre Futuros Estados
+```text
+DRAFT     --PUBLISH-->   PUBLISHED
+PUBLISHED --UNPUBLISH--> DRAFT
+DRAFT     --ARCHIVE-->   ARCHIVED
+PUBLISHED --ARCHIVE-->   ARCHIVED
+ARCHIVED  --RESTORE-->   DRAFT
+```
 
-Para la **Fase 2** (e-commerce público), se recomienda migrar a un campo `status` con estados más granulares:
+- `PUBLISH` habilita y muestra; valida requisitos comerciales y permisos.
+- `UNPUBLISH` deshabilita y oculta; vuelve siempre a `DRAFT`.
+- `ARCHIVE` conserva el registro; requiere motivo y confirmación.
+- `RESTORE` requiere motivo y confirmación; vuelve siempre a `DRAFT`, nunca publica automáticamente.
+- La programación de publicación se representa como `DRAFT + publishAt futura`; el scheduler interno aplica `PUBLISH` al llegar la fecha. No existe estado `SCHEDULED` ni auto-despublicación.
+- `unpublishAt` se conserva temporalmente como columna legacy obsoleta e ignorada.
 
-| Estado | Descripción |
-|--------|-------------|
-| `DRAFT` | Borrador, edición en progreso |
-| `REVIEW` | Pendiente de revisión/aprobación por gerente |
-| `PUBLISHED` | Publicado y visible para clientes |
-| `ARCHIVED` | Archivado, oculto pero conservado |
+### Compatibilidad legacy (lectura temporal, hasta migración)
 
-La transición `DRAFT → REVIEW → PUBLISHED` habilitará un flujo editorial con aprobación requerida antes de que un producto aparezca en el catálogo público.
+```text
+READY        -> DRAFT
+SCHEDULED    -> DRAFT, preservando publishAt si existe
+HIDDEN       -> DRAFT
+DISCONTINUED -> ARCHIVED
+```
+
+Los estados legacy no se producen ni se exponen; solo se normalizan en lectura. La migración de filas existentes está pendiente.
+
+> **Nota sobre el modelo previo** (`isActive` + `isVisible`): el modelo histórico de dos booleanos (`borrador` / `interno` / `publicado` / `no válido`) queda **superado** por la FSM canónica. `isActive` e `isVisible` se conservan únicamente como espejo derivado del estado canónico.
 
 ---
 
@@ -556,8 +575,11 @@ model Product {
   categoryId     String    @db.Uuid @map("category_id")
   brandId        String    @db.Uuid @map("brand_id")
   technicalSpecs Json?     @map("technical_specs")
-  isActive       Boolean   @default(false) @map("is_active")
-  isVisible      Boolean   @default(false) @map("is_visible")
+  lifecycleStatus String   @default("DRAFT") @map("lifecycle_status") // Fuente de verdad: DRAFT|PUBLISHED|ARCHIVED
+  isActive       Boolean   @default(false) @map("is_active")          // Legacy (espejo)
+  isVisible      Boolean   @default(false) @map("is_visible")         // Legacy (espejo)
+  publishAt      DateTime? @map("publish_at")                          // Legacy: solo publicación programada (DRAFT)
+  unpublishAt    DateTime? @map("unpublish_at")                        // Legacy obsoleto e ignorado
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
@@ -782,7 +804,7 @@ model AuditLog {
 | UUID como PK | Distribución segura, sin secuencias centralizadas, preparado para integración con Yéminus |
 | JSONB para `technicalSpecs` | Flexibilidad ante diversidad de equipos de seguridad; evita tabla EAV en Fase 1 |
 | Permiso como string | Simple y extensible; permite agregar permisos sin migraciones de esquema |
-| `isActive` + `isVisible` | Control dual: gestión interna vs. publicación pública; suficiente para Fase 1 |
+| `isActive` + `isVisible` | Legacy conservado como espejo del estado FSM; el estado real se rige por `lifecycleStatus` (`DRAFT`/`PUBLISHED`/`ARCHIVED`) |
 | `price.value` como DECIMAL(12,2) | Precisión monetaria hasta 99,999,999,999.99 COP; evita errores de punto flotante |
 | Auditoría en tabla separada | No contamina las entidades de negocio; consultas independientes sin JOINs pesados |
 | Categorías jerárquicas (self-ref) | Soporte para estructura tipo árbol: CCTV → Cámaras → IP → Bullet |
@@ -791,7 +813,8 @@ model AuditLog {
 
 ## 11. Pendientes y Evolución
 
-- [ ] Definir migración de `isActive`/`isVisible` a campo `status` con estados (`DRAFT`, `REVIEW`, `PUBLISHED`, `ARCHIVED`)
+- [ ] Migración de filas legacy (`READY`, `SCHEDULED`, `HIDDEN`, `DISCONTINUED`) al estado canónico (`lifecycleStatus`), con backup y aprobación independiente
+- [ ] **Fecha de actualización de contrato FSM**: 2026-08-28 — FSM canónica de tres estados implementada
 - [ ] Evaluar normalización de `technicalSpecs` a tabla `ProductAttribute` si se requieren búsquedas por atributos
 - [ ] Confirmar integración con Yéminus: campos adicionales necesarios en `Product` o `Price`
 - [ ] Definir política de retención de registros en `AuditLog`
