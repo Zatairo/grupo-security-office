@@ -531,6 +531,44 @@ export class ProductsService {
     if (!product) throw new NotFoundException('Producto no encontrado');
 
     const status = this.effectiveLifecycleStatus(product);
+
+    // Cancelación explícita de una publicación programada.
+    // Solo válida en DRAFT con publishAt futura activa. No ejecuta transiciones
+    // canónicas ni scheduler; conserva el contrato de Borrador.
+    if (dto.publishAt === null) {
+      if (status !== 'DRAFT') {
+        throw new ConflictException('Solo se puede cancelar una programación en un producto en Borrador.');
+      }
+      const currentPublishAt = product.publishAt ? new Date(product.publishAt) : null;
+      if (!currentPublishAt || currentPublishAt <= new Date()) {
+        throw new ConflictException('El producto no tiene una publicación programada activa.');
+      }
+
+      const updated = await this.prisma.product.update({
+        where: { id },
+        data: {
+          lifecycleStatus: 'DRAFT',
+          isActive: false,
+          isVisible: false,
+          publishStatus: 'borrador',
+          publishAt: null,
+          unpublishAt: null,
+          publishedAt: null,
+          publishedById: null,
+          unpublishReason: null,
+        },
+      });
+      await this.audit.log({
+        userId: ctx?.userId,
+        action: 'cancel_schedule_publish',
+        entity: 'Product',
+        entityId: id,
+        oldValues: { lifecycleStatus: status, publishAt: currentPublishAt },
+        newValues: { lifecycleStatus: status, publishAt: null, isActive: false, isVisible: false },
+      });
+      return updated;
+    }
+
     if (status === 'PUBLISHED') {
       throw new ConflictException('El producto ya está publicado');
     }

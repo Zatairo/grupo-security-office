@@ -4,11 +4,13 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 export class PublishProductDto {
   @ApiPropertyOptional({
     example: '2026-09-01T08:00:00.000Z',
-    description: 'Fecha ISO programada de publicación. Si viene (futura), el producto permanece en DRAFT con publishAt persistido (el scheduler aplicará PUBLISH). Si no viene, se publica de inmediato.',
+    description:
+      'Fecha ISO programada de publicación. Si viene (futura), el producto permanece en DRAFT con publishAt persistido (el scheduler aplicará PUBLISH). Si no viene, se publica de inmediato. Si es null, se cancela una programación existente en un producto DRAFT.',
+    nullable: true,
   })
   @IsISO8601()
   @IsOptional()
-  publishAt?: string;
+  publishAt?: string | null;
 
   /**
    * @deprecated Se acepta únicamente por retrocompatibilidad con clientes legacy.

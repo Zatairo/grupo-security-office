@@ -947,6 +947,77 @@ describe('ProductsService', () => {
       await expect(service.publish('p1', { publishAt: future.toISOString() })).rejects.toThrow(/archivado/);
       expect(mockPrisma.product.update).not.toHaveBeenCalled();
     });
+
+    describe('cancelación de programación (publishAt: null)', () => {
+      const future = () => new Date(Date.now() + 86400000);
+
+      it('DRAFT con programación futura activa: conserva DRAFT, limpia publishAt y audita cancel_schedule_publish', async () => {
+        const publishAt = future();
+        mockPrisma.product.findUnique.mockResolvedValue(readyProduct({ lifecycleStatus: 'DRAFT', publishAt }));
+        mockPrisma.product.update.mockResolvedValue(readyProduct({ lifecycleStatus: 'DRAFT', publishAt: null }));
+
+        const result = await service.publish('p1', { publishAt: null });
+
+        expect(result.lifecycleStatus).toBe('DRAFT');
+        expect(mockPrisma.product.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: {
+              lifecycleStatus: 'DRAFT',
+              isActive: false,
+              isVisible: false,
+              publishStatus: 'borrador',
+              publishAt: null,
+              unpublishAt: null,
+              publishedAt: null,
+              publishedById: null,
+              unpublishReason: null,
+            },
+          }),
+        );
+        expect(mockAudit.log).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'cancel_schedule_publish',
+            entity: 'Product',
+            entityId: 'p1',
+            oldValues: expect.objectContaining({ publishAt }),
+            newValues: expect.objectContaining({ publishAt: null }),
+          }),
+        );
+      });
+
+      it('DRAFT sin programación futura activa → 409 con mensaje exacto y sin auditoría', async () => {
+        mockPrisma.product.findUnique.mockResolvedValue(readyProduct({ lifecycleStatus: 'DRAFT', publishAt: null }));
+
+        await expect(service.publish('p1', { publishAt: null })).rejects.toThrow(ConflictException);
+        await expect(service.publish('p1', { publishAt: null })).rejects.toThrow(
+          'El producto no tiene una publicación programada activa.',
+        );
+        expect(mockPrisma.product.update).not.toHaveBeenCalled();
+        expect(mockAudit.log).not.toHaveBeenCalled();
+      });
+
+      it('PUBLISHED → 409 (Borrador) y sin auditoría', async () => {
+        mockPrisma.product.findUnique.mockResolvedValue(readyProduct({ lifecycleStatus: 'PUBLISHED', publishStatus: 'publicado', isActive: true, isVisible: true }));
+
+        await expect(service.publish('p1', { publishAt: null })).rejects.toThrow(ConflictException);
+        await expect(service.publish('p1', { publishAt: null })).rejects.toThrow(
+          'Solo se puede cancelar una programación en un producto en Borrador.',
+        );
+        expect(mockPrisma.product.update).not.toHaveBeenCalled();
+        expect(mockAudit.log).not.toHaveBeenCalled();
+      });
+
+      it('ARCHIVED → 409 (Borrador) y sin auditoría', async () => {
+        mockPrisma.product.findUnique.mockResolvedValue(readyProduct({ lifecycleStatus: 'ARCHIVED', publishStatus: 'archivado', isActive: false, isVisible: false }));
+
+        await expect(service.publish('p1', { publishAt: null })).rejects.toThrow(ConflictException);
+        await expect(service.publish('p1', { publishAt: null })).rejects.toThrow(
+          'Solo se puede cancelar una programación en un producto en Borrador.',
+        );
+        expect(mockPrisma.product.update).not.toHaveBeenCalled();
+        expect(mockAudit.log).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('unpublish', () => {
