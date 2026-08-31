@@ -17,6 +17,7 @@ import { getApiErrorMessage } from '../lib/apiError'
 import { formatDate } from '../lib/format'
 import { canManageListaAccess } from '../lib/rbac'
 import { Button } from '../components/ui'
+import { SearchFilterBar } from '../components/filters/SearchFilterBar'
 
 const RESOURCE_TYPE_LABELS: Record<AssignmentResourceType, string> = {
   CATALOG: 'Catálogo',
@@ -144,23 +145,13 @@ export default function AssignmentsPage() {
         ? 'No hay asignaciones inactivas'
         : 'No hay asignaciones'
 
-  const filterBar = (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-      <select
-        value={statusFilter}
-        onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}
-        className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm"
-        aria-label="Filtrar asignaciones por estado"
-      >
-        <option value="active">Activos</option>
-        <option value="inactive">Inactivos</option>
-        <option value="all">Todos</option>
-      </select>
-      <span className="text-xs text-neutral-400">
-        {activeCount} activa{activeCount === 1 ? '' : 's'} · {inactiveCount} inactiva{inactiveCount === 1 ? '' : 's'}
-      </span>
-    </div>
-  )
+  const statusFilterChips = statusFilter === 'all'
+    ? []
+    : [{
+        id: 'status',
+        label: statusFilter === 'active' ? 'Estado: Activas' : 'Estado: Inactivas',
+        onRemove: () => setStatusFilter('all'),
+      }]
 
   return (
     <div className="space-y-6">
@@ -222,156 +213,214 @@ export default function AssignmentsPage() {
         </div>
       )}
 
-      {isLoading ? (
-        <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-neutral-200">
-              <thead className="bg-neutral-100">
-                <tr>
-                  {['Usuario', 'Recurso', 'Tipo', 'Nivel', 'Estado', 'Actualizado', ''].map((h) => (
-                    <th
-                      key={h || 'actions'}
-                      className={`px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider ${h === '' ? 'text-right' : ''}`}
-                    >
-                      {h || 'Acciones'}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}>
-                    {Array.from({ length: 7 }).map((__, j) => (
-                      <td key={j} className="px-4 py-4">
-                        <div className="h-4 bg-neutral-100 rounded animate-pulse w-24"></div>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : !assignments || assignments.length === 0 ? (
-        <div className="bg-white rounded-xl border border-neutral-200 text-center py-16">
-          <svg className="w-16 h-16 text-neutral-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-          <p className="text-neutral-500 font-medium">No hay asignaciones</p>
-          <p className="text-neutral-400 text-sm mt-1">Crea tu primera asignación para comenzar</p>
-        </div>
-      ) : visibleAssignments.length === 0 ? (
-        <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-neutral-200">{filterBar}</div>
-          <div className="text-center py-16">
-            <p className="text-neutral-500 font-medium">{emptyMessage}</p>
-            <p className="text-neutral-400 text-sm mt-1">Cambia el filtro para ver otras asignaciones</p>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-neutral-200">{filterBar}</div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-neutral-200">
-              <thead className="bg-neutral-100">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
-                    Usuario
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
-                    Recurso
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
-                    Tipo
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
-                    Nivel
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
-                    Actualizado
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
-                {visibleAssignments.map((a) => {
-                  const user = userMap.get(a.userId)
-                  const isToggling = toggleMutation.isPending && toggleMutation.variables?.id === a.id
-                  const isDeleting = deleteMutation.isPending && deleteMutation.variables === a.id
-                  const busy = isToggling || isDeleting
-                  return (
-                    <tr key={a.id} className="hover:bg-neutral-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <p className="text-sm font-medium text-gray-900">{user?.name ?? shortId(a.userId)}</p>
-                        <p className="text-xs text-neutral-400">{user?.email ?? 'Usuario no encontrado'}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-neutral-700">{resourceName(a, listaNames)}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-neutral-100 text-neutral-600">
-                          {RESOURCE_TYPE_LABELS[a.resourceType] ?? a.resourceType}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${LEVEL_STYLES[a.level] ?? ''}`}
-                        >
-                          {LEVEL_LABELS[a.level] ?? a.level}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge isActive={a.isActive} />
-                      </td>
-                      <td className="px-4 py-3 text-sm text-neutral-500">{formatDate(a.updatedAt)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => {
-                              setActionError(null)
-                              toggleMutation.mutate(a)
-                            }}
-                            disabled={busy}
-                            className="p-2 text-neutral-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={a.isActive ? 'Desactivar asignación' : 'Activar asignación'}
-                            aria-label={a.isActive ? 'Desactivar asignación' : 'Activar asignación'}
+      <SearchFilterBar
+        activeFilterCount={statusFilter === 'all' ? 0 : 1}
+        activeFilterChips={statusFilterChips}
+        onClearFilters={() => setStatusFilter('all')}
+        clearFiltersDisabled={statusFilter === 'all'}
+        layout="sidebar"
+        sidebarSections={[
+          {
+            id: 'categories',
+            label: 'Estado',
+            content: (
+              <fieldset>
+                <legend className="text-sm font-medium text-neutral-800 mb-2">Estado</legend>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="asignacion-estado"
+                      checked={statusFilter === 'all'}
+                      onChange={() => setStatusFilter('all')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Todas
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="asignacion-estado"
+                      checked={statusFilter === 'active'}
+                      onChange={() => setStatusFilter('active')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Activas
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="asignacion-estado"
+                      checked={statusFilter === 'inactive'}
+                      onChange={() => setStatusFilter('inactive')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Inactivas
+                  </label>
+                </div>
+              </fieldset>
+            ),
+          },
+        ]}
+        content={
+          <>
+            <div className="space-y-2">
+              <span className="block text-xs text-neutral-400">
+                {activeCount} activa{activeCount === 1 ? '' : 's'} · {inactiveCount} inactiva{inactiveCount === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            {isLoading ? (
+              <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-neutral-200">
+                    <thead className="bg-neutral-100">
+                      <tr>
+                        {['Usuario', 'Recurso', 'Tipo', 'Nivel', 'Estado', 'Actualizado', ''].map((h) => (
+                          <th
+                            key={h || 'actions'}
+                            className={`px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider ${h === '' ? 'text-right' : ''}`}
                           >
-                            {a.isActive ? (
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636M12 3a9 9 0 019 9 9 9 0 01-9 9 9 9 0 01-9-9 9 9 0 019-9z" />
-                              </svg>
-                            ) : (
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                            )}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(a)}
-                            disabled={busy}
-                            className="p-2 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Eliminar asignación"
-                            aria-label="Eliminar asignación"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                            {h || 'Acciones'}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <tr key={i}>
+                          {Array.from({ length: 7 }).map((__, j) => (
+                            <td key={j} className="px-4 py-4">
+                              <div className="h-4 bg-neutral-100 rounded animate-pulse w-24"></div>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : !assignments || assignments.length === 0 ? (
+              <div className="bg-white rounded-xl border border-neutral-200 text-center py-16">
+                <svg className="w-16 h-16 text-neutral-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <p className="text-neutral-500 font-medium">No hay asignaciones</p>
+                <p className="text-neutral-400 text-sm mt-1">Crea tu primera asignación para comenzar</p>
+              </div>
+            ) : visibleAssignments.length === 0 ? (
+              <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
+                <div className="text-center py-16">
+                  <p className="text-neutral-500 font-medium">{emptyMessage}</p>
+                  <p className="text-neutral-400 text-sm mt-1">Cambia el filtro para ver otras asignaciones</p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-neutral-200">
+                    <thead className="bg-neutral-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
+                          Usuario
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
+                          Recurso
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
+                          Tipo
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
+                          Nivel
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
+                          Estado
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
+                          Actualizado
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-condensed font-semibold text-neutral-500 uppercase tracking-wider">
+                          Acciones
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100">
+                      {visibleAssignments.map((a) => {
+                        const user = userMap.get(a.userId)
+                        const isToggling = toggleMutation.isPending && toggleMutation.variables?.id === a.id
+                        const isDeleting = deleteMutation.isPending && deleteMutation.variables === a.id
+                        const busy = isToggling || isDeleting
+                        return (
+                          <tr key={a.id} className="hover:bg-neutral-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <p className="text-sm font-medium text-gray-900">{user?.name ?? shortId(a.userId)}</p>
+                              <p className="text-xs text-neutral-400">{user?.email ?? 'Usuario no encontrado'}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-sm text-neutral-700">{resourceName(a, listaNames)}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-neutral-100 text-neutral-600">
+                                {RESOURCE_TYPE_LABELS[a.resourceType] ?? a.resourceType}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${LEVEL_STYLES[a.level] ?? ''}`}
+                              >
+                                {LEVEL_LABELS[a.level] ?? a.level}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <StatusBadge isActive={a.isActive} />
+                            </td>
+                            <td className="px-4 py-3 text-sm text-neutral-500">{formatDate(a.updatedAt)}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => {
+                                    setActionError(null)
+                                    toggleMutation.mutate(a)
+                                  }}
+                                  disabled={busy}
+                                  className="p-2 text-neutral-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={a.isActive ? 'Desactivar asignación' : 'Activar asignación'}
+                                  aria-label={a.isActive ? 'Desactivar asignación' : 'Activar asignación'}
+                                >
+                                  {a.isActive ? (
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636M12 3a9 9 0 019 9 9 9 0 01-9 9 9 9 0 01-9-9 9 9 0 019-9z" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(a)}
+                                  disabled={busy}
+                                  className="p-2 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)] disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Eliminar asignación"
+                                  aria-label="Eliminar asignación"
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        }
+      />
 
       {showCreateModal && (
         <AssignmentFormModal

@@ -18,6 +18,7 @@ import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatDate } from '../lib/format'
 import { Button, Modal, Alert } from '../components/ui'
+import { SearchFilterBar } from '../components/filters/SearchFilterBar'
 
 const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   solicitada: 'Solicitada',
@@ -111,6 +112,14 @@ export default function PurchaseOrdersPage() {
     },
   })
 
+  const statusFilterChips = statusFilter === ''
+    ? []
+    : [{
+        id: 'status',
+        label: `Estado: ${PO_STATUS_LABELS[statusFilter as PurchaseOrderStatus]}`,
+        onRemove: () => setStatusFilter(''),
+      }]
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -145,95 +154,123 @@ export default function PurchaseOrdersPage() {
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
-          aria-label="Filtrar por estado"
-        >
-          <option value="">Todos los estados</option>
-          {PURCHASE_ORDER_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {PO_STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-neutral-200">
-            <thead className="bg-neutral-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Código</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Proveedor</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-neutral-600 uppercase tracking-wider">Items</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Creada</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-neutral-600 uppercase tracking-wider">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-200">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-neutral-400">Cargando...</td>
-                </tr>
-              ) : !orders || orders.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-neutral-400">
-                    {statusFilter
-                      ? 'No hay órdenes en este estado'
-                      : 'No hay órdenes de compra registradas'}
-                  </td>
-                </tr>
-              ) : (
-                orders.map((order) => (
-                  <tr
-                    key={order.id}
-                    className="hover:bg-neutral-50 transition-colors cursor-pointer"
-                    onClick={() => {
-                      setActionError(null)
-                      setDetailId(order.id)
-                    }}
-                  >
-                    <td className="px-6 py-4 text-sm font-mono font-medium text-neutral-800">{order.code}</td>
-                    <td className="px-6 py-4 text-sm text-neutral-700">
-                      {order.supplier?.name ?? '—'}
-                      {order.supplier?.nit && (
-                        <span className="text-xs text-neutral-400 font-mono ml-1">({order.supplier.nit})</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4"><PoBadge status={order.status} /></td>
-                    <td className="px-6 py-4 text-right text-sm text-neutral-600 tabular-nums">
-                      {parsePoItems(order.items).length}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-neutral-500">{formatDate(order.createdAt)}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setActionError(null)
-                            setDetailId(order.id)
-                          }}
-                          className="p-2 text-neutral-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors"
-                          title="Ver detalle"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
+      <SearchFilterBar
+        activeFilterCount={statusFilter === '' ? 0 : 1}
+        activeFilterChips={statusFilterChips}
+        onClearFilters={() => setStatusFilter('')}
+        clearFiltersDisabled={statusFilter === ''}
+        layout="sidebar"
+        sidebarSections={[
+          {
+            id: 'categories',
+            label: 'Estado',
+            content: (
+              <fieldset>
+                <legend className="text-sm font-medium text-neutral-800 mb-2">Estado</legend>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="po-estado"
+                      checked={statusFilter === ''}
+                      onChange={() => setStatusFilter('')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Todos los estados
+                  </label>
+                  {PURCHASE_ORDER_STATUSES.map((status) => (
+                    <label key={status} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="po-estado"
+                        checked={statusFilter === status}
+                        onChange={() => setStatusFilter(status)}
+                        className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                      />
+                      {PO_STATUS_LABELS[status]}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ),
+          },
+        ]}
+        content={
+          <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-neutral-200">
+                <thead className="bg-neutral-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Código</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Proveedor</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Estado</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold text-neutral-600 uppercase tracking-wider">Items</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Creada</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold text-neutral-600 uppercase tracking-wider">Acciones</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody className="divide-y divide-neutral-200">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-neutral-400">Cargando...</td>
+                    </tr>
+                  ) : !orders || orders.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-neutral-400">
+                        {statusFilter
+                          ? 'No hay órdenes en este estado'
+                          : 'No hay órdenes de compra registradas'}
+                      </td>
+                    </tr>
+                  ) : (
+                    orders.map((order) => (
+                      <tr
+                        key={order.id}
+                        className="hover:bg-neutral-50 transition-colors cursor-pointer"
+                        onClick={() => {
+                          setActionError(null)
+                          setDetailId(order.id)
+                        }}
+                      >
+                        <td className="px-6 py-4 text-sm font-mono font-medium text-neutral-800">{order.code}</td>
+                        <td className="px-6 py-4 text-sm text-neutral-700">
+                          {order.supplier?.name ?? '—'}
+                          {order.supplier?.nit && (
+                            <span className="text-xs text-neutral-400 font-mono ml-1">({order.supplier.nit})</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4"><PoBadge status={order.status} /></td>
+                        <td className="px-6 py-4 text-right text-sm text-neutral-600 tabular-nums">
+                          {parsePoItems(order.items).length}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-neutral-500">{formatDate(order.createdAt)}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setActionError(null)
+                                setDetailId(order.id)
+                              }}
+                              className="p-2 text-neutral-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors"
+                              title="Ver detalle"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+      />
 
       {createOpen && (
         <CreatePurchaseOrderModal

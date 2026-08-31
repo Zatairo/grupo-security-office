@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { LifecycleEvent, LifecycleStatus, Product } from '../features/products/types/product.types'
 import {
   LIFECYCLE_STATUS_LABEL,
-  effectiveLifecycleStatus,
   productAllowedActions,
 } from '../features/products/lib/lifecycle'
 import { useProducts } from '../features/products/hooks/useProducts'
@@ -24,8 +23,10 @@ import { hasPermission, hasRole, canManageListas } from '../lib/rbac'
 import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
 import { Button } from '../components/ui'
+import { SearchFilterBar, type SearchFilterChip } from '../components/filters/SearchFilterBar'
 import { useAuthStore } from '../stores/auth.store'
 import { BulkDeleteModal } from '../features/products/components/BulkDeleteModal'
+import { useToast } from '../hooks/useToast'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const DEFAULT_PAGE_SIZE = 20
@@ -56,16 +57,13 @@ const LIFECYCLE_FILTER_OPTIONS: LifecycleStatus[] = [
 export default function ProductsPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
-  const [categoryId, setCategoryId] = useState('')
-  const [brandId, setBrandId] = useState('')
-  const [lifecycleFilter, setLifecycleFilter] = useState<'' | LifecycleStatus>('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
-  const [createListaId, setCreateListaId] = useState('')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
   const [showListaSelector, setShowListaSelector] = useState(false)
+  const [createListaId, setCreateListaId] = useState('')
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(() => new Set())
   const [bulkNotice, setBulkNotice] = useState<string | null>(null)
   const [bulkError, setBulkError] = useState<string | null>(null)
@@ -74,6 +72,13 @@ const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
   const [accessProduct, setAccessProduct] = useState<Product | null>(null)
   const [showBulkPrices, setShowBulkPrices] = useState(false)
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
+
+  // Batch filters state
+  const [filterChips, setFilterChips] = useState({
+    categoryIds: [] as string[],
+    brandIds: [] as string[],
+    lifecycleStatuses: [] as string[],
+  })
 
   const listasQuery = useQuery({
     queryKey: ['listas'],
@@ -84,8 +89,9 @@ const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
 
   const filters = {
     search,
-    categoryId,
-    brandId,
+    categoryIds: filterChips.categoryIds,
+    brandIds: filterChips.brandIds,
+    lifecycleStatuses: filterChips.lifecycleStatuses,
   }
 
   const { products, categories, brands, total, isLoading } = useProducts({
@@ -99,6 +105,8 @@ const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
   const currentUser = useAuthStore((s) => s.user)
   const userRoles = currentUser?.roles ?? []
 
+  const { showToast } = useToast()
+
   const canBulkDelete = hasPermission('products:delete')
   const canBulkManage = canBulkDelete || hasPermission('products:write')
   const isCatalogManager = hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
@@ -109,10 +117,7 @@ const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
 
   // Filtro de estado FSM (provisional, cliente): el backend aún no soporta
   // `?status=` en el query DTO. Se aplica sobre los productos ya cargados.
-  const filteredProducts = lifecycleFilter
-    ? (products ?? []).filter((p) => effectiveLifecycleStatus(p) === lifecycleFilter)
-    : products ?? []
-  const currentProducts = filteredProducts
+  const currentProducts = products ?? []
   const allPageSelected = currentProducts.length > 0 && currentProducts.every((p) => selectedProductIds.has(p.id))
 
   const toggleSelectProduct = (id: string) => {
@@ -215,9 +220,56 @@ const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
   useEffect(() => {
     setPage(1)
     setSelectedProductIds(new Set())
-  }, [search, categoryId, brandId, lifecycleFilter])
+  }, [search, filterChips])
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  const productsFilterCount =
+    filterChips.categoryIds.length +
+    filterChips.brandIds.length +
+    filterChips.lifecycleStatuses.length
+
+  const clearProductFilters = () => {
+    setFilterChips({ categoryIds: [], brandIds: [], lifecycleStatuses: [] })
+    setPage(1)
+    setSelectedProductIds(new Set())
+  }
+
+  const productFilterChips: SearchFilterChip[] = [
+    ...filterChips.categoryIds.map((id) => {
+      const cat = categories.find((c) => c.id === id)
+      return {
+        id: `cat-${id}`,
+        label: `Categoría: ${cat?.name ?? id}`,
+        onRemove: () => {
+          setFilterChips((prev) => ({ ...prev, categoryIds: prev.categoryIds.filter((c) => c !== id) }))
+          setPage(1)
+          setSelectedProductIds(new Set())
+        },
+      }
+    }),
+    ...filterChips.brandIds.map((id) => {
+      const brand = brands.find((b) => b.id === id)
+      return {
+        id: `brand-${id}`,
+        label: `Marca: ${brand?.name ?? id}`,
+        onRemove: () => {
+          setFilterChips((prev) => ({ ...prev, brandIds: prev.brandIds.filter((b) => b !== id) }))
+          setPage(1)
+          setSelectedProductIds(new Set())
+        },
+      }
+    }),
+    ...filterChips.lifecycleStatuses.map((status) => ({
+      id: `lifecycle-${status}`,
+      label: `Estado: ${LIFECYCLE_STATUS_LABEL[status as LifecycleStatus]}`,
+      onRemove: () => {
+        setFilterChips((prev) => ({ ...prev, lifecycleStatuses: prev.lifecycleStatuses.filter((s) => s !== status) }))
+        setPage(1)
+        setSelectedProductIds(new Set())
+      },
+    })),
+  ]
 
   const selectedProducts = currentProducts.filter((p) => selectedProductIds.has(p.id))
   const selectedCan = (event: LifecycleEvent) =>
@@ -239,324 +291,355 @@ const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
         </div>
         <div className="flex flex-wrap gap-2 max-w-full">
           {hasPermission('products:write') && (
-            <>
-              <select
-                value={createListaId}
-                onChange={(e) => setCreateListaId(e.target.value)}
-                className="px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm bg-white max-w-64"
-                aria-label="Lista destino para nuevos productos"
-              >
-                <option value="">Lista destino...</option>
-                {availableListas.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-              <Button
-                variant="primary"
-                icon={
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
+            <Button
+              variant="primary"
+              icon={
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              }
+              onClick={() => {
+                if (availableListas.length === 0) {
+                  showToast('No hay listas activas. Crea una lista primero.', 'warning')
+                  return
                 }
-                onClick={() => {
-                  if (createListaId) {
-                    setShowCreateModal(true)
-                  } else {
-                    setShowListaSelector(true)
-                  }
-                }}
-              >
-                Nuevo Producto
-              </Button>
-            </>
+                setShowListaSelector(true)
+              }}
+            >
+              Nuevo Producto
+            </Button>
           )}
         </div>
       </div>
 
       {/* Search and filters */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        <div className="flex-1 relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Buscar por nombre, SKU o descripción..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm"
-          />
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <select
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className="px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm bg-white"
-          >
-            <option value="">Todas las categorías</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={brandId}
-            onChange={(e) => setBrandId(e.target.value)}
-            className="px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm bg-white"
-          >
-            <option value="">Todas las marcas</option>
-            {brands.map((brand) => (
-              <option key={brand.id} value={brand.id}>
-                {brand.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={lifecycleFilter}
-            onChange={(e) => setLifecycleFilter((e.target.value || '') as '' | LifecycleStatus)}
-            aria-label="Filtrar por estado de ciclo de vida"
-            className="px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm bg-white"
-          >
-            <option value="">Todos los ciclos</option>
-            {LIFECYCLE_FILTER_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {LIFECYCLE_STATUS_LABEL[s]}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* View controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setViewMode('grid')}
-            className={`p-2.5 rounded-lg border transition-colors ${
-              viewMode === 'grid'
-                ? 'bg-security-500 text-white border-security-500'
-                : 'bg-white text-neutral-500 border-neutral-300 hover:bg-neutral-50'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={`p-2.5 rounded-lg border transition-colors ${
-              viewMode === 'list'
-                ? 'bg-security-500 text-white border-security-500'
-                : 'bg-white text-neutral-500 border-neutral-300 hover:bg-neutral-50'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-            </svg>
-          </button>
-        </div>
-        <ProductPagination
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          pageSize={pageSize}
-          pageSizeOptions={PAGE_SIZE_OPTIONS}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size)
-            setPage(1)
-          }}
-        />
-      </div>
-
-      {canBulkManage && (selectedProductIds.size > 0 || bulkNotice || bulkError) && (
-        <div className="px-4 py-3 bg-white rounded-xl border border-neutral-200 space-y-2">
-          {selectedProductIds.size > 0 && (
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-medium text-neutral-600">{selectedProductIds.size} seleccionado(s)</span>
-              <button
-                onClick={() => {
-                  setSelectedProductIds(new Set())
-                  setBulkNotice(null)
-                  setBulkError(null)
-                }}
-                className="text-sm text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
-              >
-                Limpiar selección
-              </button>
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                {canBulkManage && (
-                  <>
-                    <BulkButton label="Publicar" disabled={bulkTransition.isPending || !bulkAvailability.publish} onClick={() => handleBulkClick('publish')} />
-                    <BulkButton label="Despublicar" disabled={bulkTransition.isPending || !bulkAvailability.unpublish} onClick={() => handleBulkClick('unpublish')} />
-                    <BulkButton label="Archivar" disabled={bulkTransition.isPending || !bulkAvailability.archive} onClick={() => handleBulkClick('archive')} />
-                    <BulkButton label="Restaurar" disabled={bulkTransition.isPending || !bulkAvailability.restore} onClick={() => handleBulkClick('restore')} />
-                    <BulkButton
-                      label="Mover categoría"
-                      disabled={bulkTransition.isPending}
-                      onClick={() =>
-                        setMoveCategoryTarget({
-                          type: 'bulk',
-                          products: currentProducts.filter((p) => selectedProductIds.has(p.id)),
-                        })
-                      }
-                    />
-                    <BulkButton
-                      label="Actualizar precios"
-                      disabled={bulkTransition.isPending}
-                      onClick={() => setShowBulkPrices(true)}
-                    />
-                  </>
-                )}
-                {canBulkDelete && (
-                  <Button variant="danger" onClick={bulkDeleteProducts} disabled={bulkTransition.isPending}>
-                    Eliminar
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-          {(bulkNotice || bulkError) && (
-            <div
-              role="status"
-              aria-live="polite"
-              className={`text-sm px-3 py-2 rounded-lg ${
-                bulkError ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
-              }`}
-            >
-              {bulkNotice}
-              {bulkError && <span className="block mt-1 text-xs opacity-80">{bulkError}</span>}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Products grid/list */}
-      {viewMode === 'grid' ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {isLoading ? (
-            Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="border border-gray-200 overflow-hidden animate-pulse">
-                <div className="aspect-square bg-gray-100"></div>
-                <div className="p-4 space-y-2">
-                  <div className="h-3 bg-gray-100 rounded w-1/3"></div>
-                  <div className="h-4 bg-gray-100 rounded w-full"></div>
-                  <div className="h-3 bg-gray-100 rounded w-1/2"></div>
-                </div>
-              </div>
-            ))
-          ) : currentProducts.length === 0 ? (
-            <div className="col-span-full text-center py-12">
-              <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-              <p className="text-gray-500 font-medium">
-                {lifecycleFilter && (products?.length ?? 0) > 0
-                  ? `No hay productos en estado ${LIFECYCLE_STATUS_LABEL[lifecycleFilter]}`
-                  : 'No hay productos'}
-              </p>
-              <p className="text-gray-400 text-sm mt-1">
-                {isCatalogManager
-                  ? 'Crea tu primer producto para comenzar'
-                  : 'No tienes listas asignadas. Solicita acceso a tu administrador.'}
-              </p>
-            </div>
-          ) : (
-            currentProducts.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onEdit={setEditingProduct}
-onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEvent })}
-                onDelete={(id) => deleteProductWithMasterKey.mutate({ id })}
-                onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
-                onAccess={setAccessProduct}
-              />
-            ))
-          )}
-        </div>
-      ) : (
-        <div className="overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                {canBulkManage && (
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+      <SearchFilterBar
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: 'Buscar por nombre, SKU o descripción...',
+          ariaLabel: 'Buscar productos',
+        }}
+        activeFilterCount={productsFilterCount}
+        activeFilterChips={productFilterChips}
+        onClearFilters={clearProductFilters}
+        clearFiltersDisabled={productsFilterCount === 0}
+        layout="sidebar"
+        sidebarSections={[
+          {
+            id: 'categories',
+            label: 'Categorías',
+            content: (
+              <div className="space-y-2 max-h-56 overflow-y-auto">
+                {(categories ?? []).map((cat) => (
+                  <label key={cat.id} htmlFor={`prod-cat-${cat.id}`} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
                     <input
+                      id={`prod-cat-${cat.id}`}
                       type="checkbox"
-                      checked={allPageSelected}
-                      onChange={toggleSelectAllPage}
-                      aria-label="Seleccionar todos los productos de la página"
-                      className="h-4 w-4 accent-security-500 cursor-pointer"
+                      checked={filterChips.categoryIds.includes(cat.id)}
+                      onChange={(e) => {
+                        setFilterChips((prev) => ({
+                          ...prev,
+                          categoryIds: e.target.checked
+                            ? [...prev.categoryIds, cat.id]
+                            : prev.categoryIds.filter((c) => c !== cat.id),
+                        }))
+                      }}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-brand-primary/30 cursor-pointer"
                     />
-                  </th>
-                )}
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Producto</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Categoría</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Marca</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={canBulkManage ? 7 : 6} className="px-6 py-12 text-center text-gray-400">Cargando...</td>
-                </tr>
-              ) : currentProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={canBulkManage ? 7 : 6} className="px-6 py-12 text-center text-gray-400">
-                  {lifecycleFilter && (products?.length ?? 0) > 0
-                    ? `No hay productos en estado ${LIFECYCLE_STATUS_LABEL[lifecycleFilter]}`
-                    : 'No hay productos'}
-                  {!isCatalogManager && !lifecycleFilter && (
-                    <span className="block text-xs mt-1 text-gray-500">
-                      No tienes listas asignadas. Solicita acceso a tu administrador.
-                    </span>
-                  )}
-                </td>
-                </tr>
-              ) : (
-                currentProducts.map((product) => (
-                  <ProductTableRow
-                    key={product.id}
-                    product={product}
-                    onEdit={setEditingProduct}
-onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEvent })}
-                    onDelete={(id) => deleteProductWithMasterKey.mutate({ id })}
-                    selected={selectedProductIds.has(product.id)}
-                    onToggleSelect={canBulkManage ? toggleSelectProduct : undefined}
-                    accessRestrictedIds={accessRestrictedIds}
-                    accessUnavailable={accessUnavailable}
-                    onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
-                    onAccess={setAccessProduct}
-                  />
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+                    {cat.name}
+                  </label>
+                ))}
+              </div>
+            ),
+          },
+          {
+            id: 'brands',
+            label: 'Marcas',
+            content: (
+              <div className="space-y-2 max-h-56 overflow-y-auto">
+                {(brands ?? []).map((brand) => (
+                  <label key={brand.id} htmlFor={`prod-brand-${brand.id}`} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      id={`prod-brand-${brand.id}`}
+                      type="checkbox"
+                      checked={filterChips.brandIds.includes(brand.id)}
+                      onChange={(e) => {
+                        setFilterChips((prev) => ({
+                          ...prev,
+                          brandIds: e.target.checked
+                            ? [...prev.brandIds, brand.id]
+                            : prev.brandIds.filter((b) => b !== brand.id),
+                        }))
+                      }}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-brand-primary/30 cursor-pointer"
+                    />
+                    {brand.name}
+                  </label>
+                ))}
+              </div>
+            ),
+          },
+          {
+            id: 'lifecycle',
+            label: 'Estado',
+            content: (
+              <div className="space-y-2">
+                {LIFECYCLE_FILTER_OPTIONS.map((status) => (
+                  <label key={status} htmlFor={`prod-state-${status}`} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      id={`prod-state-${status}`}
+                      type="checkbox"
+                      checked={filterChips.lifecycleStatuses.includes(status)}
+                      onChange={(e) => {
+                        setFilterChips((prev) => ({
+                          ...prev,
+                          lifecycleStatuses: e.target.checked
+                            ? [...prev.lifecycleStatuses, status]
+                            : prev.lifecycleStatuses.filter((s) => s !== status),
+                        }))
+                      }}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-brand-primary/30 cursor-pointer"
+                    />
+                    {LIFECYCLE_STATUS_LABEL[status]}
+                  </label>
+                ))}
+              </div>
+            ),
+          },
+        ]}
+        content={
+          <>
+            {/* View controls */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2.5 rounded-lg border transition-colors ${
+                    viewMode === 'grid'
+                      ? 'bg-security-500 text-white border-security-500'
+                      : 'bg-white text-neutral-500 border-neutral-300 hover:bg-neutral-50'
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-2.5 rounded-lg border transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-security-500 text-white border-security-500'
+                      : 'bg-white text-neutral-500 border-neutral-300 hover:bg-neutral-50'
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                </button>
+              </div>
+              <ProductPagination
+                page={page}
+                totalPages={totalPages}
+                total={total}
+                pageSize={pageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+                onPageChange={setPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size)
+                  setPage(1)
+                }}
+              />
+            </div>
 
-      {/* Pagination */}
-      {total > 0 && (
-        <ProductPagination
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          pageSize={pageSize}
-          pageSizeOptions={PAGE_SIZE_OPTIONS}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size)
-            setPage(1)
-          }}
-        />
-      )}
+            {canBulkManage && (selectedProductIds.size > 0 || bulkNotice || bulkError) && (
+              <div className="px-4 py-3 bg-white rounded-xl border border-neutral-200 space-y-2">
+                {selectedProductIds.size > 0 && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-medium text-neutral-600">{selectedProductIds.size} seleccionado(s)</span>
+                    <button
+                      onClick={() => {
+                        setSelectedProductIds(new Set())
+                        setBulkNotice(null)
+                        setBulkError(null)
+                      }}
+                      className="text-sm text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+                    >
+                      Limpiar selección
+                    </button>
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                      {canBulkManage && (
+                        <>
+                          <BulkButton label="Publicar" disabled={bulkTransition.isPending || !bulkAvailability.publish} onClick={() => handleBulkClick('publish')} />
+                          <BulkButton label="Despublicar" disabled={bulkTransition.isPending || !bulkAvailability.unpublish} onClick={() => handleBulkClick('unpublish')} />
+                          <BulkButton label="Archivar" disabled={bulkTransition.isPending || !bulkAvailability.archive} onClick={() => handleBulkClick('archive')} />
+                          <BulkButton label="Restaurar" disabled={bulkTransition.isPending || !bulkAvailability.restore} onClick={() => handleBulkClick('restore')} />
+                          <BulkButton
+                            label="Mover categoría"
+                            disabled={bulkTransition.isPending}
+                            onClick={() =>
+                              setMoveCategoryTarget({
+                                type: 'bulk',
+                                products: currentProducts.filter((p) => selectedProductIds.has(p.id)),
+                              })
+                            }
+                          />
+                          <BulkButton
+                            label="Actualizar precios"
+                            disabled={bulkTransition.isPending}
+                            onClick={() => setShowBulkPrices(true)}
+                          />
+                        </>
+                      )}
+                      {canBulkDelete && (
+                        <Button variant="danger" onClick={bulkDeleteProducts} disabled={bulkTransition.isPending}>
+                          Eliminar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {(bulkNotice || bulkError) && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className={`text-sm px-3 py-2 rounded-lg ${
+                      bulkError ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
+                    }`}
+                  >
+                    {bulkNotice}
+                    {bulkError && <span className="block mt-1 text-xs opacity-80">{bulkError}</span>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Products grid/list */}
+            {viewMode === 'grid' ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {isLoading ? (
+                  Array.from({ length: 10 }).map((_, i) => (
+                    <div key={i} className="border border-gray-200 overflow-hidden animate-pulse">
+                      <div className="aspect-square bg-gray-100"></div>
+                      <div className="p-4 space-y-2">
+                        <div className="h-3 bg-gray-100 rounded w-1/3"></div>
+                        <div className="h-4 bg-gray-100 rounded w-full"></div>
+                        <div className="h-3 bg-gray-100 rounded w-1/2"></div>
+                      </div>
+                    </div>
+                  ))
+                ) : currentProducts.length === 0 ? (
+                  <div className="col-span-full text-center py-12">
+                    <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                    <p className="text-gray-500 font-medium">
+                      {filterChips.lifecycleStatuses.length > 0 && (products?.length ?? 0) > 0
+                        ? `No hay productos en estado ${filterChips.lifecycleStatuses.map(s => LIFECYCLE_STATUS_LABEL[s as LifecycleStatus]).join(', ')}`
+                        : 'No hay productos'}
+                    </p>
+                    <p className="text-gray-400 text-sm mt-1">
+                      {isCatalogManager
+                        ? 'Crea tu primer producto para comenzar'
+                        : 'No tienes listas asignadas. Solicita acceso a tu administrador.'}
+                    </p>
+                  </div>
+                ) : (
+                  currentProducts.map((product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      onEdit={setEditingProduct}
+onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEvent })}
+                      onDelete={(id) => deleteProductWithMasterKey.mutate({ id })}
+                      onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
+                      onAccess={setAccessProduct}
+                    />
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {canBulkManage && (
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          <input
+                            type="checkbox"
+                            checked={allPageSelected}
+                            onChange={toggleSelectAllPage}
+                            aria-label="Seleccionar todos los productos de la página"
+                            className="h-4 w-4 accent-security-500 cursor-pointer"
+                          />
+                        </th>
+                      )}
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Producto</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Categoría</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Marca</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Estado</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={canBulkManage ? 7 : 6} className="px-6 py-12 text-center text-gray-400">Cargando...</td>
+                      </tr>
+                    ) : currentProducts.length === 0 ? (
+                      <tr>
+                        <td colSpan={canBulkManage ? 7 : 6} className="px-6 py-12 text-center text-gray-400">
+                        {filterChips.lifecycleStatuses.length > 0 && (products?.length ?? 0) > 0
+                          ? `No hay productos en estado ${filterChips.lifecycleStatuses.map(s => LIFECYCLE_STATUS_LABEL[s as LifecycleStatus]).join(', ')}`
+                          : 'No hay productos'}
+                        {!isCatalogManager && filterChips.lifecycleStatuses.length === 0 && (
+                          <span className="block text-xs mt-1 text-gray-500">
+                            No tienes listas asignadas. Solicita acceso a tu administrador.
+                          </span>
+                        )}
+                      </td>
+                      </tr>
+                    ) : (
+                      currentProducts.map((product) => (
+                        <ProductTableRow
+                          key={product.id}
+                          product={product}
+                          onEdit={setEditingProduct}
+onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEvent })}
+                          onDelete={(id) => deleteProductWithMasterKey.mutate({ id })}
+                          selected={selectedProductIds.has(product.id)}
+                          onToggleSelect={canBulkManage ? toggleSelectProduct : undefined}
+                          accessRestrictedIds={accessRestrictedIds}
+                          accessUnavailable={accessUnavailable}
+                          onMoveCategory={(p) => setMoveCategoryTarget({ type: 'single', product: p })}
+                          onAccess={setAccessProduct}
+                        />
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination */}
+            {total > 0 && (
+              <ProductPagination
+                page={page}
+                totalPages={totalPages}
+                total={total}
+                pageSize={pageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+                onPageChange={setPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size)
+                  setPage(1)
+                }}
+              />
+            )}
+          </>
+        }
+      />
 
       {/* Modal */}
       {(showCreateModal || editingProduct) && (
@@ -582,8 +665,8 @@ onTransition={(event) => transitionProduct.mutate({ event: event as LifecycleEve
           listas={listas}
           onConfirm={(listaId) => {
             setCreateListaId(listaId)
-            setShowListaSelector(false)
             setShowCreateModal(true)
+            setShowListaSelector(false)
           }}
           onClose={() => setShowListaSelector(false)}
         />
@@ -807,5 +890,3 @@ function ListaSelectorModal({
     </div>
   )
 }
-
-

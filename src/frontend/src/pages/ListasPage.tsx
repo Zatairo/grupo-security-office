@@ -23,6 +23,7 @@ import { getApiErrorMessage } from '../lib/apiError'
 import { formatDate } from '../lib/format'
 import { Button } from '../components/ui'
 import { ProductPagination } from '../components/ProductPagination'
+import { SearchFilterBar, type SearchFilterChip } from '../components/filters/SearchFilterBar'
 import { fetchUsers, type UserListItem } from '../services/users.service'
 import ImportWizard from '../features/products/import/components/ImportWizard'
 import { hasPersistedImportState } from '../features/products/import/store/import.store'
@@ -201,6 +202,49 @@ export default function ListasPage() {
   useEffect(() => {
     setPage(1)
   }, [search, activeFilter, expiryFilter, typeFilter, indicatorFilter, productCountFilter, updateFilter, expiryDateFilter])
+
+  const listFilterCount =
+    (activeFilter !== 'all' ? 1 : 0) +
+    (expiryFilter !== 'all' ? 1 : 0) +
+    (typeFilter !== 'all' ? 1 : 0) +
+    (indicatorFilter !== 'all' ? 1 : 0) +
+    (productCountFilter !== 'all' ? 1 : 0) +
+    (updateFilter !== 'all' ? 1 : 0) +
+    (expiryDateFilter !== 'all' ? 1 : 0)
+  const hasActiveListFilters = listFilterCount > 0
+
+  const clearListFilters = () => {
+    setActiveFilter('all')
+    setExpiryFilter('all')
+    setTypeFilter('all')
+    setIndicatorFilter('all')
+    setProductCountFilter('all')
+    setUpdateFilter('all')
+    setExpiryDateFilter('all')
+  }
+
+  const listFilterChips: SearchFilterChip[] = []
+  if (activeFilter === true) listFilterChips.push({ id: 'state-active', label: 'Estado: Activas', onRemove: () => setActiveFilter('all') })
+  if (activeFilter === false) listFilterChips.push({ id: 'state-inactive', label: 'Estado: Inactivas', onRemove: () => setActiveFilter('all') })
+  if (expiryFilter === 'active') listFilterChips.push({ id: 'exp-active', label: 'Vigencia: Vigentes', onRemove: () => setExpiryFilter('all') })
+  if (expiryFilter === 'expiring') listFilterChips.push({ id: 'exp-expiring', label: 'Vigencia: Por vencer (30 días)', onRemove: () => setExpiryFilter('all') })
+  if (expiryFilter === 'expired') listFilterChips.push({ id: 'exp-expired', label: 'Vigencia: Vencidas', onRemove: () => setExpiryFilter('all') })
+  if (typeFilter !== 'all') listFilterChips.push({ id: `type-${typeFilter}`, label: `Tipo: ${typeFilter}`, onRemove: () => setTypeFilter('all') })
+  if (indicatorFilter === 'with_prices') listFilterChips.push({ id: 'ind-with', label: 'Indicador: Con precios', onRemove: () => setIndicatorFilter('all') })
+  if (indicatorFilter === 'no_prices') listFilterChips.push({ id: 'ind-nop', label: 'Indicador: Sin precios', onRemove: () => setIndicatorFilter('all') })
+  if (indicatorFilter === 'no_stock') listFilterChips.push({ id: 'ind-stock', label: 'Indicador: Sin stock', onRemove: () => setIndicatorFilter('all') })
+  if (productCountFilter === 'zero') listFilterChips.push({ id: 'cnt-zero', label: 'Productos: Sin productos', onRemove: () => setProductCountFilter('all') })
+  if (productCountFilter === 'low') listFilterChips.push({ id: 'cnt-low', label: 'Productos: 1-10', onRemove: () => setProductCountFilter('all') })
+  if (productCountFilter === 'mid') listFilterChips.push({ id: 'cnt-mid', label: 'Productos: 11-50', onRemove: () => setProductCountFilter('all') })
+  if (productCountFilter === 'high') listFilterChips.push({ id: 'cnt-high', label: 'Productos: Más de 50', onRemove: () => setProductCountFilter('all') })
+  if (updateFilter === '7d') listFilterChips.push({ id: 'upd-7d', label: 'Actualización: 7 días', onRemove: () => setUpdateFilter('all') })
+  if (updateFilter === '30d') listFilterChips.push({ id: 'upd-30d', label: 'Actualización: 30 días', onRemove: () => setUpdateFilter('all') })
+  if (updateFilter === 'older') listFilterChips.push({ id: 'upd-older', label: 'Actualización: Sin cambios recientes', onRemove: () => setUpdateFilter('all') })
+  if (expiryDateFilter === 'with_expiry') listFilterChips.push({ id: 'expd-with', label: 'Fecha final: Con vencimiento', onRemove: () => setExpiryDateFilter('all') })
+  if (expiryDateFilter === 'no_expiry') listFilterChips.push({ id: 'expd-no', label: 'Fecha final: Sin vencimiento', onRemove: () => setExpiryDateFilter('all') })
+
+  const selectFieldClass =
+    'w-full px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white'
 
   const toggleMutation = useMutation({
     mutationFn: (lista: Lista) => toggleListaActive(lista.id, !lista.isActive),
@@ -412,386 +456,439 @@ export default function ListasPage() {
         </div>
       </div>
 
-      <div className="flex flex-col xl:flex-row gap-3">
-        <div className="relative flex-1">
-          <input
-            type="text"
-            placeholder="Buscar por nombre o código..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm"
-          />
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="flex gap-1.5 bg-neutral-100 rounded-lg p-1 text-xs font-medium text-neutral-600">
-            <button
-              onClick={() => setActiveFilter('all')}
-              className={`px-3 py-1.5 rounded ${activeFilter === 'all' ? 'bg-white shadow text-neutral-800' : ''}`}
-            >
-              Todas
-            </button>
-            <button
-              onClick={() => setActiveFilter(true)}
-              className={`px-3 py-1.5 rounded ${activeFilter === true ? 'bg-white shadow text-neutral-800' : ''}`}
-            >
-              Activas
-            </button>
-            <button
-              onClick={() => setActiveFilter(false)}
-              className={`px-3 py-1.5 rounded ${activeFilter === false ? 'bg-white shadow text-neutral-800' : ''}`}
-            >
-              Inactivas
-            </button>
-          </div>
-          <div className="flex gap-1.5 bg-neutral-100 rounded-lg p-1 text-xs font-medium text-neutral-600">
-            {([
-              { key: 'all', label: 'Vigencia: todas' },
-              { key: 'active', label: 'Vigentes' },
-              { key: 'expiring', label: 'Por vencer (30d)' },
-              { key: 'expired', label: 'Vencidas' },
-            ] as const).map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setExpiryFilter(f.key)}
-                className={`px-3 py-1.5 rounded ${expiryFilter === f.key ? 'bg-white shadow text-neutral-800' : ''}`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
-            aria-label="Filtrar por tipo"
-          >
-            <option value="all">Todos los tipos</option>
-            {LISTA_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-          <select
-            value={indicatorFilter}
-            onChange={(e) => setIndicatorFilter(e.target.value as typeof indicatorFilter)}
-            className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
-            aria-label="Filtrar por indicador"
-          >
-            <option value="all">Todos los indicadores</option>
-            <option value="with_prices">Con precios</option>
-            <option value="no_prices">Sin precios</option>
-            <option value="no_stock">Sin stock</option>
-          </select>
-          <select
-            value={productCountFilter}
-            onChange={(e) => setProductCountFilter(e.target.value as ProductCountFilter)}
-            className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
-            aria-label="Filtrar por cantidad de productos"
-          >
-            <option value="all">Cualquier cantidad</option>
-            <option value="zero">Sin productos</option>
-            <option value="low">1-10 productos</option>
-            <option value="mid">11-50 productos</option>
-            <option value="high">Más de 50</option>
-          </select>
-          <select
-            value={updateFilter}
-            onChange={(e) => setUpdateFilter(e.target.value as UpdateFilter)}
-            className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
-            aria-label="Filtrar por última actualización"
-          >
-            <option value="all">Cualquier actualización</option>
-            <option value="7d">Actualizadas (7 días)</option>
-            <option value="30d">Actualizadas (30 días)</option>
-            <option value="older">Sin cambios recientes</option>
-          </select>
-          <select
-            value={expiryDateFilter}
-            onChange={(e) => setExpiryDateFilter(e.target.value as ExpiryDateFilter)}
-            className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
-            aria-label="Filtrar por vigencia definida"
-          >
-            <option value="all">Cualquier vigencia</option>
-            <option value="with_expiry">Con fecha de vencimiento</option>
-            <option value="no_expiry">Sin fecha de vencimiento</option>
-          </select>
-        </div>
-      </div>
+      <SearchFilterBar
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: 'Buscar por nombre o código...',
+          ariaLabel: 'Buscar listas',
+        }}
+        activeFilterCount={listFilterCount}
+        activeFilterChips={listFilterChips}
+        onClearFilters={clearListFilters}
+        clearFiltersDisabled={listFilterCount === 0}
+        layout="sidebar"
+        sidebarSections={[
+          {
+            id: 'categories',
+            label: 'Estado',
+            content: (
+              <fieldset>
+                <legend className="text-sm font-medium text-neutral-800 mb-2">Estado</legend>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="lista-estado"
+                      checked={activeFilter === 'all'}
+                      onChange={() => setActiveFilter('all')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Todas
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="lista-estado"
+                      checked={activeFilter === true}
+                      onChange={() => setActiveFilter(true)}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Activas
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="lista-estado"
+                      checked={activeFilter === false}
+                      onChange={() => setActiveFilter(false)}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Inactivas
+                  </label>
+                </div>
+              </fieldset>
+            ),
+          },
+          {
+            id: 'brands',
+            label: 'Estado de vigencia',
+            content: (
+              <fieldset>
+                <legend className="text-sm font-medium text-neutral-800 mb-2">Estado de vigencia</legend>
+                <p className="text-xs text-neutral-500 mb-2">Clasifica según el estado calculado de la vigencia.</p>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="lista-vigencia"
+                      checked={expiryFilter === 'all'}
+                      onChange={() => setExpiryFilter('all')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Todas
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="lista-vigencia"
+                      checked={expiryFilter === 'active'}
+                      onChange={() => setExpiryFilter('active')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Vigentes
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="lista-vigencia"
+                      checked={expiryFilter === 'expiring'}
+                      onChange={() => setExpiryFilter('expiring')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Por vencer (30 días)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="lista-vigencia"
+                      checked={expiryFilter === 'expired'}
+                      onChange={() => setExpiryFilter('expired')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Vencidas
+                  </label>
+                </div>
+              </fieldset>
+            ),
+          },
+          {
+            id: 'lifecycle',
+            label: 'Filtros adicionales',
+            content: (
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label htmlFor="lista-type" className="block text-sm font-medium text-neutral-800 mb-1.5">Tipo de lista</label>
+                  <select id="lista-type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={selectFieldClass}>
+                    <option value="all">Todos los tipos</option>
+                    {LISTA_TYPES.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="lista-indicator" className="block text-sm font-medium text-neutral-800 mb-1.5">Indicador de productos</label>
+                  <select id="lista-indicator" value={indicatorFilter} onChange={(e) => setIndicatorFilter(e.target.value as typeof indicatorFilter)} className={selectFieldClass}>
+                    <option value="all">Todos los indicadores</option>
+                    <option value="with_prices">Con precios</option>
+                    <option value="no_prices">Sin precios</option>
+                    <option value="no_stock">Sin stock</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="lista-count" className="block text-sm font-medium text-neutral-800 mb-1.5">Cantidad de productos</label>
+                  <select id="lista-count" value={productCountFilter} onChange={(e) => setProductCountFilter(e.target.value as ProductCountFilter)} className={selectFieldClass}>
+                    <option value="all">Cualquier cantidad</option>
+                    <option value="zero">Sin productos</option>
+                    <option value="low">1-10 productos</option>
+                    <option value="mid">11-50 productos</option>
+                    <option value="high">Más de 50</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="lista-update" className="block text-sm font-medium text-neutral-800 mb-1.5">Última actualización</label>
+                  <select id="lista-update" value={updateFilter} onChange={(e) => setUpdateFilter(e.target.value as UpdateFilter)} className={selectFieldClass}>
+                    <option value="all">Cualquier actualización</option>
+                    <option value="7d">Actualizadas (7 días)</option>
+                    <option value="30d">Actualizadas (30 días)</option>
+                    <option value="older">Sin cambios recientes</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="lista-expirydate" className="block text-sm font-medium text-neutral-800 mb-1.5">Fecha de vencimiento</label>
+                  <select id="lista-expirydate" value={expiryDateFilter} onChange={(e) => setExpiryDateFilter(e.target.value as ExpiryDateFilter)} className={selectFieldClass}>
+                    <option value="all">Cualquier vigencia</option>
+                    <option value="with_expiry">Con fecha de vencimiento</option>
+                    <option value="no_expiry">Sin fecha de vencimiento</option>
+                  </select>
+                  <p className="text-xs text-neutral-500 mt-1">Indica si la lista tiene una fecha final de vigencia definida.</p>
+                </div>
+              </div>
+            ),
+          },
+        ]}
+        content={
+          <>
+            {actionError && (
+              <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
+                <span className="flex-1">{actionError}</span>
+                <button onClick={() => setActionError(null)} className="p-0.5 rounded hover:bg-red-100/60" aria-label="Cerrar" />
+              </div>
+            )}
 
-      {actionError && (
-        <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
-          <span className="flex-1">{actionError}</span>
-          <button onClick={() => setActionError(null)} className="p-0.5 rounded hover:bg-red-100/60" aria-label="Cerrar" />
-        </div>
-      )}
+            {actionNotice && (
+              <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-emerald-50 border-emerald-200 text-emerald-800" role="status">
+                <span className="flex-1">{actionNotice}</span>
+                <button onClick={() => setActionNotice(null)} className="p-0.5 rounded hover:bg-emerald-100/60" aria-label="Cerrar" />
+              </div>
+            )}
 
-      {actionNotice && (
-        <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-emerald-50 border-emerald-200 text-emerald-800" role="status">
-          <span className="flex-1">{actionNotice}</span>
-          <button onClick={() => setActionNotice(null)} className="p-0.5 rounded hover:bg-emerald-100/60" aria-label="Cerrar" />
-        </div>
-      )}
+            <p className="text-sm text-neutral-500">
+              {isLoading ? 'Cargando listas...' : `${filteredCount} resultado(s)`}
+            </p>
 
-      <p className="text-sm text-neutral-500">
-        {isLoading ? 'Cargando listas...' : `${filteredCount} resultado(s)`}
-      </p>
+            {listError && (
+              <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
+                <span className="flex-1">{listError}</span>
+              </div>
+            )}
 
-      {listError && (
-        <div className="flex items-start gap-3 p-3.5 rounded-lg border text-sm bg-red-50 border-red-200 text-red-800" role="alert">
-          <span className="flex-1">{listError}</span>
-        </div>
-      )}
-
-      {canManageListas() && filtered.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-white rounded-xl border border-neutral-200">
-          <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
-            <input
-              ref={selectAllRef}
-              type="checkbox"
-              checked={allFilteredSelected}
-              onChange={toggleSelectAll}
-              className="h-4 w-4 accent-[var(--color-primary)] cursor-pointer"
-              aria-label="Seleccionar todas las Listas filtradas"
-            />
-            Seleccionar todas las filtradas
-          </label>
-          {selectedIds.length > 0 && (
-            <>
-              <span className="text-sm font-medium text-neutral-600">{selectedIds.length} seleccionada(s)</span>
-              <button
-                onClick={() => setSelectedIds([])}
-                className="text-sm text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
-              >
-                Limpiar selección
-              </button>
-              <div className="flex flex-wrap gap-2 ml-auto">
-                <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('activate', 'Activar')}>
-                  Activar
-                </Button>
-                <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('deactivate', 'Desactivar')}>
-                  Desactivar
-                </Button>
-                <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('archive', 'Archivar')}>
-                  Archivar
-                </Button>
-                <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('restore', 'Restaurar')}>
-                  Restaurar
-                </Button>
-                {canDeleteLista() && (
-                  <Button variant="danger" disabled={deleteMutation.isPending} onClick={runBatchDelete}>
-                    Eliminar
-                  </Button>
+            {canManageListas() && filtered.length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-white rounded-xl border border-neutral-200">
+                <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 accent-[var(--color-primary)] cursor-pointer"
+                    aria-label="Seleccionar todas las Listas filtradas"
+                  />
+                  Seleccionar todas las filtradas
+                </label>
+                {selectedIds.length > 0 && (
+                  <>
+                    <span className="text-sm font-medium text-neutral-600">{selectedIds.length} seleccionada(s)</span>
+                    <button
+                      onClick={() => setSelectedIds([])}
+                      className="text-sm text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+                    >
+                      Limpiar selección
+                    </button>
+                    <div className="flex flex-wrap gap-2 ml-auto">
+                      <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('activate', 'Activar')}>
+                        Activar
+                      </Button>
+                      <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('deactivate', 'Desactivar')}>
+                        Desactivar
+                      </Button>
+                      <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('archive', 'Archivar')}>
+                        Archivar
+                      </Button>
+                      <Button variant="secondary" disabled={batchMutation.isPending} onClick={() => runBatch('restore', 'Restaurar')}>
+                        Restaurar
+                      </Button>
+                      {canDeleteLista() && (
+                        <Button variant="danger" disabled={deleteMutation.isPending} onClick={runBatchDelete}>
+                          Eliminar
+                        </Button>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
-            </>
-          )}
-        </div>
-      )}
+            )}
 
-      <div className="space-y-3">
-        {isLoading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-xl border border-neutral-200 p-5 animate-pulse">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-neutral-100 rounded w-1/3"></div>
-                    <div className="h-3 bg-neutral-100 rounded w-1/4"></div>
-                  </div>
-                  <div className="h-6 bg-neutral-100 rounded-full w-20"></div>
-                </div>
-              </div>
-            ))
-          : filtered.length === 0 ? (
-            <div className="bg-white rounded-xl border border-neutral-200 text-center py-16">
-              <svg className="w-16 h-16 text-neutral-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <p className="text-neutral-500 font-medium">No tienes Listas asignadas</p>
-              <p className="text-neutral-400 text-sm mt-1">
-                {search || activeFilter !== 'all'
-                  ? 'Intenta ajustar los filtros de búsqueda.'
-                  : canManageListas()
-                    ? 'No tienes permisos para ver ninguna Lista. Contacta al administrador.'
-                    : 'No tienes listas asignadas. Solicita acceso a tu administrador.'}
-              </p>
-            </div>
-          ) : (
-            paged.map((lista) => (
-              <div
-                key={lista.id}
-                className="bg-white rounded-xl border border-neutral-200 p-5 hover:shadow-lg transition-shadow"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3 min-w-0">
-                    {canManageListas() && (
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(lista.id)}
-                        onChange={() => toggleSelect(lista.id)}
-                        className="mt-3 h-4 w-4 accent-[var(--color-primary)] cursor-pointer"
-                        aria-label={`Seleccionar ${lista.name}`}
-                      />
-                    )}
-                    <div className="w-12 h-12 bg-[var(--color-primary-bg-subtle)] rounded-xl flex items-center justify-center text-[var(--color-primary)] flex-shrink-0">
-                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                      </svg>
+            <div className="space-y-3">
+              {isLoading
+                ? Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="bg-white rounded-xl border border-neutral-200 p-5 animate-pulse">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-neutral-100 rounded w-1/3"></div>
+                          <div className="h-3 bg-neutral-100 rounded w-1/4"></div>
+                        </div>
+                        <div className="h-6 bg-neutral-100 rounded-full w-20"></div>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <Link
-                        to={`/commercial/lists/${lista.id}`}
-                        className="text-sm font-semibold text-gray-900 hover:text-[var(--color-primary)] focus:outline-none"
-                      >
-                        {lista.name}
-                      </Link>
-                      <p className="text-xs text-neutral-400 font-mono">{lista.code} · {lista.currency}</p>
-                      {(lista.isExpiringSoon || lista.isExpired) && typeof lista.daysUntilExpiry === 'number' && (
-                        <p className={`text-xs font-medium mt-0.5 ${lista.isExpired ? 'text-red-600' : 'text-amber-600'}`}>
-                          {lista.isExpired
-                            ? `Vencida hace ${Math.abs(lista.daysUntilExpiry)} día(s)`
-                            : `Vence en ${lista.daysUntilExpiry} día(s)`}
-                        </p>
-                      )}
-                      {lista.description && (
-                        <p className="text-sm text-neutral-500 mt-1 line-clamp-2">{lista.description}</p>
-                      )}
-                    </div>
+                  ))
+                : filtered.length === 0 ? (
+                  <div className="bg-white rounded-xl border border-neutral-200 text-center py-16">
+                    <svg className="w-16 h-16 text-neutral-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <p className="text-neutral-500 font-medium">No tienes Listas asignadas</p>
+                    <p className="text-neutral-400 text-sm mt-1">
+                      {search || hasActiveListFilters
+                        ? 'Intenta ajustar los filtros de búsqueda.'
+                        : canManageListas()
+                          ? 'No tienes permisos para ver ninguna Lista. Contacta al administrador.'
+                          : 'No tienes listas asignadas. Solicita acceso a tu administrador.'}
+                    </p>
                   </div>
-                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                    <StatusBadge isActive={lista.isActive} archived={lista.archivedAt !== null} />
-                    {lista.isExpiringSoon && (
-                      <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
-                        Por vencer
-                      </span>
-                    )}
-                    {lista.isExpired && (
-                      <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
-                        Vencida
-                      </span>
-                    )}
-                    <span className="text-xs text-neutral-500 whitespace-nowrap">
-                      {countOf(lista)} producto(s)
-                    </span>
-                    {(() => {
-                      const expiry = nextExpiryLabel(lista)
-                      return (
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full whitespace-nowrap ${EXPIRY_TONE_CLASSES[expiry.tone]}`}
-                          title="Próxima vigencia"
-                        >
-                          {expiry.label}
-                        </span>
-                      )
-                    })()}
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-neutral-100 flex flex-wrap items-center justify-between gap-3">
-                  <span className="text-xs text-neutral-400">Actualizado: {formatDate(lista.updatedAt)}</span>
-                  <div className="flex items-center gap-1">
-                    {canManageListas() && !lista.archivedAt && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setActionError(null)
-                            duplicateMutation.mutate(lista.id)
-                          }}
-                          className="p-2 text-neutral-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
-                          title="Duplicar Lista"
-                          aria-label="Duplicar Lista"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setActionError(null)
-                            setEditingLista(lista)
-                            setShowCreateModal(true)
-                          }}
-                          className="p-2 text-neutral-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
-                          title="Editar Lista"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setActionError(null)
-                            toggleMutation.mutate(lista)
-                          }}
-                          className="p-2 text-neutral-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
-                          title={lista.isActive ? 'Desactivar Lista' : 'Activar Lista'}
-                          aria-label={lista.isActive ? 'Desactivar Lista' : 'Activar Lista'}
-                        >
-                          {lista.isActive ? (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636M12 3a9 9 0 019 9 9 9 0 01-9 9 9 9 0 01-9-9 9 9 0 019-9z" />
-                            </svg>
-                          ) : (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z" />
-                            </svg>
+                ) : (
+                  paged.map((lista) => (
+                    <div
+                      key={lista.id}
+                      className="bg-white rounded-xl border border-neutral-200 p-5 hover:shadow-lg transition-shadow"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3 min-w-0">
+                          {canManageListas() && (
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(lista.id)}
+                              onChange={() => toggleSelect(lista.id)}
+                              className="mt-3 h-4 w-4 accent-[var(--color-primary)] cursor-pointer"
+                              aria-label={`Seleccionar ${lista.name}`}
+                            />
                           )}
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (window.confirm('¿Archivar esta Lista? No se podrán crear productos nuevos mientras esté archivada.')) {
-                              archiveMutation.mutate(lista.id)
-                            }
-                          }}
-                          className="p-2 text-neutral-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
-                          title="Archivar Lista"
-                          aria-label="Archivar Lista"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 7v10a2 2 0 002 2h10a2 2 0 012-2V7M9 12h6" />
-                          </svg>
-                        </button>
-                      </>
-                    )}
-                    {canManageListas() && lista.archivedAt && (
-                      <button
-                        onClick={() => restoreMutation.mutate(lista.id)}
-                        className="p-2 text-neutral-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
-                        title="Restaurar Lista"
-                        aria-label="Restaurar Lista"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h4l3-3m0 0l-3 3m3-3v10a2 2 0 002 2h1.07m-7.43 0a2 2 0 01-.58-1.4l-2-8M7 17h10a2 2 0 012 2v2" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-      </div>
+                          <div className="w-12 h-12 bg-[var(--color-primary-bg-subtle)] rounded-xl flex items-center justify-center text-[var(--color-primary)] flex-shrink-0">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                          </div>
+                          <div className="min-w-0">
+                            <Link
+                              to={`/commercial/lists/${lista.id}`}
+                              className="text-sm font-semibold text-gray-900 hover:text-[var(--color-primary)] focus:outline-none"
+                            >
+                              {lista.name}
+                            </Link>
+                            <p className="text-xs text-neutral-400 font-mono">{lista.code} · {lista.currency}</p>
+                            {(lista.isExpiringSoon || lista.isExpired) && typeof lista.daysUntilExpiry === 'number' && (
+                              <p className={`text-xs font-medium mt-0.5 ${lista.isExpired ? 'text-red-600' : 'text-amber-600'}`}>
+                                {lista.isExpired
+                                  ? `Vencida hace ${Math.abs(lista.daysUntilExpiry)} día(s)`
+                                  : `Vence en ${lista.daysUntilExpiry} día(s)`}
+                              </p>
+                            )}
+                            {lista.description && (
+                              <p className="text-sm text-neutral-500 mt-1 line-clamp-2">{lista.description}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                          <StatusBadge isActive={lista.isActive} archived={lista.archivedAt !== null} />
+                          {lista.isExpiringSoon && (
+                            <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                              Por vencer
+                            </span>
+                          )}
+                          {lista.isExpired && (
+                            <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                              Vencida
+                            </span>
+                          )}
+                          <span className="text-xs text-neutral-500 whitespace-nowrap">
+                            {countOf(lista)} producto(s)
+                          </span>
+                          {(() => {
+                            const expiry = nextExpiryLabel(lista)
+                            return (
+                              <span
+                                className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full whitespace-nowrap ${EXPIRY_TONE_CLASSES[expiry.tone]}`}
+                                title="Próxima vigencia"
+                              >
+                                {expiry.label}
+                              </span>
+                            )
+                          })()}
+                        </div>
+                      </div>
 
-      {filtered.length > 0 && (
-        <ProductPagination
-          page={currentPage}
-          totalPages={totalPages}
-          total={filtered.length}
-          pageSize={pageSize}
-          pageSizeOptions={PAGE_SIZE_OPTIONS}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size)
-            setPage(1)
-          }}
-        />
-      )}
+                      <div className="mt-4 pt-3 border-t border-neutral-100 flex flex-wrap items-center justify-between gap-3">
+                        <span className="text-xs text-neutral-400">Actualizado: {formatDate(lista.updatedAt)}</span>
+                        <div className="flex items-center gap-1">
+                          {canManageListas() && !lista.archivedAt && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setActionError(null)
+                                  duplicateMutation.mutate(lista.id)
+                                }}
+                                className="p-2 text-neutral-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                                title="Duplicar Lista"
+                                aria-label="Duplicar Lista"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setActionError(null)
+                                  setEditingLista(lista)
+                                  setShowCreateModal(true)
+                                }}
+                                className="p-2 text-neutral-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                                title="Editar Lista"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setActionError(null)
+                                  toggleMutation.mutate(lista)
+                                }}
+                                className="p-2 text-neutral-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                                title={lista.isActive ? 'Desactivar Lista' : 'Activar Lista'}
+                                aria-label={lista.isActive ? 'Desactivar Lista' : 'Activar Lista'}
+                              >
+                                {lista.isActive ? (
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636M12 3a9 9 0 019 9 9 9 0 01-9 9 9 9 0 01-9-9 9 9 0 019-9z" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z" />
+                                  </svg>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (window.confirm('¿Archivar esta Lista? No se podrán crear productos nuevos mientras esté archivada.')) {
+                                    archiveMutation.mutate(lista.id)
+                                  }
+                                }}
+                                className="p-2 text-neutral-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                                title="Archivar Lista"
+                                aria-label="Archivar Lista"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 7v10a2 2 0 002 2h10a2 2 0 012-2V7M9 12h6" />
+                                </svg>
+                              </button>
+                            </>
+                          )}
+                          {canManageListas() && lista.archivedAt && (
+                            <button
+                              onClick={() => restoreMutation.mutate(lista.id)}
+                              className="p-2 text-neutral-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                              title="Restaurar Lista"
+                              aria-label="Restaurar Lista"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h4l3-3m0 0l-3 3m3-3v10a2 2 0 002 2h1.07m-7.43 0a2 2 0 01-.58-1.4l-2-8M7 17h10a2 2 0 012 2v2" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+            </div>
+
+            {filtered.length > 0 && (
+              <ProductPagination
+                page={currentPage}
+                totalPages={totalPages}
+                total={filtered.length}
+                pageSize={pageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+                onPageChange={setPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size)
+                  setPage(1)
+                }}
+              />
+            )}
+          </>
+        }
+      />
 
       {(showCreateModal || editingLista) && (
         <ListasFormModal

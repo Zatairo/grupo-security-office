@@ -15,6 +15,7 @@ import { canDeleteSuppliers, hasPermission, hasRole } from '../lib/rbac'
 import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
 import { Button } from '../components/ui'
+import { SearchFilterBar } from '../components/filters/SearchFilterBar'
 
 const CRITERIA_SPECS = [
   { key: 'calidad', label: 'Calidad', weight: 0.4 },
@@ -131,6 +132,14 @@ export default function SuppliersPage() {
     },
   })
 
+  const statusFilterChips = status === ''
+    ? []
+    : [{
+        id: 'status',
+        label: status === 'active' ? 'Estado: Activos' : 'Estado: Inactivos',
+        onRemove: () => setStatus(''),
+      }]
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -164,149 +173,177 @@ export default function SuppliersPage() {
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <input
-            type="text"
-            placeholder="Buscar por nombre, NIT o categoría..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm"
-          />
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </div>
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className="px-3 py-2.5 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-focus-ring)] focus:border-[var(--color-primary)] text-sm bg-white"
-          aria-label="Filtrar por estado"
-        >
-          <option value="">Todos los estados</option>
-          <option value="active">Activo</option>
-          <option value="inactive">Inactivo</option>
-        </select>
-      </div>
-
-      <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-neutral-200">
-            <thead className="bg-neutral-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Proveedor</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">NIT</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Categoría</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Rating</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Evaluaciones</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-neutral-600 uppercase tracking-wider">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-200">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-neutral-400">Cargando...</td>
-                </tr>
-              ) : !suppliers || suppliers.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-neutral-400">
-                    {search || status
-                      ? 'No hay proveedores que coincidan con los filtros'
-                      : 'No hay proveedores registrados'}
-                  </td>
-                </tr>
-              ) : (
-                suppliers.map((supplier) => (
-                  <tr key={supplier.id} className="hover:bg-neutral-50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-medium text-neutral-800">{supplier.name}</td>
-                    <td className="px-6 py-4 text-xs font-mono text-neutral-500">{supplier.nit ?? '—'}</td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">{supplier.category ?? '—'}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${
-                        supplier.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {supplier.status === 'active' ? 'Activo' : 'Inactivo'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${ratingColor(supplier.rating)}`}>
-                        {supplier.rating === null || supplier.rating === undefined ? 'Sin rating' : `${supplier.rating}/100`}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">{supplier.evaluationCount ?? 0}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-1">
-                        {canWrite && (
-                          <button
-                            onClick={() => {
-                              setActionError(null)
-                              setEvaluating(supplier)
-                            }}
-                            className={actionButtonClass}
-                            title="Evaluar proveedor"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                            </svg>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            setActionError(null)
-                            setHistoryFor(supplier)
-                          }}
-                          className={actionButtonClass}
-                          title="Ver historial de evaluaciones"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        {canWrite && (
-                          <button
-                            onClick={() => {
-                              setActionError(null)
-                              setEditing(supplier)
-                              setShowModal(true)
-                            }}
-                            className={actionButtonClass}
-                            title="Editar proveedor"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`¿Eliminar el proveedor "${supplier.name}"?`)) {
-                                removeMutation.mutate(supplier.id)
-                              }
-                            }}
-                            className={dangerButtonClass}
-                            title="Eliminar proveedor"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                    </td>
+      <SearchFilterBar
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: 'Buscar por nombre, NIT o categoría...',
+          ariaLabel: 'Buscar proveedores',
+        }}
+        activeFilterCount={status === '' ? 0 : 1}
+        activeFilterChips={statusFilterChips}
+        onClearFilters={() => setStatus('')}
+        clearFiltersDisabled={status === ''}
+        layout="sidebar"
+        sidebarSections={[
+          {
+            id: 'categories',
+            label: 'Estado',
+            content: (
+              <fieldset>
+                <legend className="text-sm font-medium text-neutral-800 mb-2">Estado</legend>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="proveedor-estado"
+                      checked={status === ''}
+                      onChange={() => setStatus('')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Todos los estados
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="proveedor-estado"
+                      checked={status === 'active'}
+                      onChange={() => setStatus('active')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Activos
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="proveedor-estado"
+                      checked={status === 'inactive'}
+                      onChange={() => setStatus('inactive')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Inactivos
+                  </label>
+                </div>
+              </fieldset>
+            ),
+          },
+        ]}
+        content={
+          <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-neutral-200">
+                <thead className="bg-neutral-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Proveedor</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">NIT</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Categoría</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Estado</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Rating</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">Evaluaciones</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold text-neutral-600 uppercase tracking-wider">Acciones</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody className="divide-y divide-neutral-200">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-neutral-400">Cargando...</td>
+                    </tr>
+                  ) : !suppliers || suppliers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-neutral-400">
+                        {search || status
+                          ? 'No hay proveedores que coincidan con los filtros'
+                          : 'No hay proveedores registrados'}
+                      </td>
+                    </tr>
+                  ) : (
+                    suppliers.map((supplier) => (
+                      <tr key={supplier.id} className="hover:bg-neutral-50 transition-colors">
+                        <td className="px-6 py-4 text-sm font-medium text-neutral-800">{supplier.name}</td>
+                        <td className="px-6 py-4 text-xs font-mono text-neutral-500">{supplier.nit ?? '—'}</td>
+                        <td className="px-6 py-4 text-sm text-neutral-600">{supplier.category ?? '—'}</td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${
+                            supplier.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {supplier.status === 'active' ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${ratingColor(supplier.rating)}`}>
+                            {supplier.rating === null || supplier.rating === undefined ? 'Sin rating' : `${supplier.rating}/100`}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-neutral-600">{supplier.evaluationCount ?? 0}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-1">
+                            {canWrite && (
+                              <button
+                                onClick={() => {
+                                  setActionError(null)
+                                  setEvaluating(supplier)
+                                }}
+                                className={actionButtonClass}
+                                title="Evaluar proveedor"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                </svg>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                setActionError(null)
+                                setHistoryFor(supplier)
+                              }}
+                              className={actionButtonClass}
+                              title="Ver historial de evaluaciones"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
+                            {canWrite && (
+                              <button
+                                onClick={() => {
+                                  setActionError(null)
+                                  setEditing(supplier)
+                                  setShowModal(true)
+                                }}
+                                className={actionButtonClass}
+                                title="Editar proveedor"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`¿Eliminar el proveedor "${supplier.name}"?`)) {
+                                    removeMutation.mutate(supplier.id)
+                                  }
+                                }}
+                                className={dangerButtonClass}
+                                title="Eliminar proveedor"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+      />
 
       {showModal && (
         <SupplierModal
