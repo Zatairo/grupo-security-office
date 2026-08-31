@@ -55,6 +55,7 @@ import {
   type Price,
 } from '../services/prices.service'
 import { ProductAccessModal } from '../features/products/components/ProductAccessModal'
+import { SpecEditor, deserializeSpecFields, serializeSpecFields } from '../features/products/components/SpecEditor'
 
 type DetailTab =
   | 'info'
@@ -146,92 +147,6 @@ function ComingSoon({ title, message }: { title: string; message: string }) {
       </svg>
       <p className="text-sm font-medium text-neutral-600">{title}</p>
       <p className="text-xs text-neutral-400 mt-1">{message}</p>
-    </div>
-  )
-}
-
-// ------------------------------ Editor clave-valor ------------------------------
-function KeyValueEditor({
-  value,
-  onChange,
-  valuePlaceholder,
-}: {
-  value: Record<string, unknown>
-  onChange: (next: Record<string, unknown>) => void
-  valuePlaceholder?: string
-}) {
-  const entries = Object.entries(value)
-  const keys = entries.map(([k]) => k)
-  const hasEmptyKey = keys.some((k) => k.trim() === '')
-  const hasDuplicates = new Set(keys).size !== keys.length
-  const invalid = hasEmptyKey || hasDuplicates
-
-  const updateRowKey = (oldKey: string, newKey: string) => {
-    if (newKey === oldKey) return
-    const next: Record<string, unknown> = {}
-    for (const [k, v] of entries) {
-      if (k === oldKey) next[newKey] = v
-      else next[k] = v
-    }
-    onChange(next)
-  }
-
-  const updateRowValue = (key: string, raw: string) => {
-    onChange({ ...value, [key]: raw })
-  }
-
-  const removeRow = (key: string) => {
-    const next = { ...value }
-    delete next[key]
-    onChange(next)
-  }
-
-  return (
-    <div className="space-y-2">
-      {invalid && (
-        <Alert variant="warning">
-          Las claves no pueden estar vacías ni repetirse. Corrige antes de guardar.
-        </Alert>
-      )}
-      {entries.length === 0 && (
-        <p className="text-sm text-neutral-400 py-4 text-center">Sin atributos definidos.</p>
-      )}
-      {entries.map(([key, val], idx) => (
-        <div key={idx} className="flex gap-2 items-center">
-          <input
-            value={key}
-            onChange={(e) => updateRowKey(key, e.target.value)}
-            className={`${inputClass} w-2/5`}
-            placeholder="clave"
-            aria-label="Clave del atributo"
-          />
-          <input
-            value={String(val ?? '')}
-            onChange={(e) => updateRowValue(key, e.target.value)}
-            className={`${inputClass} flex-1`}
-            placeholder={valuePlaceholder ?? 'valor'}
-            aria-label="Valor del atributo"
-          />
-          <button
-            type="button"
-            onClick={() => removeRow(key)}
-            className="p-2 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-            title="Eliminar atributo"
-            aria-label="Eliminar atributo"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={() => onChange({ ...value, '': '' })}
-        className="px-3 py-2 border border-dashed border-neutral-300 rounded-lg text-sm text-neutral-500 hover:text-[var(--color-primary)] hover:border-[var(--color-primary)] transition-colors"
-      >
-        + Agregar atributo
-      </button>
     </div>
   )
 }
@@ -651,30 +566,19 @@ function InfoTab({
 // ------------------------------ Atributos ------------------------------
 function AtributosTab({ product }: { product: Product }) {
   const queryClient = useQueryClient()
-  const [specs, setSpecs] = useState<Record<string, unknown>>(() =>
-    product.technicalSpecs && typeof product.technicalSpecs === 'object'
-      ? { ...(product.technicalSpecs as Record<string, unknown>) }
-      : {}
+  const [specs, setSpecs] = useState(() =>
+    deserializeSpecFields(product.technicalSpecs ?? null)
   )
-  const [extra, setExtra] = useState<Record<string, unknown>>(() =>
-    product.extraAttributes && typeof product.extraAttributes === 'object'
-      ? { ...(product.extraAttributes as Record<string, unknown>) }
-      : {}
+  const [extra, setExtra] = useState(() =>
+    deserializeSpecFields(product.extraAttributes ?? null)
   )
   const [error, setError] = useState('')
-
-  const specsValid =
-    Object.keys(specs).every((k) => k.trim() !== '') &&
-    new Set(Object.keys(specs)).size === Object.keys(specs).length
-  const extraValid =
-    Object.keys(extra).every((k) => k.trim() !== '') &&
-    new Set(Object.keys(extra)).size === Object.keys(extra).length
 
   const mutation = useMutation({
     mutationFn: () =>
       api.put(`/products/${product.id}`, {
-        technicalSpecs: Object.keys(specs).length ? specs : {},
-        extraAttributes: Object.keys(extra).length ? extra : {},
+        technicalSpecs: Object.keys(serializeSpecFields(specs)).length ? serializeSpecFields(specs) : {},
+        extraAttributes: Object.keys(serializeSpecFields(extra)).length ? serializeSpecFields(extra) : {},
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product', product.id] })
@@ -682,10 +586,6 @@ function AtributosTab({ product }: { product: Product }) {
   })
 
   const handleSave = () => {
-    if (!specsValid || !extraValid) {
-      setError('Corrige las claves vacías o duplicadas antes de guardar.')
-      return
-    }
     setError('')
     mutation.mutate()
   }
@@ -701,15 +601,18 @@ function AtributosTab({ product }: { product: Product }) {
         <Alert variant="success">Atributos guardados correctamente.</Alert>
       )}
 
-      <div>
-        <h3 className="text-sm font-semibold text-neutral-700 mb-2">Especificaciones técnicas</h3>
-        <KeyValueEditor value={specs} onChange={setSpecs} />
-      </div>
-
-      <div>
-        <h3 className="text-sm font-semibold text-neutral-700 mb-2">Atributos extra</h3>
-        <KeyValueEditor value={extra} onChange={setExtra} />
-      </div>
+      <SpecEditor
+        fields={specs}
+        onChange={setSpecs}
+        label="Especificaciones técnicas"
+        placeholder="Agrega especificaciones como resolución, lente, visión nocturna, etc."
+      />
+      <SpecEditor
+        fields={extra}
+        onChange={setExtra}
+        label="Atributos extra"
+        placeholder="Agrega atributos como garantía, peso, color, etc."
+      />
 
       <p className="text-xs text-neutral-400">
         Los atributos se serializan como JSON en los campos technicalSpecs y extraAttributes del
@@ -762,6 +665,7 @@ function AltEditor({
 function ImagesTab({ product }: { product: Product }) {
   const queryClient = useQueryClient()
   const images = product.images ?? []
+  const IMAGE_TYPES = ['PORTADA', 'LOGO', 'PRINCIPAL', 'COMPLEMENTARIA', 'EXTRA'] as const
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['product', product.id] })
@@ -785,6 +689,12 @@ function ImagesTab({ product }: { product: Product }) {
   const updateAlt = useMutation({
     mutationFn: ({ imageId, alt }: { imageId: string; alt: string }) =>
       updateProductImageAlt(imageId, alt),
+    onSuccess: refresh,
+  })
+
+  const updateImageType = useMutation({
+    mutationFn: ({ imageId, type }: { imageId: string; type: string }) =>
+      api.patch(`/products/images/${imageId}`, { type }),
     onSuccess: refresh,
   })
 
@@ -835,31 +745,47 @@ function ImagesTab({ product }: { product: Product }) {
               <div className="p-2 space-y-1.5">
                 <AltEditor image={img} onSave={(alt) => updateAlt.mutate({ imageId: img.id, alt })} />
                 <div className="flex items-center justify-between">
-                  <button
-                    type="button"
-                    disabled={img.isPrimary || primary.isPending}
-                    onClick={() => primary.mutate(img.id)}
-                    className={`text-xs font-medium rounded px-2 py-1 transition-colors ${
-                      img.isPrimary
-                        ? 'bg-[var(--color-primary-bg-subtle)] text-[var(--color-primary)] cursor-default'
-                        : 'text-neutral-500 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)]'
-                    }`}
-                  >
-                    {img.isPrimary ? 'Principal' : 'Hacer principal'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={remove.isPending}
-                    onClick={() => {
-                      if (confirm('¿Eliminar esta imagen?')) remove.mutate(img.id)
-                    }}
-                    className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                    title="Eliminar"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                  <span className="text-xs px-2 py-0.5 bg-neutral-100 text-neutral-600 rounded-full font-medium">
+                    {img.type ?? 'PRINCIPAL'}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={img.type ?? 'PRINCIPAL'}
+                      onChange={(e) => updateImageType.mutate({ imageId: img.id, type: e.target.value })}
+                      disabled={updateImageType.isPending}
+                      className="text-xs px-2 py-1 border border-neutral-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
+                      aria-label="Cambiar tipo de imagen"
+                    >
+                      {IMAGE_TYPES.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={img.isPrimary || primary.isPending}
+                      onClick={() => primary.mutate(img.id)}
+                      className={`text-xs font-medium rounded px-2 py-1 transition-colors ${
+                        img.isPrimary
+                          ? 'bg-[var(--color-primary-bg-subtle)] text-[var(--color-primary)] cursor-default'
+                          : 'text-neutral-500 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)]'
+                      }`}
+                    >
+                      {img.isPrimary ? 'Principal' : 'Hacer principal'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={remove.isPending}
+                      onClick={() => {
+                        if (confirm('¿Eliminar esta imagen?')) remove.mutate(img.id)
+                      }}
+                      className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                      title="Eliminar"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -3,6 +3,7 @@ export interface ProductImage {
   url: string
   isPrimary: boolean
   alt?: string | null
+  type?: string
 }
 
 export interface ProductDocument {

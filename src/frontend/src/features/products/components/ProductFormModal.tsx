@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../../services/api'
 import type { Product, Category, Brand, ProductPayload } from '../types/product.types'
 import { usePriceLists } from '../hooks/usePriceLists'
+import { SpecEditor, type SpecField, deserializeSpecFields, serializeSpecFields } from './SpecEditor'
 
 interface ProductFormModalProps {
   product: Product | null
@@ -43,21 +44,6 @@ function seedPrices(product: Product | null): Record<string, PriceRow> {
   return map
 }
 
-function parseJsonField(
-  raw: string
-): { ok: true; value: Record<string, unknown> | null } | { ok: false; error: string } {
-  if (!raw.trim()) return { ok: true, value: null }
-  try {
-    const parsed = JSON.parse(raw)
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return { ok: true, value: parsed as Record<string, unknown> }
-    }
-    return { ok: false, error: 'Debe ser un objeto JSON, ej: {"clave": "valor"}' }
-  } catch {
-    return { ok: false, error: 'JSON inválido' }
-  }
-}
-
 export default function ProductFormModal({
   product,
   categories,
@@ -68,7 +54,7 @@ export default function ProductFormModal({
 }: ProductFormModalProps) {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<Tab>('basic')
-  const [form, setForm] = useState({
+const [form, setForm] = useState({
     sku: product?.sku || '',
     name: product?.name || '',
     description: product?.description || '',
@@ -77,11 +63,11 @@ export default function ProductFormModal({
     isActive: product?.isActive ?? true,
     isVisible: product?.isVisible ?? false,
   })
-  const [technicalSpecsText, setTechnicalSpecsText] = useState(() =>
-    product?.technicalSpecs ? JSON.stringify(product.technicalSpecs, null, 2) : ''
+  const [technicalSpecs, setTechnicalSpecs] = useState<SpecField[]>(() =>
+    deserializeSpecFields(product?.technicalSpecs ?? null)
   )
-  const [extraAttributesText, setExtraAttributesText] = useState(() =>
-    product?.extraAttributes ? JSON.stringify(product.extraAttributes, null, 2) : ''
+  const [extraAttributes, setExtraAttributes] = useState<SpecField[]>(() =>
+    deserializeSpecFields(product?.extraAttributes ?? null)
   )
   const [specErrors, setSpecErrors] = useState<{
     technicalSpecs?: string
@@ -113,10 +99,11 @@ export default function ProductFormModal({
   }
 
   const uploadImage = useMutation({
-    mutationFn: ({ file, isPrimary }: { file: File; isPrimary: boolean }) => {
+    mutationFn: ({ file, isPrimary, type }: { file: File; isPrimary: boolean; type: string }) => {
       const fd = new FormData()
       fd.append('file', file, file.name)
       if (isPrimary) fd.append('isPrimary', 'true')
+      fd.append('type', type)
       return api.post(`/products/${product!.id}/images`, fd)
     },
     onSuccess: refreshProduct,
@@ -132,6 +119,15 @@ export default function ProductFormModal({
       api.patch(`/products/images/${imageId}`, { isPrimary: true }),
     onSuccess: refreshProduct,
   })
+
+  const updateImageType = useMutation({
+    mutationFn: ({ imageId, type }: { imageId: string; type: string }) =>
+      api.patch(`/products/images/${imageId}`, { type }),
+    onSuccess: refreshProduct,
+  })
+
+  const [uploadImageType, setUploadImageType] = useState<'PORTADA' | 'LOGO' | 'PRINCIPAL' | 'COMPLEMENTARIA' | 'EXTRA'>('PRINCIPAL')
+  const IMAGE_TYPES = ['PORTADA', 'LOGO', 'PRINCIPAL', 'COMPLEMENTARIA', 'EXTRA'] as const
 
   const [clave, setClave] = useState('')
   const [claveRequired, setClaveRequired] = useState(false)
@@ -184,16 +180,29 @@ export default function ProductFormModal({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    const tech = parseJsonField(technicalSpecsText)
-    const extra = parseJsonField(extraAttributesText)
-    if (!tech.ok || !extra.ok) {
+
+    // Validate specs - check for empty keys, duplicates, and SELECT without options
+    const validateSpecs = (fields: SpecField[], fieldName: string): string | undefined => {
+      const keys = fields.map((f) => f.key.trim())
+      if (keys.some((k) => !k)) return `${fieldName}: las claves no pueden estar vacías`
+      if (new Set(keys).size !== keys.length) return `${fieldName}: claves duplicadas`
+      const selectWithoutOptions = fields.find((f) => f.type === 'SELECT' && (!f.options || f.options.length === 0))
+      if (selectWithoutOptions) return `${fieldName}: las listas SELECT requieren opciones`
+      return undefined
+    }
+
+    const techError = validateSpecs(technicalSpecs, 'Especificaciones técnicas')
+    const extraError = validateSpecs(extraAttributes, 'Atributos extra')
+    if (techError || extraError) {
       setSpecErrors({
-        technicalSpecs: tech.ok ? undefined : tech.error,
-        extraAttributes: extra.ok ? undefined : extra.error,
+        technicalSpecs: techError,
+        extraAttributes: extraError,
       })
       setTab('specs')
       return
     }
+    setSpecErrors({})
+
     if (!product && !form.categoryId) {
       setCategoryError('La categoría es obligatoria para crear un producto.')
       setTab('basic')
@@ -220,8 +229,8 @@ export default function ProductFormModal({
       brandId: form.brandId,
       ...(product ? {} : { isActive: form.isActive }),
       ...(product ? {} : { isVisible: form.isVisible }),
-      technicalSpecs: tech.value ?? undefined,
-      extraAttributes: extra.value ?? undefined,
+      technicalSpecs: Object.keys(serializeSpecFields(technicalSpecs)).length ? serializeSpecFields(technicalSpecs) : undefined,
+      extraAttributes: Object.keys(serializeSpecFields(extraAttributes)).length ? serializeSpecFields(extraAttributes) : undefined,
       prices: buildPricesPayload(),
     }
     if (!product) {
@@ -398,43 +407,21 @@ export default function ProductFormModal({
             )}
 
             {tab === 'specs' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Especificaciones técnicas (JSON)
-                  </label>
-                  <textarea
-                    value={technicalSpecsText}
-                    onChange={(e) => {
-                      setTechnicalSpecsText(e.target.value)
-                      setSpecErrors((prev) => ({ ...prev, technicalSpecs: undefined }))
-                    }}
-                    className={`${inputClass} font-mono resize-y`}
-                    rows={7}
-                    placeholder='{"resolucion": "4MP", "lente": "2.8mm", "vision_nocturna": "30m"}'
-                  />
-                  {specErrors.technicalSpecs && (
-                    <p className="text-xs text-red-600 mt-1">{specErrors.technicalSpecs}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Atributos extra (JSON)
-                  </label>
-                  <textarea
-                    value={extraAttributesText}
-                    onChange={(e) => {
-                      setExtraAttributesText(e.target.value)
-                      setSpecErrors((prev) => ({ ...prev, extraAttributes: undefined }))
-                    }}
-                    className={`${inputClass} font-mono resize-y`}
-                    rows={7}
-                    placeholder='{"garantia": "12 meses", "peso": "0.8kg"}'
-                  />
-                  {specErrors.extraAttributes && (
-                    <p className="text-xs text-red-600 mt-1">{specErrors.extraAttributes}</p>
-                  )}
-                </div>
+              <div className="space-y-6">
+                <SpecEditor
+                  fields={technicalSpecs}
+                  onChange={setTechnicalSpecs}
+                  label="Especificaciones técnicas"
+                  placeholder="Agrega especificaciones como resolución, lente, visión nocturna, etc."
+                  validationError={specErrors.technicalSpecs}
+                />
+                <SpecEditor
+                  fields={extraAttributes}
+                  onChange={setExtraAttributes}
+                  label="Atributos extra"
+                  placeholder="Agrega atributos como garantía, peso, color, etc."
+                  validationError={specErrors.extraAttributes}
+                />
               </div>
             )}
 
@@ -599,25 +586,37 @@ export default function ProductFormModal({
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <label className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors">
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                      </svg>
-                      Subir imagen
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        disabled={uploadImage.isPending}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file instanceof File) {
-                            uploadImage.mutate({ file, isPrimary: images.length === 0 })
-                          }
-                          e.target.value = ''
-                        }}
-                      />
-                    </label>
+                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                      <label className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors flex-1 sm:flex-none">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        Subir imagen
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={uploadImage.isPending}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file instanceof File) {
+                              uploadImage.mutate({ file, isPrimary: images.length === 0, type: uploadImageType })
+                            }
+                            e.target.value = ''
+                          }}
+                        />
+                      </label>
+                      <select
+                        value={uploadImageType}
+                        onChange={(e) => setUploadImageType(e.target.value as typeof uploadImageType)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-sm bg-white min-w-[160px]"
+                        aria-label="Tipo de imagen"
+                      >
+                        {IMAGE_TYPES.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
                     {uploadImage.isPending && (
                       <p className="text-xs text-gray-400">Subiendo imagen...</p>
                     )}
@@ -637,33 +636,49 @@ export default function ProductFormModal({
                               className="w-full h-28 object-cover rounded-md bg-gray-100"
                             />
                             <div className="flex items-center justify-between mt-2">
-                              <button
-                                type="button"
-                                disabled={img.isPrimary || markPrimary.isPending}
-                                onClick={() => markPrimary.mutate(img.id)}
-                                className={`text-xs font-medium rounded px-2 py-1 transition-colors ${
-                                  img.isPrimary
-                                    ? 'bg-security-100 text-security-700 cursor-default'
-                                    : 'text-gray-500 hover:text-security-600 hover:bg-security-50'
-                                }`}
-                              >
-                                {img.isPrimary ? 'Principal' : 'Marcar principal'}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={deleteImage.isPending}
-                                onClick={() => {
-                                  if (confirm('¿Eliminar esta imagen?')) {
-                                    deleteImage.mutate(img.id)
-                                  }
-                                }}
-                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                                title="Eliminar"
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
+                              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full font-medium">
+                                {img.type ?? 'PRINCIPAL'}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={img.type ?? 'PRINCIPAL'}
+                                  onChange={(e) => updateImageType.mutate({ imageId: img.id, type: e.target.value })}
+                                  disabled={updateImageType.isPending}
+                                  className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                                  aria-label="Cambiar tipo de imagen"
+                                >
+                                  {IMAGE_TYPES.map((t) => (
+                                    <option key={t} value={t}>{t}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  disabled={img.isPrimary || markPrimary.isPending}
+                                  onClick={() => markPrimary.mutate(img.id)}
+                                  className={`text-xs font-medium rounded px-2 py-1 transition-colors ${
+                                    img.isPrimary
+                                      ? 'bg-security-100 text-security-700 cursor-default'
+                                      : 'text-gray-500 hover:text-security-600 hover:bg-security-50'
+                                  }`}
+                                >
+                                  {img.isPrimary ? 'Principal' : 'Marcar principal'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={deleteImage.isPending}
+                                  onClick={() => {
+                                    if (confirm('¿Eliminar esta imagen?')) {
+                                      deleteImage.mutate(img.id)
+                                    }
+                                  }}
+                                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                  title="Eliminar"
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))}
