@@ -21,6 +21,7 @@ import { UnpublishProductDto } from './dto/unpublish-product.dto';
 import { PriceInputDto } from './dto/price-input.dto';
 import { TransitionProductDto } from './dto/transition.dto';
 import { DeleteProductDto } from './dto/delete-product.dto';
+import { SpecFieldDto, SpecsDto, SpecType } from './dto/spec-field.dto';
 import {
   LifecycleStatus,
   LifecycleEvent,
@@ -67,25 +68,128 @@ export class ProductsService {
    */
   private lifecycleTickRunning = false;
 
-  private trendingCache: { data: any; timestamp: number } | null = null;
+  private trendingCache: Map<string, { data: any; meta: { total: number; take?: number }; timestamp: number }> = new Map();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutos de expiración de caché
 
   /**
    * Cachea productos tendencia por 5 minutos
    */
-  private getFromTrendingCache(): any | null {
-    if (!this.trendingCache) return null;
-    if (Date.now() - this.trendingCache.timestamp > this.CACHE_TTL) {
-      this.trendingCache = null;
+  private getFromTrendingCache(key?: string): { data: any; meta: { total: number; take?: number } } | null {
+    const cacheKey = key || 'default';
+    const cached = this.trendingCache.get(cacheKey);
+    if (!cached) return null;
+    if (Date.now() - cached.timestamp > this.CACHE_TTL) {
+      this.trendingCache.delete(cacheKey);
+      return null;
     }
-    return this.trendingCache?.data || null;
+    return { data: cached.data, meta: cached.meta };
   }
 
-  private setTrendingCache(data: any): void {
-    this.trendingCache = {
-      data,
+  private setTrendingCache(key: string, data: { data: any; meta: { total: number; take?: number } }): void {
+    this.trendingCache.set(key, {
+      ...data,
       timestamp: Date.now(),
-    };
+    });
+  }
+
+  /**
+   * Convierte un objeto legacy (Record<string, any>) al nuevo formato SpecFieldDto[].
+   * Cada key-value se convierte en un SpecFieldDto con type TEXT por defecto.
+   */
+  private migrateLegacySpecs(legacy: Record<string, any> | undefined): SpecFieldDto[] | undefined {
+    if (!legacy || typeof legacy !== 'object') return undefined;
+    return Object.entries(legacy).map(([key, value]) => ({
+      key,
+      type: SpecType.TEXT,
+      value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+    }));
+  }
+
+  /**
+   * Valida un array de SpecFieldDto según las reglas de tipo:
+   * - TEXT: value debe ser string
+   * - NUMBER: value debe ser number
+   * - BOOLEAN: value debe ser boolean
+   * - SELECT: value debe ser string y estar en options (si options existe)
+   * - UNIT: value debe ser string, unit es obligatorio
+   * - required: si true, value no puede ser null/undefined/empty string
+   */
+  private validateSpecs(specs: SpecFieldDto[] | undefined, fieldName: string): void {
+    if (!specs || !specs.length) return;
+
+    for (const spec of specs) {
+      // Validar required
+      if (spec.required && (spec.value === undefined || spec.value === null || spec.value === '')) {
+        throw new BadRequestException(`El campo "${spec.key}" en ${fieldName} es obligatorio`);
+      }
+
+      // Validar según type
+      switch (spec.type) {
+        case SpecType.TEXT:
+          if (spec.value !== undefined && spec.value !== null && typeof spec.value !== 'string') {
+            throw new BadRequestException(`El campo "${spec.key}" en ${fieldName} debe ser de tipo TEXT (string)`);
+          }
+          break;
+        case SpecType.NUMBER:
+          if (spec.value !== undefined && spec.value !== null && typeof spec.value !== 'number') {
+            throw new BadRequestException(`El campo "${spec.key}" en ${fieldName} debe ser de tipo NUMBER (number)`);
+          }
+          break;
+        case SpecType.BOOLEAN:
+          if (spec.value !== undefined && spec.value !== null && typeof spec.value !== 'boolean') {
+            throw new BadRequestException(`El campo "${spec.key}" en ${fieldName} debe ser de tipo BOOLEAN (boolean)`);
+          }
+          break;
+        case SpecType.SELECT:
+          if (spec.value !== undefined && spec.value !== null) {
+            if (typeof spec.value !== 'string') {
+              throw new BadRequestException(`El campo "${spec.key}" en ${fieldName} debe ser de tipo SELECT (string)`);
+            }
+            if (spec.options && spec.options.length > 0 && !spec.options.includes(spec.value)) {
+              throw new BadRequestException(`El valor "${spec.value}" para "${spec.key}" en ${fieldName} no está en las opciones permitidas: ${spec.options.join(', ')}`);
+            }
+          }
+          break;
+        case SpecType.UNIT:
+          if (!spec.unit) {
+            throw new BadRequestException(`El campo "${spec.key}" en ${fieldName} de tipo UNIT requiere la propiedad "unit"`);
+          }
+          if (spec.value !== undefined && spec.value !== null && typeof spec.value !== 'string') {
+            throw new BadRequestException(`El campo "${spec.key}" en ${fieldName} debe ser de tipo UNIT (string con unidad)`);
+          }
+          break;
+      }
+    }
+  }
+
+  /**
+   * Prepara specs para guardado en BD: convierte SpecFieldDto[] a JSON serializable
+   * manteniendo la estructura tipada.
+   */
+  private prepareSpecsForStorage(specs: SpecFieldDto[] | undefined): any {
+    if (!specs || !specs.length) return undefined;
+    return specs.map(s => ({
+      key: s.key,
+      type: s.type,
+      unit: s.unit,
+      options: s.options,
+      required: s.required,
+      value: s.value,
+    }));
+  }
+
+  /**
+   * Combina specs nuevos (tipados) con legacy (planos) dando prioridad a los nuevos.
+   * Si vienen specs nuevos, se usan esos; si no, se migran los legacy.
+   */
+  private resolveSpecs(
+    newSpecs: SpecsDto | undefined,
+    legacySpecs: Record<string, any> | undefined,
+  ): SpecFieldDto[] | undefined {
+    if (newSpecs && newSpecs.specs && newSpecs.specs.length > 0) {
+      return newSpecs.specs;
+    }
+    return this.migrateLegacySpecs(legacySpecs);
   }
 
   /**
@@ -120,45 +224,120 @@ export class ProductsService {
     data: any;
     meta: { total: number; take?: number }
   }> {
-    if (params?.forceReload || !this.getFromTrendingCache()) {
+    const cacheKey = `${params?.take || 5}-${params?.categoryId || ''}-${params?.search || ''}`;
+    
+    if (params?.forceReload || !this.getFromTrendingCache(cacheKey)) {
       const take = params?.take || 5;
 
-      const where: Prisma.ProductWhereInput = {
-        isVisible: true,
-        isActive: true,
-        createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-        ...(params?.categoryId && { categoryId: params.categoryId }),
-        ...(params?.search && {
-          OR: [
-            { name: { contains: params.search, mode: 'insensitive' } },
-            { sku: { contains: params.search, mode: 'insensitive' } },
-            { description: { contains: params.search, mode: 'insensitive' } },
-          ],
-        }),
-      };
+      if (params?.search && params.search.trim().length > 2) {
+        // Fuzzy search para trending
+        const searchTerm = params.search.trim();
+        const categoryFilter = params?.categoryId ? `AND "categoryId" = '${params.categoryId}'` : '';
 
-      const [products, total] = await Promise.all([
-        this.prisma.product.findMany({
-          where,
-          take,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            category: { select: { id: true, name: true, slug: true } },
-            brand: { select: { id: true, name: true, slug: true } },
-            images: { where: { isPrimary: true }, take: 1 },
-            prices: { include: { priceList: { select: { id: true, name: true, code: true } } } },
-          },
-        }),
-        this.prisma.product.count({ where }),
-      ]);
+        const whereClause = `WHERE "isVisible" = true AND "isActive" = true AND "createdAt" >= NOW() - INTERVAL '30 days' ${categoryFilter}`;
 
-      this.setTrendingCache({
-        data: products,
-        meta: { total, take },
-      });
+        const countResult = await this.prisma.$queryRawUnsafe<{ count: bigint }[]>(`
+          SELECT COUNT(*)::bigint as count
+          FROM "products"
+          ${whereClause}
+          AND (similarity("name", $1) + similarity("sku", $1) + similarity("description", $1)) > 0.1
+        `, searchTerm);
+        const total = Number(countResult[0]?.count ?? 0);
+
+        const products = await this.prisma.$queryRawUnsafe<any[]>(`
+          SELECT
+            p.*,
+            (similarity(p."name", $1) + similarity(p."sku", $1) + similarity(p."description", $1)) as _similarity
+          FROM "products" p
+          ${whereClause}
+          AND (similarity(p."name", $1) + similarity(p."sku", $1) + similarity(p."description", $1)) > 0.1
+          ORDER BY _similarity DESC
+          LIMIT $2
+        `, searchTerm, take);
+
+        // Fetch related data
+        const productIds = products.map(p => p.id);
+        const [categories, brands, images, prices] = await Promise.all([
+          productIds.length > 0 ? this.prisma.category.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, name: true, slug: true }
+          }) : [],
+          productIds.length > 0 ? this.prisma.brand.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, name: true, slug: true }
+          }) : [],
+          productIds.length > 0 ? this.prisma.productImage.findMany({
+            where: { productId: { in: productIds }, isPrimary: true },
+            select: { productId: true, url: true, alt: true, type: true, isPrimary: true, sortOrder: true }
+          }) : [],
+          productIds.length > 0 ? this.prisma.price.findMany({
+            where: { productId: { in: productIds } },
+            include: { priceList: { select: { id: true, name: true, code: true } } }
+          }) : [],
+        ]);
+
+        const categoryMap = new Map<string, typeof categories[0]>(categories.map(c => [c.id, c] as const));
+        const brandMap = new Map<string, typeof brands[0]>(brands.map(b => [b.id, b] as const));
+        const imageMap = new Map<string, typeof images[0]>(images.map(i => [i.productId, i] as const));
+        const pricesByProduct = new Map<string, typeof prices>();
+        for (const price of prices) {
+          const arr = pricesByProduct.get(price.productId) || [];
+          arr.push(price);
+          pricesByProduct.set(price.productId, arr);
+        }
+
+        const formattedProducts = products.map(p => ({
+          ...p,
+          category: categoryMap.get(p.categoryId) || null,
+          brand: brandMap.get(p.brandId) || null,
+          images: imageMap.get(p.productId) ? [imageMap.get(p.productId)!] : [],
+          prices: pricesByProduct.get(p.productId) || [],
+          _similarity: undefined,
+        }));
+
+        this.setTrendingCache(cacheKey, {
+          data: formattedProducts,
+          meta: { total, take },
+        });
+      } else {
+        // Fallback: búsqueda por contains insensible
+        const where: Prisma.ProductWhereInput = {
+          isVisible: true,
+          isActive: true,
+          createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+          ...(params?.categoryId && { categoryId: params.categoryId }),
+          ...(params?.search && {
+            OR: [
+              { name: { contains: params.search, mode: 'insensitive' } },
+              { sku: { contains: params.search, mode: 'insensitive' } },
+              { description: { contains: params.search, mode: 'insensitive' } },
+            ],
+          }),
+        };
+
+        const [products, total] = await Promise.all([
+          this.prisma.product.findMany({
+            where,
+            take,
+            orderBy: { createdAt: 'desc' },
+            include: {
+              category: { select: { id: true, name: true, slug: true } },
+              brand: { select: { id: true, name: true, slug: true } },
+              images: { where: { isPrimary: true }, take: 1 },
+              prices: { include: { priceList: { select: { id: true, name: true, code: true } } } },
+            },
+          }),
+          this.prisma.product.count({ where }),
+        ]);
+
+        this.setTrendingCache(cacheKey, {
+          data: products,
+          meta: { total, take },
+        });
+      }
     }
 
-    const cached = this.getFromTrendingCache();
+    const cached = this.getFromTrendingCache(cacheKey);
     return {
       data: cached?.data || [],
       meta: cached?.meta || { total: 0, take: params?.take || 5 },
@@ -186,38 +365,119 @@ export class ProductsService {
       allowedListaIds = await this.acl.getAllowedListaIds(ctx.userId, ctx.roles, 'view');
     }
 
-    const where: Prisma.ProductWhereInput = {
-      ...(allowedListaIds !== null && { listaId: { in: allowedListaIds.length ? allowedListaIds : [] } }),
-      ...(search && {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { sku: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } },
-        ],
-      }),
-      ...(categoryId && { categoryId }),
-      ...(brandId && { brandId }),
-      ...(isVisible !== undefined && { isVisible }),
-      ...(isActive !== undefined && { isActive }),
-    };
+    let products: any[];
+    let total: number;
 
-    const [products, total] = await Promise.all([
-      this.prisma.product.findMany({
-        where,
-        skip,
-        take,
-        include: {
-          category: { select: { id: true, name: true, slug: true } },
-          brand: { select: { id: true, name: true, slug: true } },
-          images: { where: { isPrimary: true }, take: 1 },
-          prices: {
-            include: { priceList: { select: { id: true, name: true, code: true } } },
+    if (search && search.trim().length > 2) {
+      // Fuzzy search usando pg_trgm similarity
+      const searchTerm = search.trim();
+      const listaFilter = allowedListaIds !== null
+        ? (allowedListaIds.length > 0 ? `AND "listaId" IN (${allowedListaIds.map(id => `'${id}'`).join(',')})` : `AND "listaId" IS NULL`)
+        : '';
+      const categoryFilter = categoryId ? `AND "categoryId" = '${categoryId}'` : '';
+      const brandFilter = brandId ? `AND "brandId" = '${brandId}'` : '';
+      const isVisibleFilter = isVisible !== undefined ? `AND "isVisible" = ${isVisible}` : '';
+      const isActiveFilter = isActive !== undefined ? `AND "isActive" = ${isActive}` : '';
+
+      const whereClause = `WHERE 1=1 ${listaFilter} ${categoryFilter} ${brandFilter} ${isVisibleFilter} ${isActiveFilter}`;
+
+      // Total count with fuzzy search
+      const countResult = await this.prisma.$queryRawUnsafe<{ count: bigint }[]>(`
+        SELECT COUNT(*)::bigint as count
+        FROM "products"
+        ${whereClause}
+        AND (similarity("name", $1) + similarity("sku", $1) + similarity("description", $1)) > 0.1
+      `, searchTerm);
+      total = Number(countResult[0]?.count ?? 0);
+
+      // Paginated results ordered by similarity desc
+      products = await this.prisma.$queryRawUnsafe<any[]>(`
+        SELECT
+          p.*,
+          (similarity(p."name", $1) + similarity(p."sku", $1) + similarity(p."description", $1)) as _similarity
+        FROM "products" p
+        ${whereClause}
+        AND (similarity(p."name", $1) + similarity(p."sku", $1) + similarity(p."description", $1)) > 0.1
+        ORDER BY _similarity DESC
+        LIMIT $2 OFFSET $3
+      `, searchTerm, take, skip);
+
+      // Fetch related data for each product
+      const productIds = products.map(p => p.id);
+      const [categories, brands, images, prices] = await Promise.all([
+        productIds.length > 0 ? this.prisma.category.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, name: true, slug: true }
+        }) : [],
+        productIds.length > 0 ? this.prisma.brand.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, name: true, slug: true }
+        }) : [],
+        productIds.length > 0 ? this.prisma.productImage.findMany({
+          where: { productId: { in: productIds }, isPrimary: true },
+          select: { productId: true, url: true, alt: true, type: true, isPrimary: true, sortOrder: true }
+        }) : [],
+        productIds.length > 0 ? this.prisma.price.findMany({
+          where: { productId: { in: productIds } },
+          include: { priceList: { select: { id: true, name: true, code: true } } }
+        }) : [],
+      ]);
+
+      const categoryMap = new Map<string, typeof categories[0]>(categories.map(c => [c.id, c] as const));
+      const brandMap = new Map<string, typeof brands[0]>(brands.map(b => [b.id, b] as const));
+      const imageMap = new Map<string, typeof images[0]>(images.map(i => [i.productId, i] as const));
+      const pricesByProduct = new Map<string, typeof prices>();
+      for (const price of prices) {
+        const arr = pricesByProduct.get(price.productId) || [];
+        arr.push(price);
+        pricesByProduct.set(price.productId, arr);
+      }
+
+      products = products.map(p => ({
+        ...p,
+        category: categoryMap.get(p.categoryId) || null,
+        brand: brandMap.get(p.brandId) || null,
+        images: imageMap.get(p.productId) ? [imageMap.get(p.productId)!] : [],
+        prices: pricesByProduct.get(p.productId) || [],
+        _similarity: undefined, // remove internal field
+      }));
+    } else {
+      // Fallback: búsqueda por contains insensible (search ≤ 2 chars o sin search)
+      const where: Prisma.ProductWhereInput = {
+        ...(allowedListaIds !== null && { listaId: { in: allowedListaIds.length ? allowedListaIds : [] } }),
+        ...(search && {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { sku: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+          ],
+        }),
+        ...(categoryId && { categoryId }),
+        ...(brandId && { brandId }),
+        ...(isVisible !== undefined && { isVisible }),
+        ...(isActive !== undefined && { isActive }),
+      };
+
+      const [foundProducts, count] = await Promise.all([
+        this.prisma.product.findMany({
+          where,
+          skip,
+          take,
+          include: {
+            category: { select: { id: true, name: true, slug: true } },
+            brand: { select: { id: true, name: true, slug: true } },
+            images: { where: { isPrimary: true }, take: 1 },
+            prices: {
+              include: { priceList: { select: { id: true, name: true, code: true } } },
+            },
           },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.product.count({ where }),
-    ]);
+          orderBy: { createdAt: 'desc' },
+        }),
+        this.prisma.product.count({ where }),
+      ]);
+      products = foundProducts;
+      total = count;
+    }
 
     // Filtrado por restricción explícita de assignment PRODUCT (checklist 17/31).
     // Si el usuario tiene assignment PRODUCT con isActive=false sobre algún producto,
@@ -315,6 +575,14 @@ export class ProductsService {
 
     await this.validatePriceLists(dto.prices);
 
+    // Resolver y validar specs tipados (nuevo formato) con fallback a legacy
+    const specs = this.resolveSpecs(dto.specs, dto.technicalSpecs);
+    const extraSpecs = this.resolveSpecs(dto.extraSpecs, dto.extraAttributes);
+
+    // Validar specs
+    this.validateSpecs(specs, 'specs');
+    this.validateSpecs(extraSpecs, 'extraSpecs');
+
     // Compatibilidad: toda creación de producto debe quedar asociada a una Lista.
     // Si se envía listaId se valida su existencia; si falta, se asigna LISTA-GENERAL
     // (fallback explícito y documentado para registros legados).  [decisiones 8/14]
@@ -333,8 +601,8 @@ export class ProductsService {
         categoryId: dto.categoryId,
         brandId: dto.brandId,
         listaId: lista.id,
-        technicalSpecs: dto.technicalSpecs,
-        extraAttributes: dto.extraAttributes,
+        technicalSpecs: this.prepareSpecsForStorage(specs),
+        extraAttributes: this.prepareSpecsForStorage(extraSpecs),
         ...(dto.documents !== undefined && { documents: dto.documents }),
         lifecycleStatus: 'DRAFT',
         // Un producto nuevo SIEMPRE nace en DRAFT (isActive=false, isVisible=false).
@@ -399,6 +667,18 @@ export class ProductsService {
 
     await this.validatePriceLists(dto.prices);
 
+    // Resolver y validar specs tipados (nuevo formato) con fallback a legacy
+    const specs = this.resolveSpecs(dto.specs, dto.technicalSpecs);
+    const extraSpecs = this.resolveSpecs(dto.extraSpecs, dto.extraAttributes);
+
+    // Validar specs si se proporcionan
+    if (dto.specs !== undefined || dto.technicalSpecs !== undefined) {
+      this.validateSpecs(specs, 'specs');
+    }
+    if (dto.extraSpecs !== undefined || dto.extraAttributes !== undefined) {
+      this.validateSpecs(extraSpecs, 'extraSpecs');
+    }
+
     const updated = await this.prisma.product.update({
       where: { id },
       data: {
@@ -408,8 +688,12 @@ export class ProductsService {
         ...(dto.categoryId && { categoryId: dto.categoryId }),
         ...(dto.brandId && { brandId: dto.brandId }),
         ...(dto.listaId !== undefined && { listaId }),
-        ...(dto.technicalSpecs !== undefined && { technicalSpecs: dto.technicalSpecs }),
-        ...(dto.extraAttributes !== undefined && { extraAttributes: dto.extraAttributes }),
+        ...(dto.specs !== undefined || dto.technicalSpecs !== undefined
+          ? { technicalSpecs: this.prepareSpecsForStorage(specs) }
+          : {}),
+        ...(dto.extraSpecs !== undefined || dto.extraAttributes !== undefined
+          ? { extraAttributes: this.prepareSpecsForStorage(extraSpecs) }
+          : {}),
         ...(dto.documents !== undefined && { documents: dto.documents }),
       },
       include: {

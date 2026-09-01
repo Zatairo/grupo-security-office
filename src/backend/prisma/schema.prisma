@@ -192,14 +192,23 @@ model Brand {
   @@map("brands")
 }
 
+enum ProductImageType {
+  PORTADA
+  LOGO
+  PRINCIPAL
+  COMPLEMENTARIA
+  EXTRA
+}
+
 model ProductImage {
-  id        String  @id @default(uuid())
+  id        String            @id @default(uuid())
   productId String
-  product   Product @relation(fields: [productId], references: [id])
+  product   Product           @relation(fields: [productId], references: [id])
   url       String
   alt       String?
-  isPrimary Boolean @default(false)
-  sortOrder Int     @default(0)
+  type      ProductImageType  @default(PRINCIPAL)
+  isPrimary Boolean           @default(false)
+  sortOrder Int               @default(0)
 
   @@index([productId])
   @@map("product_images")

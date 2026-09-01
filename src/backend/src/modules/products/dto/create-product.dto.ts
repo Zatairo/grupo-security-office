@@ -1,7 +1,8 @@
-import { IsString, MinLength, IsOptional, IsBoolean, IsObject, IsArray, ValidateNested, IsUUID, IsIn, IsISO8601 } from 'class-validator';
+import { IsString, MinLength, IsOptional, IsBoolean, IsArray, ValidateNested, IsUUID, IsIn, IsISO8601, IsObject } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PriceInputDto } from './price-input.dto';
+import { SpecFieldDto, SpecsDto } from './spec-field.dto';
 
 export class CreateProductDto {
   @ApiProperty({ example: 'DS-2CD2143G2-I' })
@@ -33,15 +34,17 @@ export class CreateProductDto {
   @IsOptional()
   listaId?: string;
 
-  @ApiPropertyOptional({ example: { resolution: '4MP', lens: '2.8mm', nightVision: '30m' } })
-  @IsObject()
+  @ApiPropertyOptional({ type: SpecsDto, description: 'Especificaciones técnicas tipadas (array de SpecFieldDto). Reemplaza a technicalSpecs legacy.' })
   @IsOptional()
-  technicalSpecs?: Record<string, any>;
+  @ValidateNested()
+  @Type(() => SpecsDto)
+  specs?: SpecsDto;
 
-  @ApiPropertyOptional({ example: { garantia: '1 año', origen: 'China', ip: '127.0.0.1' } })
-  @IsObject()
+  @ApiPropertyOptional({ type: SpecsDto, description: 'Atributos extra tipados (array de SpecFieldDto). Reemplaza a extraAttributes legacy.' })
   @IsOptional()
-  extraAttributes?: Record<string, any>;
+  @ValidateNested()
+  @Type(() => SpecsDto)
+  extraSpecs?: SpecsDto;
 
   @ApiPropertyOptional({
     type: [Object],
@@ -61,6 +64,18 @@ export class CreateProductDto {
   @Type(() => PriceInputDto)
   @IsOptional()
   prices?: PriceInputDto[];
+
+  // Compatibilidad legacy: se aceptan technicalSpecs y extraAttributes como objetos planos
+  // y se migran automáticamente a specs/extraSpecs en el servicio.
+  @ApiPropertyOptional({ example: { resolution: '4MP', lens: '2.8mm' }, deprecated: true, description: 'Legacy: usar specs en su lugar.' })
+  @IsObject()
+  @IsOptional()
+  technicalSpecs?: Record<string, any>;
+
+  @ApiPropertyOptional({ example: { garantia: '1 año', origen: 'China' }, deprecated: true, description: 'Legacy: usar extraSpecs en su lugar.' })
+  @IsObject()
+  @IsOptional()
+  extraAttributes?: Record<string, any>;
 
   // Campos legacy de compatibilidad. Un producto SIEMPRE se crea en estado
   // canónico DRAFT con isActive=false e isVisible=false (la FSM es la fuente de

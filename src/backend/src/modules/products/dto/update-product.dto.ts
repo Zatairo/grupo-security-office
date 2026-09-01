@@ -1,7 +1,8 @@
-import { IsString, MinLength, IsOptional, IsObject, IsArray, ValidateNested, IsUUID } from 'class-validator';
+import { IsString, MinLength, IsOptional, IsArray, ValidateNested, IsUUID, IsObject } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PriceInputDto } from './price-input.dto';
+import { SpecFieldDto, SpecsDto } from './spec-field.dto';
 
 export class UpdateProductDto {
   @ApiPropertyOptional({ example: 'DS-2CD2143G2-I-v2' })
@@ -37,15 +38,17 @@ export class UpdateProductDto {
   @IsOptional()
   listaId?: string;
 
-  @ApiPropertyOptional()
-  @IsObject()
+  @ApiPropertyOptional({ type: SpecsDto, description: 'Especificaciones técnicas tipadas (array de SpecFieldDto). Reemplaza a technicalSpecs legacy.' })
   @IsOptional()
-  technicalSpecs?: Record<string, any>;
+  @ValidateNested()
+  @Type(() => SpecsDto)
+  specs?: SpecsDto;
 
-  @ApiPropertyOptional()
-  @IsObject()
+  @ApiPropertyOptional({ type: SpecsDto, description: 'Atributos extra tipados (array de SpecFieldDto). Reemplaza a extraAttributes legacy.' })
   @IsOptional()
-  extraAttributes?: Record<string, any>;
+  @ValidateNested()
+  @Type(() => SpecsDto)
+  extraSpecs?: SpecsDto;
 
   @ApiPropertyOptional({
     type: [Object],
@@ -62,4 +65,16 @@ export class UpdateProductDto {
   @Type(() => PriceInputDto)
   @IsOptional()
   prices?: PriceInputDto[];
+
+  // Compatibilidad legacy: se aceptan technicalSpecs y extraAttributes como objetos planos
+  // y se migran automáticamente a specs/extraSpecs en el servicio.
+  @ApiPropertyOptional({ example: { resolution: '4MP', lens: '2.8mm' }, deprecated: true, description: 'Legacy: usar specs en su lugar.' })
+  @IsObject()
+  @IsOptional()
+  technicalSpecs?: Record<string, any>;
+
+  @ApiPropertyOptional({ example: { garantia: '1 año', origen: 'China' }, deprecated: true, description: 'Legacy: usar extraSpecs en su lugar.' })
+  @IsObject()
+  @IsOptional()
+  extraAttributes?: Record<string, any>;
 }

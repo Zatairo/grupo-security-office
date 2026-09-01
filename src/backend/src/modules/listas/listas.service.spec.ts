@@ -1,4 +1,4 @@
-import { createPrismaMock } from '../../__test__/mocks/prisma.mock';
+﻿import { createPrismaMock } from '../../__test__/mocks/prisma.mock';
 import { randomUUID } from 'crypto';
 
 import { Test, TestingModule } from '@nestjs/testing';
@@ -16,14 +16,14 @@ type AnyMock = ReturnType<typeof createPrismaMock>;
 
 const ADMIN = { userId: 'admin-1', roles: ['Super Admin'] };
 const VIEWER = { userId: 'pepito-1', roles: ['Operador'] }; // view sobre LISTA-GENERAL
-// Fixtures de NIVEL: rol no-admin (deny-by-default de la política nueva), el nivel lo
-// dan los assignments del map. La política Admin Comercial se testea en su propio describe.
+// Fixtures de NIVEL: rol no-admin (deny-by-default de la polÃ­tica nueva), el nivel lo
+// dan los assignments del map. La polÃ­tica Admin Comercial se testea en su propio describe.
 const EDITER = { userId: 'editer-1', roles: ['Operador'] }; // edit sobre LISTA-GENERAL
 const EDIT_PRICES = { userId: 'price-editor', roles: ['Operador'] }; // edit_prices sobre LISTA-GENERAL
 const MANAGER = { userId: 'manager-1', roles: ['Operador'] }; // manage sobre LISTA-GENERAL
 const MANAGE_ACCESS = { userId: 'access-mgr', roles: ['Operador'] }; // manage_access sobre LISTA-GENERAL
 const NOAUTH = { userId: 'none-1', roles: ['Operador'] }; // sin assignments
-// Admin Comercial: "Super Admin del área comercial" (isListasAdmin).
+// Admin Comercial: "Super Admin del Ã¡rea comercial" (isListasAdmin).
 const COMERCIAL = { userId: 'admin-comercial-1', roles: ['Admin Comercial'] };
 
 const LISTA_ID = 'list-1';
@@ -33,7 +33,7 @@ const mockLista = {
   id: LISTA_ID,
   code: 'LISTA-GENERAL',
   name: 'Lista General',
-  description: 'Raíz',
+  description: 'RaÃ­z',
   type: 'catalogo',
   defaultVisibility: false,
   responsibleId: null,
@@ -116,7 +116,7 @@ function buildPrisma(): AnyMock {
   return p;
 }
 
-describe('ListasService — ACL (T1–T20)', () => {
+describe('ListasService â€” ACL (T1â€“T20)', () => {
   let service: ListasService;
   let acl: AclService;
   let mockPrisma: AnyMock;
@@ -148,20 +148,20 @@ describe('ListasService — ACL (T1–T20)', () => {
     expect(mockPrisma.assignment.findMany).not.toHaveBeenCalled();
   });
 
-  // T3: Usuario sin assignment → lista vacía (deny)
-  it('T3 - usuario sin assignment ve lista vacía (deny-by-default)', async () => {
+  // T3: Usuario sin assignment â†’ lista vacÃ­a (deny)
+  it('T3 - usuario sin assignment ve lista vacÃ­a (deny-by-default)', async () => {
     mockPrisma.lista.findMany.mockResolvedValue([]);
     const res = await service.findAll(NOAUTH);
     expect(res.data).toHaveLength(0);
     expect(mockPrisma.assignment.findMany).toHaveBeenCalled();
   });
 
-  // T4: Usuario sin assignment → 404 al obtener una Lista por ID
+  // T4: Usuario sin assignment â†’ 404 al obtener una Lista por ID
   it('T4 - usuario sin assignment recibe 404 por Lista ajena', async () => {
     await expect(service.findOne(LISTA_ID, NOAUTH)).rejects.toThrow(NotFoundException);
   });
 
-  // T5/T6: Usuario view → ve solo su Lista
+  // T5/T6: Usuario view â†’ ve solo su Lista
   it('T5/T6 - usuario view ve su Lista y 404 para Lista ajena', async () => {
     mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
     const own = await service.findOne(LISTA_ID, VIEWER);
@@ -295,8 +295,8 @@ describe('ListasService — ACL (T1–T20)', () => {
     await expect(service.findOne(LISTA_ID, VIEWER)).rejects.toThrow(NotFoundException);
   });
 
-  // T17: Lista inactiva → 404 para no-admin
-  it('T17 - Lista inactiva → 404 para usuario no-admin', async () => {
+  // T17: Lista inactiva â†’ 404 para no-admin
+  it('T17 - Lista inactiva â†’ 404 para usuario no-admin', async () => {
     mockPrisma.lista.findUnique.mockImplementation(async (args: any) => {
       if (args?.where?.id === LISTA_ID) return mockListaInactiva;
       return null;
@@ -304,8 +304,8 @@ describe('ListasService — ACL (T1–T20)', () => {
     await expect(service.findOne(LISTA_ID, VIEWER)).rejects.toThrow(NotFoundException);
   });
 
-  // T18: Lista archivada → 404 para no-admin
-  it('T18 - Lista archivada → 404 para usuario no-admin', async () => {
+  // T18: Lista archivada â†’ 404 para no-admin
+  it('T18 - Lista archivada â†’ 404 para usuario no-admin', async () => {
     mockPrisma.lista.findUnique.mockImplementation(async (args: any) => {
       if (args?.where?.id === LISTA_ID) return mockListaArchivada;
       return null;
@@ -321,15 +321,15 @@ describe('ListasService — ACL (T1–T20)', () => {
   });
 
   // T19/T20: acceso directo por producto/precio no salta ACL (products service)
-  it('T19 - producto de Lista no asignada → 404 (via acl.assertProductAccess)', async () => {
+  it('T19 - producto de Lista no asignada â†’ 404 (via acl.assertProductAccess)', async () => {
     mockPrisma.product.findUnique.mockResolvedValueOnce({ listaId: LISTA_ID });
     await expect(
       acl.assertProductAccess('prod-x', NOAUTH, 'view'),
     ).rejects.toThrow(NotFoundException);
   });
 
-  // Validaciones de creación
-  it('crea Lista con moneda y estado válidos (Super Admin)', async () => {
+  // Validaciones de creaciÃ³n
+  it('crea Lista con moneda y estado vÃ¡lidos (Super Admin)', async () => {
     const res = await service.create({ code: 'NUEVA', name: 'Lista Nueva', currency: 'USD', isActive: true }, ADMIN);
     expect(res.code).toBe('NUEVA');
     expect(res.currency).toBe('USD');
@@ -337,7 +337,7 @@ describe('ListasService — ACL (T1–T20)', () => {
     expect(mockAudit.log).toHaveBeenCalled();
   });
 
-  it('rechaza código de Lista duplicado (Super Admin)', async () => {
+  it('rechaza cÃ³digo de Lista duplicado (Super Admin)', async () => {
     mockPrisma.lista.findUnique.mockResolvedValueOnce({ id: 'dup' });
     await expect(
       service.create({ code: 'LISTA-GENERAL', name: 'X' }, ADMIN),
@@ -387,14 +387,14 @@ describe('ListasService — ACL (T1–T20)', () => {
     });
   });
 
-  it('crea Lista con responsibleId inexistente → 404', async () => {
+  it('crea Lista con responsibleId inexistente â†’ 404', async () => {
     mockPrisma.user.findUnique.mockResolvedValueOnce(null);
     await expect(
       service.create({ code: 'RESP-BAD', name: 'X', responsibleId: 'no-existe' }, ADMIN),
     ).rejects.toThrow(NotFoundException);
   });
 
-  it('crea Lista con vigencias inválidas (validUntil < validFrom) → 400', async () => {
+  it('crea Lista con vigencias invÃ¡lidas (validUntil < validFrom) â†’ 400', async () => {
     await expect(
       service.create(
         { code: 'BAD-DATES', name: 'X', validFrom: '2026-12-31', validUntil: '2026-01-01' },
@@ -440,14 +440,14 @@ describe('ListasService — ACL (T1–T20)', () => {
     );
   });
 
-  it('update con validUntil < validFrom → error de validación (400)', async () => {
+  it('update con validUntil < validFrom â†’ error de validaciÃ³n (400)', async () => {
     mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
     await expect(
       service.update(LISTA_ID, { validFrom: '2026-12-31', validUntil: '2026-01-01' }, EDITER),
     ).rejects.toThrow(BadRequestException);
   });
 
-  // ---- Campos nuevos (codigo, supplierId — metadata de lista importada) ----
+  // ---- Campos nuevos (codigo, supplierId â€” metadata de lista importada) ----
 
   it('crea Lista con codigo+supplierId y los persiste + audita', async () => {
     const res = await service.create(
@@ -475,14 +475,14 @@ describe('ListasService — ACL (T1–T20)', () => {
     );
   });
 
-  it('crea Lista sin codigo/supplierId → null (opcionales)', async () => {
+  it('crea Lista sin codigo/supplierId â†’ null (opcionales)', async () => {
     const res = await service.create({ code: 'SIN-META', name: 'Sin Meta' }, ADMIN);
     expect(res.codigo).toBeNull();
     expect(res.supplierId).toBeNull();
     expect(mockPrisma.supplier.findUnique).not.toHaveBeenCalled();
   });
 
-  it('crea Lista con codigo duplicado → 409', async () => {
+  it('crea Lista con codigo duplicado â†’ 409', async () => {
     mockPrisma.lista.findUnique.mockResolvedValueOnce(null); // code 'NUEVA' libre
     mockPrisma.lista.findUnique.mockResolvedValueOnce({ id: 'dup' }); // codigo duplicado
     await expect(
@@ -490,7 +490,7 @@ describe('ListasService — ACL (T1–T20)', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('crea Lista con supplierId inexistente → 404', async () => {
+  it('crea Lista con supplierId inexistente â†’ 404', async () => {
     await expect(
       service.create({ code: 'NUEVA', name: 'X', supplierId: 'no-existe' }, ADMIN),
     ).rejects.toThrow(NotFoundException);
@@ -520,7 +520,7 @@ describe('ListasService — ACL (T1–T20)', () => {
     expect(res.supplierId).toBeNull();
   });
 
-  it('update con codigo duplicado → 409', async () => {
+  it('update con codigo duplicado â†’ 409', async () => {
     mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista); // fetch en update
     mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista); // fetch interno del ACL
     mockPrisma.lista.findUnique.mockResolvedValueOnce({ id: 'otra' }); // check de codigo
@@ -529,7 +529,7 @@ describe('ListasService — ACL (T1–T20)', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('update con supplierId inexistente → 404', async () => {
+  it('update con supplierId inexistente â†’ 404', async () => {
     mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
     await expect(
       service.update(LISTA_ID, { supplierId: 'no-existe' }, EDITER),
@@ -632,7 +632,7 @@ describe('ListasService — ACL (T1–T20)', () => {
   });
 
   describe('vigencias calculadas (OLA 6)', () => {
-    it('findOne añade isExpired/isExpiringSoon/daysUntilExpiry (vence en 10 días)', async () => {
+    it('findOne aÃ±ade isExpired/isExpiringSoon/daysUntilExpiry (vence en 10 dÃ­as)', async () => {
       const validUntil = new Date(Date.now() + 10 * 86400000);
       mockPrisma.lista.findUnique.mockResolvedValueOnce({ ...mockLista, validUntil });
       const res = await service.findOne(LISTA_ID, ADMIN);
@@ -650,7 +650,7 @@ describe('ListasService — ACL (T1–T20)', () => {
       expect(res.daysUntilExpiry).toBeLessThan(0);
     });
 
-    it('findOne sin validUntil → no vencida y daysUntilExpiry null', async () => {
+    it('findOne sin validUntil â†’ no vencida y daysUntilExpiry null', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
       const res = await service.findOne(LISTA_ID, ADMIN);
       expect(res.isExpired).toBe(false);
@@ -670,7 +670,7 @@ describe('ListasService — ACL (T1–T20)', () => {
   });
 
   describe('findExpiringPrices (OLA 6)', () => {
-    it('devuelve precios próximos a vencer con daysRemaining y respeta ventana', async () => {
+    it('devuelve precios prÃ³ximos a vencer con daysRemaining y respeta ventana', async () => {
       const validUntil = new Date(Date.now() + 10 * 86400000);
       mockPrisma.price.findMany.mockResolvedValueOnce([
         {
@@ -718,7 +718,7 @@ describe('ListasService — ACL (T1–T20)', () => {
       expect(res.count).toBe(0);
     });
 
-    it('sin precios → data vacía, count 0', async () => {
+    it('sin precios â†’ data vacÃ­a, count 0', async () => {
       mockPrisma.price.findMany.mockResolvedValueOnce([]);
       const res = await service.findExpiringPrices(LISTA_ID, EDIT_PRICES);
       expect(res.data).toEqual([]);
@@ -726,13 +726,13 @@ describe('ListasService — ACL (T1–T20)', () => {
       expect(res.days).toBe(30);
     });
 
-    it('lista inexistente → 404', async () => {
+    it('lista inexistente â†’ 404', async () => {
       await expect(service.findExpiringPrices('no-existe', VIEWER)).rejects.toThrow(
         NotFoundException,
       );
     });
 
-    it('lista no autorizada → 404', async () => {
+    it('lista no autorizada â†’ 404', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(null);
       await expect(service.findExpiringPrices(OTHER_LISTA_ID, VIEWER)).rejects.toThrow(
         NotFoundException,
@@ -741,7 +741,7 @@ describe('ListasService — ACL (T1–T20)', () => {
   });
 
   describe('duplicateLista (OLA 6 complemento)', () => {
-    // Fuente rica con todos los campos de configuración a copiar.
+    // Fuente rica con todos los campos de configuraciÃ³n a copiar.
     const fullSource = {
       ...mockLista,
       type: 'COMERCIAL',
@@ -751,7 +751,7 @@ describe('ListasService — ACL (T1–T20)', () => {
       validUntil: new Date('2026-12-31T23:59:59Z'),
     };
 
-    it('duplica con code único nuevo e isActive false, productCount 0', async () => {
+    it('duplica con code Ãºnico nuevo e isActive false, productCount 0', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(fullSource);
       const res = await service.duplicateLista(LISTA_ID, ADMIN);
 
@@ -766,7 +766,7 @@ describe('ListasService — ACL (T1–T20)', () => {
       expect(data.code).not.toBe('LISTA-GENERAL');
     });
 
-    it('copia la configuración (type/defaultVisibility/vigencias/responsable/currency) y el actor', async () => {
+    it('copia la configuraciÃ³n (type/defaultVisibility/vigencias/responsable/currency) y el actor', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(fullSource);
       await service.duplicateLista(LISTA_ID, ADMIN);
 
@@ -779,7 +779,7 @@ describe('ListasService — ACL (T1–T20)', () => {
             validUntil: fullSource.validUntil,
             responsibleId: 'user-responsible',
             currency: 'COP',
-            description: 'Raíz',
+            description: 'RaÃ­z',
             createdById: ADMIN.userId,
             updatedById: ADMIN.userId,
           }),
@@ -787,7 +787,7 @@ describe('ListasService — ACL (T1–T20)', () => {
       );
     });
 
-    it('NO copia productos, precios ni assignments (molde de configuración)', async () => {
+    it('NO copia productos, precios ni assignments (molde de configuraciÃ³n)', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(fullSource);
       await service.duplicateLista(LISTA_ID, ADMIN);
 
@@ -798,7 +798,7 @@ describe('ListasService — ACL (T1–T20)', () => {
       expect(mockPrisma.assignment.upsert).not.toHaveBeenCalled();
     });
 
-    it('audita la acción duplicate', async () => {
+    it('audita la acciÃ³n duplicate', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(fullSource);
       await service.duplicateLista(LISTA_ID, ADMIN);
 
@@ -824,12 +824,12 @@ describe('ListasService — ACL (T1–T20)', () => {
       await expect(service.duplicateLista(LISTA_ID, NOAUTH)).rejects.toThrow(NotFoundException);
     });
 
-    it('regenera el code si el candidato inicial ya existe (colisión)', async () => {
+    it('regenera el code si el candidato inicial ya existe (colisiÃ³n)', async () => {
       const codeCheck = jest.fn();
       mockPrisma.lista.findUnique.mockImplementation(async (args: any) => {
         if (args?.where?.id === LISTA_ID) return fullSource;
         codeCheck();
-        // primera comprobación de code → colisión; siguientes → libres
+        // primera comprobaciÃ³n de code â†’ colisiÃ³n; siguientes â†’ libres
         return codeCheck.mock.calls.length === 1 ? { id: 'dup' } : null;
       });
 
@@ -841,7 +841,7 @@ describe('ListasService — ACL (T1–T20)', () => {
       expect(data.code).toBe(res.code);
     });
 
-    it('trunca name y code a límites razonables en fuentes largas', async () => {
+    it('trunca name y code a lÃ­mites razonables en fuentes largas', async () => {
       const longSource = {
         ...fullSource,
         name: 'X'.repeat(300),
@@ -858,8 +858,8 @@ describe('ListasService — ACL (T1–T20)', () => {
     });
   });
 
-  describe('removeLista — eliminación física (OLA 7A)', () => {
-    it('delete exitoso (Lista vacía) → 200 y audita delete ANTES de borrar', async () => {
+  describe('removeLista â€” eliminaciÃ³n fÃ­sica (OLA 7A)', () => {
+    it('delete exitoso (Lista vacÃ­a) â†’ 200 y audita delete ANTES de borrar', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
       mockPrisma.product.count.mockResolvedValueOnce(0);
       mockPrisma.price.count.mockResolvedValueOnce(0);
@@ -879,35 +879,41 @@ describe('ListasService — ACL (T1–T20)', () => {
       );
     });
 
-    it('409 cuando la Lista tiene productos', async () => {
+    it('200 cuando la Lista tiene productos (borra en cascada sin clave maestra)', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
       mockPrisma.product.count.mockResolvedValueOnce(3);
       mockPrisma.price.count.mockResolvedValueOnce(0);
       mockPrisma.assignment.count.mockResolvedValueOnce(0);
 
-      const promise = service.removeLista(LISTA_ID, ADMIN);
-      await expect(promise).rejects.toThrow(ConflictException);
-      await expect(promise).rejects.toThrow(
-        'La Lista tiene 3 productos. Se requiere la clave maestra para eliminar.',
+      const res = await service.removeLista(LISTA_ID, ADMIN);
+
+      expect(res.message).toBe('Lista eliminada exitosamente');
+      expect(mockPrisma.lista.delete).toHaveBeenCalledWith({ where: { id: LISTA_ID } });
+      expect(mockPrisma.assignment.deleteMany).toHaveBeenCalledWith({
+        where: { resourceType: 'LISTA', resourceId: LISTA_ID },
+      });
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'delete',
+          entity: 'LISTA',
+          entityId: LISTA_ID,
+        }),
       );
-      expect(mockPrisma.lista.delete).not.toHaveBeenCalled();
-      expect(mockMasterKey.validateMasterKey).not.toHaveBeenCalled();
     });
 
-    it('409 cuando la Lista tiene precios (mensaje combinado productos+precios)', async () => {
+    it('200 cuando la Lista tiene precios (borra en cascada)', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
       mockPrisma.product.count.mockResolvedValueOnce(3);
       mockPrisma.price.count.mockResolvedValueOnce(5);
       mockPrisma.assignment.count.mockResolvedValueOnce(0);
 
-      const promise = service.removeLista(LISTA_ID, ADMIN);
-      await expect(promise).rejects.toThrow(ConflictException);
-      await expect(promise).rejects.toThrow(
-        'La Lista tiene 3 productos y 5 precios. Se requiere la clave maestra para eliminar.',
-      );
+      const res = await service.removeLista(LISTA_ID, ADMIN);
+
+      expect(res.message).toBe('Lista eliminada exitosamente');
+      expect(mockPrisma.lista.delete).toHaveBeenCalledWith({ where: { id: LISTA_ID } });
     });
 
-    it('el historial de auditoría NO bloquea el borrado: solo historial → 200 y audita delete', async () => {
+    it('el historial de auditorÃ­a NO bloquea el borrado: solo historial â†’ 200 y audita delete', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
       mockPrisma.product.count.mockResolvedValueOnce(0);
       mockPrisma.price.count.mockResolvedValueOnce(0);
@@ -929,19 +935,20 @@ describe('ListasService — ACL (T1–T20)', () => {
       );
     });
 
-    it('409 cuando la Lista tiene accesos activos de terceros', async () => {
+    it('200 cuando la Lista tiene accesos activos de terceros (borra en cascada + hard-delete assignments)', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
       mockPrisma.product.count.mockResolvedValueOnce(0);
       mockPrisma.price.count.mockResolvedValueOnce(0);
       mockPrisma.assignment.count.mockResolvedValueOnce(2);
       mockPrisma.auditLog.count.mockResolvedValueOnce(4);
 
-      const promise = service.removeLista(LISTA_ID, ADMIN);
-      await expect(promise).rejects.toThrow(ConflictException);
-      await expect(promise).rejects.toThrow(
-        'La Lista tiene 2 accesos. Se requiere la clave maestra para eliminar.',
-      );
-      expect(mockPrisma.lista.delete).not.toHaveBeenCalled();
+      const res = await service.removeLista(LISTA_ID, ADMIN);
+
+      expect(res.message).toBe('Lista eliminada exitosamente');
+      expect(mockPrisma.lista.delete).toHaveBeenCalledWith({ where: { id: LISTA_ID } });
+      expect(mockPrisma.assignment.deleteMany).toHaveBeenCalledWith({
+        where: { resourceType: 'LISTA', resourceId: LISTA_ID },
+      });
     });
 
     it('404 si la Lista no existe', async () => {
@@ -959,11 +966,11 @@ describe('ListasService — ACL (T1–T20)', () => {
       expect(mockPrisma.lista.delete).not.toHaveBeenCalled();
     });
 
-    it('excluye la auto-asignación del actor (NOT userId) y las assignments inactivas (isActive) del conteo bloqueante', async () => {
+    it('excluye la auto-asignaciÃ³n del actor (NOT userId) y las assignments inactivas (isActive) del conteo bloqueante', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
       mockPrisma.product.count.mockResolvedValueOnce(0);
       mockPrisma.price.count.mockResolvedValueOnce(0);
-      mockPrisma.assignment.count.mockResolvedValueOnce(0); // solo auto-asignación → 0 accesos de terceros
+      mockPrisma.assignment.count.mockResolvedValueOnce(0); // solo auto-asignaciÃ³n â†’ 0 accesos de terceros
 
       const res = await service.removeLista(LISTA_ID, ADMIN);
 
@@ -993,168 +1000,23 @@ describe('ListasService — ACL (T1–T20)', () => {
       expect(mockPrisma.lista.delete).toHaveBeenCalledWith({ where: { id: LISTA_ID } });
     });
 
-    it('Fix H9 - assignment activo de terceros SÍ bloquea el borrado (409)', async () => {
-      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
-      mockPrisma.product.count.mockResolvedValueOnce(0);
-      mockPrisma.price.count.mockResolvedValueOnce(0);
-      mockPrisma.assignment.count.mockResolvedValueOnce(1); // tercero con acceso activo
-
-      const promise = service.removeLista(LISTA_ID, ADMIN);
-      await expect(promise).rejects.toThrow(ConflictException);
-      await expect(promise).rejects.toThrow('La Lista tiene 1 accesos. Se requiere la clave maestra para eliminar.');
-      expect(mockPrisma.lista.delete).not.toHaveBeenCalled();
-    });
-
-    it('Fix H9 - al borrar la Lista se hace hard-delete de TODAS sus assignments (sin huérfanos)', async () => {
-      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
-      mockPrisma.product.count.mockResolvedValueOnce(0);
-      mockPrisma.price.count.mockResolvedValueOnce(0);
-      mockPrisma.assignment.count.mockResolvedValueOnce(0);
-
-      const res = await service.removeLista(LISTA_ID, ADMIN);
-
-      expect(res.message).toBe('Lista eliminada exitosamente');
-      expect(mockPrisma.assignment.deleteMany).toHaveBeenCalledWith({
-        where: { resourceType: 'LISTA', resourceId: LISTA_ID },
-      });
-      expect(mockPrisma.lista.delete).toHaveBeenCalled();
-    });
-
-    // ---- Clave maestra: borrado forzado (feature de seguridad) ----
-
-    it('con impacto y clave maestra inválida → 403 (Clave maestra incorrecta)', async () => {
-      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
-      mockPrisma.product.count.mockResolvedValueOnce(3);
-      mockPrisma.price.count.mockResolvedValueOnce(0);
-      mockPrisma.assignment.count.mockResolvedValueOnce(0);
-      
-
-      const promise = service.removeLista(LISTA_ID, ADMIN);
-
-      await expect(promise).rejects.toThrow(ForbiddenException);
-      await expect(promise).rejects.toThrow('Clave maestra incorrecta');
-      expect(mockMasterKey.validateMasterKey).toHaveBeenCalledWith('incorrecta');
-      expect(mockPrisma.lista.delete).not.toHaveBeenCalled();
-      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
-    });
-
-    it('con impacto y sin MasterKeyService inyectado (clave no configurada) → 403', async () => {
-      const svcNoKey = new ListasService(mockPrisma as any, acl, mockAudit as any);
-      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
-      mockPrisma.product.count.mockResolvedValueOnce(2);
-      mockPrisma.price.count.mockResolvedValueOnce(0);
-      mockPrisma.assignment.count.mockResolvedValueOnce(0);
-
-      const promise = svcNoKey.removeLista(LISTA_ID, ADMIN);
-
-      await expect(promise).rejects.toThrow(ForbiddenException);
-      await expect(promise).rejects.toThrow('Clave maestra incorrecta');
-      expect(mockPrisma.lista.delete).not.toHaveBeenCalled();
-    });
-
-    it('con impacto y clave maestra válida → 200 y borra en cascada dentro de transacción', async () => {
-      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
-      mockPrisma.product.count.mockResolvedValueOnce(3);
-      mockPrisma.price.count.mockResolvedValueOnce(5);
-      mockPrisma.assignment.count.mockResolvedValueOnce(2);
-      
-      mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
-
-      const res = await service.removeLista(LISTA_ID, ADMIN);
-
-      expect(res.message).toBe('Lista eliminada exitosamente');
-      expect(mockMasterKey.validateMasterKey).toHaveBeenCalledWith('clave-valida');
-      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
-
-      // Orden de cascada por FKs:
-      expect(mockPrisma.stock.deleteMany).toHaveBeenCalledWith({
-        where: { product: { listaId: LISTA_ID } },
-      });
-      expect(mockPrisma.productImage.deleteMany).toHaveBeenCalledWith({
-        where: { product: { listaId: LISTA_ID } },
-      });
-      expect(mockPrisma.price.deleteMany).toHaveBeenCalledWith({
-        where: { product: { listaId: LISTA_ID } },
-      });
-      expect(mockPrisma.price.deleteMany).toHaveBeenCalledWith({
-        where: { listaId: LISTA_ID },
-      });
-      expect(mockPrisma.product.deleteMany).toHaveBeenCalledWith({
-        where: { listaId: LISTA_ID },
-      });
-      expect(mockPrisma.assignment.deleteMany).toHaveBeenCalledWith({
-        where: { resourceType: 'LISTA', resourceId: LISTA_ID },
-      });
-      expect(mockPrisma.lista.delete).toHaveBeenCalledWith({ where: { id: LISTA_ID } });
-    });
-
-    it('con impacto y clave válida audita delete con forced:true y counts previos', async () => {
-      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
-      mockPrisma.product.count.mockResolvedValueOnce(3);
-      mockPrisma.price.count.mockResolvedValueOnce(5);
-      mockPrisma.assignment.count.mockResolvedValueOnce(2);
-      
-      mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
-
-      await service.removeLista(LISTA_ID, ADMIN);
-
-      expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'delete',
-          entity: 'LISTA',
-          entityId: LISTA_ID,
-          oldValues: expect.objectContaining({ code: mockLista.code, name: mockLista.name }),
-          newValues: expect.objectContaining({
-            code: mockLista.code,
-            name: mockLista.name,
-            forced: true,
-            productsRemoved: 3,
-            pricesRemoved: 5,
-          }),
-        }),
-      );
-      // La audit de la Lista NO expone la clave maestra.
-      const auditCall = mockAudit.log.mock.calls.find((c: any[]) => c[0]?.entity === 'LISTA');
-      expect(JSON.stringify(auditCall[0])).not.toContain('masterKey');
-      expect(JSON.stringify(auditCall[0])).not.toContain('keyHash');
-    });
-
-    it('sin impacto borra normal sin validar la clave maestra', async () => {
-      mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
-      mockPrisma.product.count.mockResolvedValueOnce(0);
-      mockPrisma.price.count.mockResolvedValueOnce(0);
-      mockPrisma.assignment.count.mockResolvedValueOnce(0);
-
-      const res = await service.removeLista(LISTA_ID, ADMIN);
-
-      expect(res.message).toBe('Lista eliminada exitosamente');
-      expect(mockMasterKey.validateMasterKey).not.toHaveBeenCalled();
-      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
-      expect(mockPrisma.lista.delete).toHaveBeenCalledWith({ where: { id: LISTA_ID } });
-      expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'delete',
-          newValues: expect.objectContaining({ code: mockLista.code, name: mockLista.name }),
-        }),
-      );
-    });
   });
 
-  describe('Admin Comercial — contenedor de compras (isListasAdmin)', () => {
-    it('findAll ve TODAS las listas (getAllowedListaIds → null, sin filtro de id)', async () => {
+  describe('Admin Comercial â€” contenedor de compras (isListasAdmin)', () => {
+    it('findAll ve TODAS las listas (getAllowedListaIds â†’ null, sin filtro de id)', async () => {
       mockPrisma.lista.findMany.mockResolvedValue([mockLista, mockOtherLista]);
       const res = await service.findAll(COMERCIAL);
       expect(res.data).toHaveLength(2);
       expect(mockPrisma.assignment.findMany).not.toHaveBeenCalled();
     });
 
-    it('findOne accede a una Lista ajena (sin assignment previo) — no 404', async () => {
+    it('findOne accede a una Lista ajena (sin assignment previo) â€” no 404', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(mockOtherLista);
       const res = await service.findOne(OTHER_LISTA_ID, COMERCIAL);
       expect(res.id).toBe(OTHER_LISTA_ID);
     });
 
-    it('puede archivar y restaurar cualquier Lista (manage implícito)', async () => {
+    it('puede archivar y restaurar cualquier Lista (manage implÃ­cito)', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
       const archived = await service.archive(LISTA_ID, COMERCIAL);
       expect(archived.archivedAt).toBeDefined();
@@ -1164,12 +1026,12 @@ describe('ListasService — ACL (T1–T20)', () => {
       expect(restored.archivedAt).toBeNull();
     });
 
-    it('puede ver accesos (findAssignments) de cualquier Lista (manage_access implícito)', async () => {
+    it('puede ver accesos (findAssignments) de cualquier Lista (manage_access implÃ­cito)', async () => {
       const res = await service.findAssignments(LISTA_ID, COMERCIAL);
       expect(Array.isArray(res.data)).toBe(true);
     });
 
-    it('puede eliminar físicamente una Lista vacía (DELETE → 200) y audita', async () => {
+    it('puede eliminar fÃ­sicamente una Lista vacÃ­a (DELETE â†’ 200) y audita', async () => {
       mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
       mockPrisma.product.count.mockResolvedValueOnce(0);
       mockPrisma.price.count.mockResolvedValueOnce(0);
@@ -1184,7 +1046,7 @@ describe('ListasService — ACL (T1–T20)', () => {
       );
     });
 
-    it('ve precios en findProducts (userCanSeePrices implícito)', async () => {
+    it('ve precios en findProducts (userCanSeePrices implÃ­cito)', async () => {
       mockPrisma.product.findMany.mockResolvedValue([{ id: 'prod-1' }]);
       await service.findProducts(LISTA_ID, COMERCIAL);
       const call = mockPrisma.product.findMany.mock.calls[0][0];
@@ -1192,3 +1054,4 @@ describe('ListasService — ACL (T1–T20)', () => {
     });
   });
 });
+

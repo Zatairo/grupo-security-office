@@ -7,6 +7,7 @@ import { AuditModule } from '../audit/audit.module';
 
 @Module({
     controllers: [ListasController],
+    imports: [AclModule, AuditModule],
   providers: [ListasService],
   exports: [ListasService],
 })

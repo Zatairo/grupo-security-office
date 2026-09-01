@@ -38,6 +38,7 @@ export class CreateListaDto {
   @ApiProperty({ example: 'Lista Hikvision Video' })
   @IsString()
   @MinLength(2)
+  @MaxLength(200)
   name: string;
 
   @ApiPropertyOptional({ example: 'Lista comercial para línea de video Hikvision' })

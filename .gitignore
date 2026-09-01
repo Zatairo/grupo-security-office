@@ -49,3 +49,7 @@ logs/
 Thumbs.db
 *.bak
 openclaw-workspace-state.json
+
+# Uploads de productos (contenido generado en runtime, no versionar binarios)
+src/backend/uploads/*
+!src/backend/uploads/.gitkeep
