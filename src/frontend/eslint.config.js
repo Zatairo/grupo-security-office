@@ -42,7 +42,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.cjs', 'chrome-analyze.js'],
+    files: ['**/*.cjs'],
     extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 2020,

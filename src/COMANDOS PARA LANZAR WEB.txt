@@ -1,7 +1,0 @@
-cd src/frontend
-npm install
-npm run dev
-
-cd src/backend
-npm install
-npm run dev

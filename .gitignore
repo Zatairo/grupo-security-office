@@ -50,6 +50,12 @@ Thumbs.db
 *.bak
 openclaw-workspace-state.json
 
+# Fase 1 limpieza - artefactos locales
+**/__pycache__/
+*.pyc
+.obsidian/plugins/
+*-errors.txt
+
 # Uploads de productos (contenido generado en runtime, no versionar binarios)
 src/backend/uploads/*
 !src/backend/uploads/.gitkeep
