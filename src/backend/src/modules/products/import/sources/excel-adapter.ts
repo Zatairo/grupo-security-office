@@ -98,7 +98,7 @@ export class ExcelAdapter implements ImportSourceAdapter {
     const rows: RawRow[] = [];
 
     for (const rawRow of dataRows) {
-      const obj: RawRow = {};
+      const obj: RawRow = Object.create(null) as RawRow;
       let hasData = false;
 
       for (let colIdx = 0; colIdx < cleanHeaders.length; colIdx++) {
@@ -108,6 +108,7 @@ export class ExcelAdapter implements ImportSourceAdapter {
         if (value !== null && value !== undefined && String(value).trim() !== '') {
           hasData = true;
         }
+        // Mitigación Prototype Pollution: objeto sin prototipo + denylist ya filtrada en cleanHeaders
         obj[header] = value;
       }
 
@@ -240,12 +241,18 @@ export class ExcelAdapter implements ImportSourceAdapter {
   private cleanHeaders(headerRow: unknown[]): string[] {
     const cleaned: string[] = [];
     const seen = new Set<string>();
+    // Mitigación CVE xlsx Prototype Pollution (GHSA-4r6h-8v6p-xvw6): denylist de keys peligrosas
+    const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
     for (const cell of headerRow) {
       if (cell === null || cell === undefined) continue;
 
       let header = String(cell).trim();
       if (!header) continue;
+
+      // Mitigación Prototype Pollution: descartar headers peligrosos
+      if (DANGEROUS_KEYS.has(header)) continue;
+      if (DANGEROUS_KEYS.has(header.toLowerCase())) continue;
 
       // Colapsar newlines y whitespace
       header = header.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();

@@ -1613,10 +1613,24 @@ export class ProductsService {
       throw new BadRequestException('No se proporcionó archivo');
     }
 
+    // Mitigación ReDoS xlsx (GHSA-5pgg-2g8v-p4x9): límite 10MB ya en excel-adapter; aquí también
+    if (file.length > 10 * 1024 * 1024) {
+      throw new BadRequestException('Archivo excede 10MB');
+    }
+
     const workbook = XLSX.read(file, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet);
+    let rows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
+    // Mitigación Prototype Pollution (GHSA-4r6h-8v6p-xvw6): sanitizar keys peligrosas
+    rows = rows.map((r) => {
+      const clean = Object.create(null) as Record<string, unknown>;
+      for (const [k, v] of Object.entries(r as Record<string, unknown>)) {
+        if (['__proto__', 'constructor', 'prototype'].includes(k)) continue;
+        clean[k] = v;
+      }
+      return clean;
+    });
 
     if (rows.length === 0) {
       throw new BadRequestException('El archivo está vacío');
