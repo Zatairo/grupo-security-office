@@ -2023,6 +2023,7 @@ export default function ProductDetailPage() {
 
   const queryClient = useQueryClient()
 
+  // ============ TODOS LOS HOOKS DE QUERY AQUÍ (antes de cualquier return) ============
   const { data: product, isLoading, error } = useQuery({
     queryKey: ['product', productId],
     queryFn: async () => {
@@ -2051,6 +2052,7 @@ export default function ProductDetailPage() {
 
   const transition = useTransitionProduct(productId)
 
+  // ============ HOOKS DE MUTATION (SIEMPRE SE LLAMAN, INDEPENDIENTEMENTE DE product) ============
   const deleteMutation = useMutation({
     mutationFn: (opts?: { clave?: string; masterKey?: string }) => {
       if (!product) return Promise.reject(new Error('Producto no cargado'))
@@ -2062,6 +2064,30 @@ export default function ProductDetailPage() {
     },
   })
 
+  const scheduleMutation = useMutation({
+    mutationFn: (iso: string) => {
+      if (!product) return Promise.reject(new Error('Producto no cargado'))
+      return schedulePublish(product.id, { publishAt: iso })
+    },
+    onSuccess: () => {
+      setScheduleModal(null)
+      queryClient.invalidateQueries({ queryKey: ['products'], refetchType: 'all' })
+      if (product) queryClient.invalidateQueries({ queryKey: ['product', product.id] })
+    },
+  })
+
+  const cancelScheduleMutation = useMutation({
+    mutationFn: () => {
+      if (!product) return Promise.reject(new Error('Producto no cargado'))
+      return cancelScheduledPublish(product.id)
+    },
+    onSuccess: () => {
+      setCancelScheduleOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['products'], refetchType: 'all' })
+      if (product) queryClient.invalidateQueries({ queryKey: ['product', product.id] })
+    },
+  })
+
   const { priceLists } = usePriceLists()
   const canEdit = hasPermission('products:write')
 
@@ -2070,6 +2096,7 @@ export default function ProductDetailPage() {
   const visibleTabs = TABS.filter((t) => t.id !== 'prices' || canEdit)
   const effectiveTab: DetailTab = visibleTabs.some((t) => t.id === tab) ? tab : 'info'
 
+  // ============ RETORNOS CONDICIONALES (ahora después de todos los hooks) ============
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -2109,6 +2136,7 @@ export default function ProductDetailPage() {
     )
   }
 
+  // ============ EL RESTO DEL CÓDIGO (ahora product existe con seguridad) ============
   const orderedLists = orderedPriceLists(priceLists)
 
   const detailAllowed = product.allowedActions ?? []
@@ -2129,24 +2157,6 @@ export default function ProductDetailPage() {
 
   const scheduleActive = hasActiveScheduling(product)
   const scheduledAt = product.publishAt && hasActiveScheduling(product) ? product.publishAt : null
-
-  const scheduleMutation = useMutation({
-    mutationFn: (iso: string) => schedulePublish(product.id, { publishAt: iso }),
-    onSuccess: () => {
-      setScheduleModal(null)
-      queryClient.invalidateQueries({ queryKey: ['products'], refetchType: 'all' })
-      queryClient.invalidateQueries({ queryKey: ['product', product.id] })
-    },
-  })
-
-  const cancelScheduleMutation = useMutation({
-    mutationFn: () => cancelScheduledPublish(product.id),
-    onSuccess: () => {
-      setCancelScheduleOpen(false)
-      queryClient.invalidateQueries({ queryKey: ['products'], refetchType: 'all' })
-      queryClient.invalidateQueries({ queryKey: ['product', product.id] })
-    },
-  })
 
   const openSchedule = () => {
     scheduleMutation.reset()
@@ -2179,6 +2189,7 @@ export default function ProductDetailPage() {
     gallery[selectedImage]?.url ||
     (product.images[0]?.url ?? null)
 
+  // ============ RENDER ============
   return (
     <div className="space-y-6 pb-8">
       <nav aria-label="Breadcrumb">
