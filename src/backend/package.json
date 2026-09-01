@@ -39,6 +39,14 @@
     "rxjs": "^7.8.0",
     "xlsx": "^0.18.5"
   },
+  "overrides": {
+    "tar": "^7.5.3",
+    "qs": "^6.14.0",
+    "picomatch": "^4.0.4",
+    "glob": "^11.0.3",
+    "tmp": "^0.2.4",
+    "brace-expansion": "^2.0.2"
+  },
   "devDependencies": {
     "@nestjs/cli": "^10.4.0",
     "@nestjs/schematics": "^10.1.0",
