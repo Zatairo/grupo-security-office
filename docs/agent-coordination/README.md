@@ -3,9 +3,22 @@
 ## Purpose
 
 Kilo Code and OpenCode are peer technical executors working on the same repository.
-Perplexity is the sole coordinator and assigns closed, non-overlapping tasks.
+Perplexity is the sole strategic coordinator and assigns closed, non-overlapping tasks.
 
 This protocol preserves task state, file ownership, validation evidence, and commit history when chat memory or agent session memory is unavailable.
+
+## Coordination hierarchy
+
+- **Perplexity**: only strategic coordinator. Defines scope, dependencies, ownership, acceptance criteria and task sequence.
+- **Kilo Code**: technical executor under `.kilo/` rules.
+- **OpenCode**: technical executor under `.opencode/` profiles and the shared coordination files.
+- **`tech-lead-orchestrator`**: OpenCode coordination agent only. It does **not** replace Perplexity as strategic authority.
+
+## Collaboration boundary
+
+- Kilo Code and OpenCode never modify the same file, endpoint, API contract, shared type, Prisma schema, migration, package manifest, lock file, or infrastructure configuration in parallel.
+- A task belongs to one executor at a time, assigned by Perplexity.
+- The `finance-orchestrator` profile is inactive and has no coordination authority.
 
 ## Mandatory files
 

@@ -1,134 +1,120 @@
 # AGENT_TEAM.md — Matriz de Responsabilidades y Escalamiento
 
-> Equipo de agentes del proyecto **FINANZAS 1:1**. Documento mantenido por `finance-orchestrator`.
+> Equipo de agentes del proyecto **Grupo Security Office / Plataforma Comercial Grupo Security**.
+> Autoridad estratégica: **Perplexity**. Ejecutores técnicos: **Kilo Code** y **OpenCode**.
 
-## Resumen del equipo
+## Resumen del equipo (OpenCode)
 
-| Agente | Archivo | Modelo | Color | Modo |
-|--------|---------|--------|-------|------|
-| `finance-orchestrator` | `.opencode/agents/finance-orchestrator.md` | nemotron-3-super-120b | accent | Ejecución (primario) |
-| `solution-architect` | `.opencode/agents/solution-architect.md` | nemotron-3-super-120b | blue | **Solo lectura** |
-| `data-migration-engineer` | `.opencode/agents/data-migration-engineer.md` | nemotron-3-super-120b | green | Implementación |
-| `backend-engineer` | `.opencode/agents/backend-engineer.md` | nemotron-3-super-120b | yellow | Implementación |
-| `frontend-pwa-engineer` | `.opencode/agents/frontend-pwa-engineer.md` | nemotron-3-super-120b | magenta | Implementación |
-| `ai-integration-engineer` | `.opencode/agents/ai-integration-engineer.md` | nemotron-3-super-120b | cyan | Implementación |
-| `qa-security-reviewer` | `.opencode/agents/qa-security-reviewer.md` | nemotron-3-super-120b | red | **Independiente** |
-| `devops-release-engineer` | `.opencode/agents/devops-release-engineer.md` | nemotron-3-super-120b | orange | Implementación |
+| Agente | Archivo | Rol | Modo |
+|--------|---------|-----|------|
+| `tech-lead-orchestrator` | `.opencode/agents/tech-lead-orchestrator.md` | Coordinación técnica OpenCode | Ejecución |
+| `solution-architect` | `.opencode/agents/solution-architect.md` | Arquitectura / contratos | **Solo análisis/diseño** |
+| `data-migration-engineer` | `.opencode/agents/data-migration-engineer.md` | Datos / import / migración | Implementación |
+| `backend-engineer` | `.opencode/agents/backend-engineer.md` | Backend NestJS | Implementación |
+| `frontend-pwa-engineer` | `.opencode/agents/frontend-pwa-engineer.md` | Frontend React PWA | Implementación |
+| `ai-integration-engineer` | `.opencode/agents/ai-integration-engineer.md` | IA/integración opcional | Implementación |
+| `qa-security-reviewer` | `.opencode/agents/qa-security-reviewer.md` | QA / Seguridad | **Independiente** |
+| `devops-release-engineer` | `.opencode/agents/devops-release-engineer.md` | DevOps / Release | Implementación |
+| `excel-mapping-architect` | `.opencode/agent/excel-mapping-architect.md` | Contrato de mapeo Excel/CSV | **Solo diseño** |
+| `python-excel-toolsmith` | `.opencode/agent/python-excel-toolsmith.md` | Utilidad Python de mapeo | Implementación (solo utilidad) |
+
+> `finance-orchestrator` (`.opencode/agents/finance-orchestrator.md`) es un perfil **INACTIVO — FUERA DE ALCANCE**. No tiene autoridad, ownership ni rol de coordinación en este repositorio.
 
 ## Matriz de responsabilidades por dominio
 
 | Dominio | Owner principal | Colaboradores | Revisor (QA) |
 |---------|-----------------|---------------|--------------|
-| **Coordinación general** | finance-orchestrator | — | — |
-| **Arquitectura, ADR, contratos** | solution-architect | finance-orchestrator | qa-security-reviewer |
-| **Modelo datos, migraciones, Excel** | data-migration-engineer | solution-architect, backend-engineer | qa-security-reviewer |
-| **Backend API, auth, dominio** | backend-engineer | data-migration-engineer, ai-integration-engineer | qa-security-reviewer |
-| **Frontend PWA, UX, offline** | frontend-pwa-engineer | backend-engineer (contratos), ai-integration-engineer (bandeja) | qa-security-reviewer |
-| **IA/OCR/Ingestión/WhatsApp** | ai-integration-engineer | backend-engineer (interfaces), frontend-pwa-engineer (bandeja) | qa-security-reviewer |
+| **Coordinación estratégica** | Perplexity | — | — |
+| **Coordinación técnica OpenCode** | tech-lead-orchestrator | — | — |
+| **Arquitectura, ADR, contratos** | solution-architect | tech-lead-orchestrator | qa-security-reviewer |
+| **Modelo datos, Prisma, import/migración** | data-migration-engineer | backend-engineer | qa-security-reviewer |
+| **Backend NestJS, auth, dominio** | backend-engineer | data-migration-engineer | qa-security-reviewer |
+| **Frontend React PWA, UX, a11y** | frontend-pwa-engineer | backend-engineer (contratos) | qa-security-reviewer |
+| **IA/OCR/Integraciones (opcional)** | ai-integration-engineer | backend-engineer (interfaces) | qa-security-reviewer |
 | **Calidad, seguridad, tests** | qa-security-reviewer | (todos, revisión cruzada) | — (independiente) |
-| **Infra, CI/CD, deploy, runbooks** | devops-release-engineer | backend-engineer, frontend-pwa-engineer | qa-security-reviewer |
+| **Infra local, CI/CD, release** | devops-release-engineer | backend-engineer, frontend-pwa-engineer | qa-security-reviewer |
+| **Mapeo Excel/CSV (política)** | excel-mapping-architect | — | qa-security-reviewer |
+| **Utilidad Python Excel (implementación)** | python-excel-toolsmith | excel-mapping-architect (contrato) | qa-security-reviewer |
 
 ## Permisos por agente (resumen ejecutivo)
 
 | Agente | Lee todo | Escribe código | Escribe docs | Ejecuta tests | Despliega | Comandos destructivos |
 |--------|----------|----------------|--------------|---------------|-----------|----------------------|
-| finance-orchestrator | ✅ | ❌ | ✅ (coordinación) | ❌ | ❌ | ❌ |
-| solution-architect | ✅ | ❌ | ✅ (ADR/arquitectura) | ❌ | ❌ | ❌ |
-| data-migration-engineer | ✅ | ✅ (esquemas/migraciones/scripts) | ✅ | ✅ (dev) | ❌ | ❌ (prod) |
+| tech-lead-orchestrator | ✅ | ❌ | ✅ (coordinación) | ❌ | ❌ | ❌ |
+| solution-architect | ✅ | ❌ | ✅ (arquitectura/contratos) | ❌ | ❌ | ❌ |
+| data-migration-engineer | ✅ | ✅ (import/migración/plan) | ✅ | ✅ (dev) | ❌ | ❌ (prod) |
 | backend-engineer | ✅ | ✅ (`src/backend/**`) | ✅ | ✅ | ❌ | ❌ |
 | frontend-pwa-engineer | ✅ | ✅ (`src/frontend/**`) | ✅ | ✅ | ❌ | ❌ |
-| ai-integration-engineer | ✅ | ✅ (módulos ingestion/ai) | ✅ | ✅ | ❌ | ❌ |
-| qa-security-reviewer | ✅ | ✅ (tests/reportes/correcciones solicitadas) | ✅ | ✅ | ❌ | ❌ |
-| devops-release-engineer | ✅ | ✅ (infra/Docker/CI) | ✅ | ✅ (local) | ⚠️ (con aprobación) | ❌ |
+| ai-integration-engineer | ✅ | ✅ (módulos IA opcionales) | ✅ | ✅ | ❌ | ❌ |
+| qa-security-reviewer | ✅ | ✅ (tests/reportes) | ✅ | ✅ | ❌ | ❌ |
+| devops-release-engineer | ✅ | ✅ (infra local/Docker/CI) | ✅ | ✅ (local) | ⚠️ (con aprobación) | ❌ |
+| excel-mapping-architect | ✅ (Excel/CSV) | ❌ | ✅ (contrato mapeo) | ❌ | ❌ | ❌ |
+| python-excel-toolsmith | ✅ (contrato + datos) | ✅ (solo utilidad Python) | ✅ | ✅ | ❌ | ❌ |
 
 **Leyenda**: ✅ = Permitido | ❌ = Prohibido | ⚠️ = Con aprobación humana explícita
 
 ## Escalamiento y resolución de conflictos
 
-### Nivel 1: Conflicto técnico entre subagentes
-1. Subagentes reportan a `finance-orchestrator` con evidencia.
-2. Orquestador analiza, propone solución o pide ADR a `solution-architect`.
-3. Decisión documentada en `docs/DECISIONS.md` + ADR si es arquitectura.
+### Nivel 1: Conflicto técnico entre ejecutores
+1. Ejecutores reportan a su coordinador técnico (tech-lead-orchestrator para OpenCode) con evidencia.
+2. Se propone solución o se solicita diseño a `solution-architect`.
+3. Perplexity documenta la decisión final.
 
 ### Nivel 2: Bloqueo de fase (Gate)
-1. Orquestador detecta que criterios de puerta no se cumplen.
+1. Perplexity detecta criterios de puerta no cumplidos.
 2. Documenta en `docs/PROJECT_STATUS.md`: qué falta, riesgos, opciones.
 3. Solicita aprobación al usuario con máx. 3 opciones + recomendación.
 
 ### Nivel 3: Hallazgo crítico de seguridad (qa-security-reviewer)
 1. QA emite hallazgo **Bloqueante** o **Alto** en reporte.
-2. Orquestador **detiene** trabajo afectado inmediatamente.
-3. Asigna corrección a owner del módulo + plazo.
+2. Se **detiene** el trabajo afectado inmediatamente.
+3. Perplexity asigna corrección al owner del módulo + plazo.
 4. QA valida fix antes de reabrir gate.
 
 ### Nivel 4: Decisión de producto / alcance
-1. Orquestador presenta opciones al usuario (máx. 3).
-2. Usuario decide → Orquestador documenta en ADR/DECISIONS.
+1. Perplexity presenta opciones al usuario (máx. 3).
+2. Usuario decide → Perplexity documenta la decisión.
 3. Equipo alinea y continúa.
 
 ## Propiedad temporal de archivos (Locks)
 
-El orquestador mantiene registro en `docs/PROJECT_STATUS.md` sección "Active Locks":
-
-```
-## Active Locks
-- `src/backend/models/transaction.py` → backend-engineer (hasta 2026-01-20)
-- `src/frontend/pages/ValidationInbox.tsx` → frontend-pwa-engineer (hasta 2026-01-22)
-- `docs/decisions/0003-orm-choice.md` → solution-architect (hasta 2026-01-15)
-```
+El registro de propiedad vive en `docs/agent-coordination/file-ownership.md`:
 
 Reglas:
 - Un archivo = un owner a la vez.
-- Lock expira en fecha indicada o al completar tarea.
-- Orquestador puede revocar/traspasar lock con notificación.
+- Lock se libera al completar la tarea y commitear.
+- Perplexity inspecciona el registro antes de cada delegación.
 - Conflictos de lock → Nivel 1 escalamiento.
 
 ## Comunicación entre agentes
 
-### Formato orden de delegación (orquestador → subagente)
+### Formato orden de delegación (coordinador → ejecutor)
 ```markdown
-## Orden: [ID único, ej. 1.3.2]
-**Agente**: backend-engineer
-**Objetivo**: Implementar endpoint POST /transactions con idempotency key
-**Archivos permitidos**: src/backend/modules/transactions/** , tests/backend/transactions/**
-**Archivos prohibidos**: src/backend/modules/auth/**, src/frontend/**, infra/**
-**Entradas**: ADR-0003 (ORM), OpenAPI spec, esquema BD migrado
-**Salida esperada**: Endpoint funcional + tests + OpenAPI actualizado
-**Criterios aceptación**:
-  - POST 201 con Idempotency-Key header
-  - Reintento misma key → 200 con mismo response (no duplicado)
-  - Validación splits suma = total
-  - Audit log escrito
-**Comandos validación**: pytest tests/backend/transactions/test_create.py -v
-**Riesgos**: Race condition splits concurrente → usar advisory lock o optimistic lock
+## Orden: [ID único]
+**Agente**: <ejecutor>
+**Objetivo**: <resultado observable único>
+**Archivos permitidos**: <paths exactos>
+**Archivos prohibidos**: <paths que NO debe tocar>
+**Entradas**: <docs, specs, schemas, código>
+**Salida esperada**: <archivos nuevos/modificados, tests, docs>
+**Criterios aceptación**: <lista verificable>
+**Comandos validación**: <comandos exactos>
+**Riesgos**: <técnicos, dependencia, alcance>
 ```
 
-### Formato reporte subagente (subagente → orquestador)
+### Formato reporte ejecutor (ejecutor → coordinador)
 ```markdown
 ## Reporte: [ID orden]
 **Estado**: completado | bloqueado | requiere decisión
-**Archivos modificados**:
-  - src/backend/modules/transactions/service.py
-  - src/backend/modules/transactions/router.py
-  - tests/backend/transactions/test_create.py
-**Decisiones tomadas**:
-  - Usar advisory lock PG `pg_advisory_xact_lock(hash(idempotency_key))` para concurrencia
-  - Validación splits en service, no solo BD
-**Pruebas ejecutadas**:
-  - pytest tests/backend/transactions/test_create.py -v → 12 passed
-  - pytest tests/backend/transactions/test_idempotency.py -v → 5 passed
-**Riesgos/deuda**:
-  - Advisory lock requiere conexión PG persistente (pool mode transaction ok)
-  - Falta test de carga concurrente (TODO: fase 6)
-**Siguiente acción**: Orquestador valida y cierra orden. QA revisa en Gate 3.
+**Archivos modificados**: [lista]
+**Decisiones tomadas**: [qué y por qué]
+**Pruebas ejecutadas**: [comando + resultado]
+**Riesgos/deuda**: [pendientes, known issues]
+**Siguiente acción**: [qué debería pasar]
 ```
-
-## Contacto y disponibilidad
-
-Todos los agentes operan en la misma sesión de trabajo. La comunicación es síncrona vía delegación de tareas del orquestador. No hay canales async externos (Slack, email) para coordinación técnica.
 
 ## Historial de cambios
 
 | Fecha | Cambio | Autor |
 |-------|--------|-------|
-| 2026-09-01 | Creación inicial equipo FINANZAS 1:1 | finance-orchestrator |
+| 2026-09-03 | Reconciliación de identidad: Grupo Security Office, Perplexity como coordinador único, finance-orchestrator inactivo | tech-lead-orchestrator |

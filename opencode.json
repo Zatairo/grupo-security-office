@@ -1,53 +1,10 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "agent": {
-    "paths": [
-      ".opencode/agents"
-    ]
-  },
-  "permission": {
-    "default": "allow",
-    "rules": [
-      {
-        "agent": "finance-orchestrator",
-        "allow": ["read", "write", "edit", "bash", "task"],
-        "deny": ["deploy", "destructive"]
-      },
-      {
-        "agent": "solution-architect",
-        "allow": ["read", "write", "edit", "bash"],
-        "deny": ["write:src/**", "write:migrations/**", "write:infra/**", "write:infrastructure/**", "bash:destructive"]
-      },
-      {
-        "agent": "data-migration-engineer",
-        "allow": ["read", "write", "edit", "bash"],
-        "deny": ["deploy", "destructive:prod", "write:excel-source"]
-      },
-      {
-        "agent": "backend-engineer",
-        "allow": ["read", "write", "edit", "bash"],
-        "deny": ["deploy:prod", "write:secrets", "write:frontend"]
-      },
-      {
-        "agent": "frontend-pwa-engineer",
-        "allow": ["read", "write", "edit", "bash"],
-        "deny": ["write:backend-contracts", "write:infra"]
-      },
-      {
-        "agent": "ai-integration-engineer",
-        "allow": ["read", "write", "edit", "bash"],
-        "deny": ["write:financial-rules", "write:db-schema", "bash:paid-api"]
-      },
-      {
-        "agent": "qa-security-reviewer",
-        "allow": ["read", "write:tests", "write:reports", "bash"],
-        "deny": ["approve:own-work", "deploy"]
-      },
-      {
-        "agent": "devops-release-engineer",
-        "allow": ["read", "write", "edit", "bash:local"],
-        "deny": ["deploy:remote", "write:dns", "write:credentials", "bash:irreversible"]
-      }
-    ]
-  }
+  "instructions": [
+    "AGENTS.md",
+    "docs/agent-coordination/README.md",
+    "docs/agent-coordination/agent-status.md",
+    "docs/agent-coordination/file-ownership.md",
+    "docs/agent-coordination/work-log.md"
+  ]
 }

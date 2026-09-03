@@ -29,4 +29,4 @@
 
 | Task ID | Executor | Agent | Files | Commit | Released at |
 |---|---|---|---|---|---|
-| NONE | NONE | NONE | NONE | NONE | NONE |
+| COORD-RECONCILE-001 | OpenCode | tech-lead-orchestrator | AGENTS.md, docs/AGENT_TEAM.md, docs/WORKFLOW.md, docs/PROJECT_STATUS.md, docs/agent-coordination/*, opencode.json, .opencode/agents/*.md, .opencode/agent/excel-*.md, data/import/README.md, requirements.txt | (see work-log) | 2026-09-03T00:00:00Z |
