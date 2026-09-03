@@ -31,8 +31,10 @@ build/
 *.env.local
 
 # Datos y memoria (NUNCA al repo — datos de Grupo Security)
-data/
+# El directorio data/ tiene .gitkeep y data/import/ (con su propio .gitignore)
+data/*
 !data/.gitkeep
+!data/import/
 
 # Logs
 *.log
@@ -59,3 +61,14 @@ openclaw-workspace-state.json
 # Uploads de productos (contenido generado en runtime, no versionar binarios)
 src/backend/uploads/*
 !src/backend/uploads/.gitkeep
+
+# Enriquecimiento Hikvision (salida local generada, no versionar)
+tools/enrichment_output/
+
+# Debug/temporal
+**/__pycache__/
+*.pyc
+*.pyo
+*.log
+.pytest_cache/
+.mypy_cache/

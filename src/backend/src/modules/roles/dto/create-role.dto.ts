@@ -12,7 +12,7 @@ export class CreateRoleDto {
   @IsOptional()
   description?: string;
 
-  @ApiPropertyOptional({ example: ['products.read', 'products.write'] })
+  @ApiPropertyOptional({ example: ['products.read', 'products.write', 'listas:create'] })
   @IsArray()
   @IsOptional()
   permissions?: string[];

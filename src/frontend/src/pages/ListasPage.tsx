@@ -93,6 +93,84 @@ function StatusBadge({ isActive, archived }: { isActive: boolean; archived: bool
   )
 }
 
+// ============================================================
+// COMPONENTE DeleteConfirmModal - Confirmación simple sin clave maestra
+// ============================================================
+function DeleteConfirmModal({
+  listas,
+  ids,
+  onClose,
+  onConfirm,
+}: {
+  listas: Lista[]
+  ids: string[]
+  onClose: () => void
+  onConfirm: (ids: string[]) => void
+}) {
+  const [confirmed, setConfirmed] = useState(false)
+
+  const listNames = ids
+    .map((id) => listas.find((l) => l.id === id)?.name)
+    .filter(Boolean)
+    .join(', ')
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl w-full max-w-md shadow-2xl">
+        <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between">
+          <h2 className="text-lg font-condensed font-semibold text-neutral-800">Confirmar eliminación</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-colors" aria-label="Cerrar">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-neutral-600">
+            Esta acción eliminará <strong>{ids.length}</strong> Lista(s) de forma definitiva:
+          </p>
+          <p className="text-sm text-neutral-700 bg-neutral-50 rounded-lg px-3 py-2 border border-neutral-200">
+            {listNames || 'Seleccionadas'}
+          </p>
+          <p className="text-xs text-red-600 font-medium">
+            ⚠️ Esta acción no se puede deshacer. Todos los productos y datos asociados se eliminarán.
+          </p>
+
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-[var(--color-primary)] border-neutral-300 rounded focus:ring-[var(--color-primary-focus-ring)]"
+            />
+            <span className="text-sm text-neutral-700">
+              Confirmo que entiendo que esta acción elimina las listas y sus datos asociados de forma permanente.
+            </span>
+          </label>
+
+          <div className="flex gap-3 justify-end pt-2">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={!confirmed}
+              onClick={() => onConfirm(ids)}
+            >
+              Eliminar definitivamente
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// COMPONENTE PRINCIPAL
+// ============================================================
 export default function ListasPage() {
   const queryClient = useQueryClient()
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -114,6 +192,8 @@ export default function ListasPage() {
   const selectAllRef = useRef<HTMLInputElement>(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [confirmDeleteIds, setConfirmDeleteIds] = useState<string[]>([])
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['listas'] })
 
@@ -358,8 +438,8 @@ export default function ListasPage() {
       setActionError('No hay Listas seleccionadas para eliminar.')
       return
     }
-    setActionNotice(null)
-    setDeleteImpactIds(ids)
+    setConfirmDeleteIds(ids)
+    setConfirmDeleteOpen(true)
   }
 
   const toggleSelect = (id: string) =>
@@ -917,6 +997,24 @@ export default function ListasPage() {
         />
       )}
 
+      {/* Modal de confirmación simple */}
+      {confirmDeleteOpen && confirmDeleteIds.length > 0 && (
+        <DeleteConfirmModal
+          listas={listas ?? []}
+          ids={confirmDeleteIds}
+          onClose={() => {
+            setConfirmDeleteOpen(false)
+            setConfirmDeleteIds([])
+          }}
+          onConfirm={(ids) => {
+            setConfirmDeleteOpen(false)
+            setConfirmDeleteIds([])
+            deleteMutation.mutate({ ids, masterKey: '' })
+          }}
+        />
+      )}
+
+      {/* Modal legacy de impacto (ya no se usa para eliminación directa) */}
       {deleteImpactIds.length > 0 && (
         <DeleteImpactModal
           listas={listas ?? []}

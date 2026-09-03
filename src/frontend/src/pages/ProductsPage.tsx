@@ -117,7 +117,16 @@ export default function ProductsPage() {
 
   // Filtro de estado FSM (provisional, cliente): el backend aún no soporta
   // `?status=` en el query DTO. Se aplica sobre los productos ya cargados.
-  const currentProducts = products ?? []
+  // Obtener IDs de listas activas
+  const listasData = listasQuery.data ?? []
+  const activeListaIds = listasData
+    .filter((l) => l.isActive && !l.archivedAt)
+    .map((l) => l.id)
+
+  // Filtrar productos: solo mostrar los que pertenecen a una lista activa
+  const currentProducts = (products ?? []).filter(
+    (p) => !!p.listaId && activeListaIds.includes(p.listaId),
+  )
   const allPageSelected = currentProducts.length > 0 && currentProducts.every((p) => selectedProductIds.has(p.id))
 
   const toggleSelectProduct = (id: string) => {

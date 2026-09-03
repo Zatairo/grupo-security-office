@@ -81,6 +81,7 @@ export class AuditService {
     newValues?: any;
     ipAddress?: string;
     userAgent?: string;
+    result?: 'SUCCESS' | 'ERROR' | 'WARNING';
   }) {
     return this.prisma.auditLog.create({
       data: {
@@ -92,7 +93,8 @@ export class AuditService {
         newValues: params.newValues ?? undefined,
         ipAddress: params.ipAddress,
         userAgent: params.userAgent,
-      },
+        ...(params.result !== undefined && { result: params.result }),
+      } as Prisma.AuditLogCreateInput,
     });
   }
 

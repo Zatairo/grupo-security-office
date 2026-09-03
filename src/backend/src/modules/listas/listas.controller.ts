@@ -17,9 +17,11 @@ import { CreateListaDto } from './dto/create-lista.dto';
 import { UpdateListaDto } from './dto/update-lista.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { AccessContext } from '../../common/acl/acl.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { AccessContext } from '../../common/acl/acl.service';
+import { Permissions } from '../../common/decorators/permissions.decorator';
+import { AclService } from '../../common/acl/acl.service';
 
 @ApiTags('Listas')
 @ApiBearerAuth()
@@ -153,6 +155,23 @@ export class ListasController {
     return this.listasService.restore(id, this.ctx(user));
   }
 
+  @Post(':id/deletion-request')
+  @Permissions('listas:delete')
+  @Roles('Super Admin', 'Admin Comercial')
+  @ApiOperation({ summary: 'Solicitar eliminación diferida de Lista (90 días)' })
+  @ApiResponse({ status: 200, description: 'Solicitud de eliminación registrada' })
+  @ApiResponse({ status: 403, description: 'Sin permiso global listas:delete' })
+  @ApiResponse({ status: 404, description: 'Lista no encontrada o archivada' })
+  @ApiResponse({ status: 409, description: 'Lista ya pendiente de eliminación' })
+  deletionRequest(
+    @Param('id') id: string,
+    @Body() dto: { reason: string },
+    @CurrentUser() user: any,
+  ) {
+    const ctx = this.ctx(user);
+    return this.listasService.deletionRequest(id, dto.reason, ctx);
+  }
+
   @Delete(':id')
   @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.OK)
@@ -164,7 +183,8 @@ export class ListasController {
   @ApiResponse({ status: 404, description: 'Lista no encontrada' })
   
   
-  remove(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.listasService.removeLista(id, this.ctx(user));
-  }
+remove(@Param('id') id: string, @CurrentUser() user: any) {
+  console.log(`[DELETE] Eliminando lista con ID: ${id}`);
+  return this.listasService.removeLista(id, this.ctx(user));
+}
 }

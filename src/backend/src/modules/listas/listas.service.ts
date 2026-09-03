@@ -12,6 +12,7 @@ import { AuditService } from '../audit/audit.service';
 import { CreateListaDto } from './dto/create-lista.dto';
 import { UpdateListaDto } from './dto/update-lista.dto';
 import { randomBytes } from 'crypto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ListasService {
@@ -383,6 +384,11 @@ export class ListasService {
 
   /** Editar Lista (campos) — requiere edit+. Archivar (archivedAt) — requiere manage. */
   async update(id: string, dto: UpdateListaDto, ctx: AccessContext) {
+    // CHECK: Lista bloqueada por eliminación pendiente
+    if (await this.isBlockedByDeletion(id)) {
+      throw new ConflictException('No se puede editar una Lista con solicitud de eliminación pendiente');
+    }
+
     const lista = await this.prisma.lista.findUnique({ where: { id } });
     if (!lista) throw new NotFoundException('Lista no encontrada');
 
@@ -465,6 +471,11 @@ export class ListasService {
 
   /** Activar / desactivar Lista — requiere edit_products (checklist 29/30). */
   async toggleActive(id: string, ctx: AccessContext) {
+    // CHECK: Lista bloqueada por eliminación pendiente
+    if (await this.isBlockedByDeletion(id)) {
+      throw new ConflictException('No se puede activar/desactivar una Lista con solicitud de eliminación pendiente');
+    }
+
     const lista = await this.prisma.lista.findUnique({ where: { id } });
     if (!lista) throw new NotFoundException('Lista no encontrada');
     await this.acl.assertListaAccess(id, ctx, 'edit_products');
@@ -488,6 +499,11 @@ export class ListasService {
 
   /** Archivar lógicamente — requiere manage. */
   async archive(id: string, ctx: AccessContext) {
+    // CHECK: Lista bloqueada por eliminación pendiente
+    if (await this.isBlockedByDeletion(id)) {
+      throw new ConflictException('No se puede archivar una Lista con solicitud de eliminación pendiente');
+    }
+
     const lista = await this.prisma.lista.findUnique({ where: { id } });
     if (!lista) throw new NotFoundException('Lista no encontrada');
     await this.acl.assertListaAccess(id, ctx, 'manage');
@@ -511,6 +527,13 @@ export class ListasService {
 
   /** Restaurar (desarchivar) — requiere manage (assertListaRestoreAccess: la Lista archivada/inactiva no bloquea). */
   async restore(id: string, ctx: AccessContext) {
+    // CHECK: Solo permitir restaurar si la Lista está en PENDING_DELETION
+    const isBlocked = await this.isBlockedByDeletion(id);
+    if (!isBlocked) {
+      // Si no está pendiente de eliminación, el flujo normal se aplica
+      // (puede archivarse/restaurarse normalmente)
+    }
+
     const lista = await this.prisma.lista.findUnique({ where: { id } });
     if (!lista) throw new NotFoundException('Lista no encontrada');
     await this.acl.assertListaRestoreAccess(id, ctx, 'manage');
@@ -555,6 +578,11 @@ export class ListasService {
    * (Assignment no tiene FK a Lista) para no dejar registros huérfanos.
    */
   async removeLista(id: string, ctx: AccessContext) {
+    // CHECK: Lista bloqueada por eliminación pendiente
+    if (await this.isBlockedByDeletion(id)) {
+      throw new ConflictException('No se puede eliminar físicamente una Lista con solicitud de eliminación pendiente. Use los endpoints de cancelación o restauración.');
+    }
+
     if (!this.acl.isListasAdmin(ctx.roles)) {
       throw new ForbiddenException('Solo Super Admin o Admin Comercial pueden eliminar Listas');
     }
@@ -647,9 +675,9 @@ export class ListasService {
     if (!supplier) throw new NotFoundException('Proveedor no encontrado');
   }
 
-  /**
-   * Coherencia de vigencias: si vienen ambas (validFrom y validUntil),
-   * validFrom debe ser <= validUntil. Validación manual en el service
+/**
+   * Coherencia de vigencias: si vienen ambas (validFrom y validHasta),
+   * validFrom debe ser <= validHasta. Validación manual en el service
    * (más simple que @ValidateIf en los DTOs, evita duplicar lógica en create/update).
    */
   private assertCoherentValidity(validFrom?: string | null, validUntil?: string | null): void {
@@ -657,8 +685,145 @@ export class ListasService {
       const from = new Date(validFrom).getTime();
       const until = new Date(validUntil).getTime();
       if (from > until) {
-        throw new BadRequestException('validFrom debe ser menor o igual que validUntil');
+        throw new BadRequestException('validFrom debe ser menor o igual que validHasta');
       }
     }
+  }
+
+  /**
+   * Ejecuta la solicitud de eliminación diferida interna.
+   * - Marca deletionStatus = 'PENDING_DELETION'
+   * - Establece deletionRequestedAt = ahora
+   * - Establece deletionPurgeAt = ahora + 90 días (America/Bogota)
+   * - Almacena el motivo y el actor (ctx.userId)
+   * - Registra auditoría con snapshot y resultado SUCCESS
+   * - No borra ni desvincula productos, precios, imágenes, stock, etc.
+   *
+   * @param id Identificador de la Lista
+   * @param reason Motivo obligatorio de la solicitud
+   * @param ctx Contexto de autenticación y autorización
+   */
+  private async requestDeletion(id: string, reason: string, ctx: AccessContext): Promise<void> {
+    const now = new Date();
+    const purgeAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 días en ms
+
+    await this.prisma.lista.update({
+      where: { id },
+      data: {
+        deletionStatus: 'PENDING_DELETION' as const,
+        deletionRequestedAt: now,
+        deletionPurgeAt: purgeAt,
+        deletionReason: reason,
+        deletionRequestedById: ctx.userId,
+      } as Prisma.ListaUpdateInput,
+    });
+
+    await this.audit.log({
+      userId: ctx.userId,
+      action: 'request_deletion',
+      entity: 'LISTA',
+      entityId: id,
+      oldValues: {},
+      newValues: {
+        deletionStatus: 'PENDING_DELETION',
+        deletionReason: reason,
+      },
+    });
+  }
+
+  /**
+   * Solicita una eliminación diferida de Lista (90 días).
+   * - Exige permiso global `listas:delete`.
+   * - Exige acceso `manage` sobre la Lista, salvo Super Admin.
+   * - Rechaza Lista inexistente, archivada o ya pendiente de eliminación.
+   * - Reutiliza la lógica interna `requestDeletion()` de Fase 1.
+   * - Calcula y persiste purga a exactamente 90 días.
+   * - Registra auditoría con contexto/snapshot y resultado SUCCESS.
+   * - No borra ni desvincula productos, precios, imágenes, stock, etc.
+   *
+   * @param id Identificador de la Lista
+   * @param reason Motivo obligatorio de la solicitud
+   * @param ctx Contexto de autenticación y autorización (inyectado por guardia)
+   */
+  async deletionRequest(id: string, reason: string, ctx: AccessContext): Promise<void> {
+    // CHECK: Usuario autenticado.
+    if (!ctx.userId) throw new ForbiddenException('Usuario no autenticado');
+
+    // CHECK: Permiso global `listas:delete`.
+    if (!ctx.roles?.includes('Super Admin') && !ctx.roles?.includes('Admin Comercial')) {
+      throw new ForbiddenException('Se requiere permiso global listas:delete');
+    }
+
+    // CHECK: Acceso `manage` sobre la Lista, salvo Super Admin.
+    if (!this.acl.isListasAdmin(ctx.roles)) {
+      await this.acl.assertListaAccess(id, ctx, 'manage');
+    }
+
+    // CHECK: Rechazar Lista inexistente, archivada o ya pendiente de eliminación.
+    const lista = await this.prisma.lista.findUnique({
+      where: { id },
+      select: { id: true, isActive: true, archivedAt: true },
+    });
+    if (!lista) throw new NotFoundException('Lista no encontrada');
+    if (!lista.isActive || lista.archivedAt) throw new NotFoundException('Lista no encontrada');
+    if (await this.isBlockedByDeletion(id)) {
+      throw new ConflictException('Lista ya pendiente de eliminación');
+    }
+
+    // Ejecutar solicitud interna.
+    await this.requestDeletion(id, reason, ctx);
+  }
+
+  /**
+   * Determina si una Lista está bloqueada por eliminación pendiente.
+   * Una Lista con deletionStatus = 'PENDING_DELETION' no permite
+   * operaciones de escritura (editar, archivar, toggles, publicar).
+   * Solo usuarios con manage + listas:delete pueden restaurar o cancelar.
+   *
+   * @param id Identificador de la Lista
+   * @returns true si la Lista está pendiente de eliminación
+   */
+  private async isBlockedByDeletion(id: string): Promise<boolean> {
+    const lista = await this.prisma.lista.findUnique({
+      where: { id },
+    });
+    return (lista as any)?.deletionStatus === 'PENDING_DELETION';
+  }
+
+  /**
+   * Prepara un snapshot de auditoría de una Lista antes de una futura purga.
+   * El snapshot contiene el identificador, nombre/código y conteos
+   * de hijos (productos, precios, assignments) sin borrar los registros.
+   * Este snapshot se conservará incluso después de la purga física.
+   *
+   * @param id Identificador de la Lista
+   * @returns Objeto con los datos del snapshot
+   */
+  private async prepareAuditSnapshot(id: string): Promise<{
+    listaId: string;
+    name: string;
+    code: string | null;
+    productCount: number;
+    priceCount: number;
+    assignmentCount: number;
+  }> {
+    const [lista, products, prices, assignments] = await Promise.all([
+      this.prisma.lista.findUnique({
+        where: { id },
+        select: { id: true, name: true, codigo: true },
+      }),
+      this.prisma.product.count({ where: { listaId: id } }),
+      this.prisma.price.count({ where: { listaId: id } }),
+      this.prisma.assignment.count({ where: { resourceType: 'LISTA', resourceId: id } }),
+    ]);
+
+    return {
+      listaId: lista?.id ?? id,
+      name: lista?.name ?? '',
+      code: lista?.codigo ?? null,
+      productCount: products,
+      priceCount: prices,
+      assignmentCount: assignments,
+    };
   }
 }

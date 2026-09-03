@@ -8,22 +8,23 @@ datasource db {
 }
 
 model User {
-  id                  String               @id @default(uuid())
-  email               String               @unique
-  name                String
-  password            String
-  isActive            Boolean              @default(true)
-  roles               UserRole[]
-  auditLogs           AuditLog[]
-  assignments         Assignment[]
-  createdListas       Lista[]              @relation("ListaCreator")
-  updatedListas       Lista[]              @relation("ListaUpdater")
-  responsibleListas   Lista[]              @relation("ListaResponsible")
-  supplierEvaluations SupplierEvaluation[]
-  purchaseOrders      PurchaseOrder[]
-  publishedProducts   Product[]            @relation("ProductPublishedBy")
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                      String               @id @default(uuid())
+  email                   String               @unique
+  name                    String
+  password                String
+  isActive                Boolean              @default(true)
+  roles                   UserRole[]
+  auditLogs               AuditLog[]
+  assignments             Assignment[]
+  createdListas           Lista[]              @relation("ListaCreator")
+  updatedListas           Lista[]              @relation("ListaUpdater")
+  responsibleListas       Lista[]              @relation("ListaResponsible")
+  deletionRequestedListas Lista[]              @relation("ListaDeletionRequester")
+  supplierEvaluations     SupplierEvaluation[]
+  purchaseOrders          PurchaseOrder[]
+  publishedProducts       Product[]            @relation("ProductPublishedBy")
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
 
   @@map("users")
 }
@@ -83,29 +84,35 @@ model RolePermission {
 }
 
 model Lista {
-  id                String    @id @default(uuid())
-  code              String    @unique
-  codigo            String?   @unique
-  name              String
-  description       String?
-  type              String?
-  defaultVisibility Boolean   @default(false)
-  currency          String    @default("COP")
-  isActive          Boolean   @default(true)
-  archivedAt        DateTime?
-  createdById       String?
-  updatedById       String?
-  responsibleId     String?
-  supplierId        String?
-  validFrom         DateTime?
-  validUntil        DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                    String    @id @default(uuid())
+  code                  String    @unique
+  codigo                String?   @unique
+  name                  String
+  description           String?
+  type                  String?
+  defaultVisibility     Boolean   @default(false)
+  currency              String    @default("COP")
+  isActive              Boolean   @default(true)
+  archivedAt            DateTime?
+  deletionStatus        String? // null | 'PENDING_DELETION'
+  deletionRequestedAt   DateTime?
+  deletionPurgeAt       DateTime? // solicitud + 90d en America/Bogota
+  deletionReason        String?
+  deletionRequestedById String?
+  createdById           String?
+  updatedById           String?
+  responsibleId         String?
+  supplierId            String?
+  validFrom             DateTime?
+  validUntil            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  creator     User?     @relation("ListaCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  updater     User?     @relation("ListaUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
-  responsible User?     @relation("ListaResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
-  supplier    Supplier? @relation("ListaSupplier", fields: [supplierId], references: [id], onDelete: SetNull)
+  creator           User?     @relation("ListaCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updater           User?     @relation("ListaUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  responsible       User?     @relation("ListaResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  supplier          Supplier? @relation("ListaSupplier", fields: [supplierId], references: [id], onDelete: SetNull)
+  deletionRequester User?     @relation("ListaDeletionRequester", fields: [deletionRequestedById], references: [id], onDelete: SetNull)
 
   products Product[]
   prices   Price[]
@@ -114,6 +121,7 @@ model Lista {
   @@index([archivedAt])
   @@index([responsibleId])
   @@index([supplierId])
+  @@index([deletionPurgeAt]) // para scheduler de purga de Listas vencidas
   @@map("listas")
 }
 
@@ -201,14 +209,14 @@ enum ProductImageType {
 }
 
 model ProductImage {
-  id        String            @id @default(uuid())
+  id        String           @id @default(uuid())
   productId String
-  product   Product           @relation(fields: [productId], references: [id])
+  product   Product          @relation(fields: [productId], references: [id])
   url       String
   alt       String?
-  type      ProductImageType  @default(PRINCIPAL)
-  isPrimary Boolean           @default(false)
-  sortOrder Int               @default(0)
+  type      ProductImageType @default(PRINCIPAL)
+  isPrimary Boolean          @default(false)
+  sortOrder Int              @default(0)
 
   @@index([productId])
   @@map("product_images")
@@ -265,6 +273,7 @@ model AuditLog {
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
+  result    String? // 'SUCCESS' | 'ERROR' | 'WARNING'
 
   @@index([entity, entityId])
   @@index([userId])

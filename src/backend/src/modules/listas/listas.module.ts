@@ -6,8 +6,8 @@ import { AclModule } from '../../common/acl/acl.module';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
-    controllers: [ListasController],
-    imports: [AclModule, AuditModule],
+  controllers: [ListasController],
+  imports: [PrismaModule, AclModule, AuditModule],
   providers: [ListasService],
   exports: [ListasService],
 })

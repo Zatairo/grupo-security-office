@@ -13,7 +13,7 @@ export class UpdateRoleDto {
   @IsOptional()
   description?: string;
 
-  @ApiPropertyOptional({ example: ['products.read', 'products.write', 'prices.read'] })
+  @ApiPropertyOptional({ example: ['products.read', 'products.write', 'listas:create'] })
   @IsArray()
   @IsOptional()
   permissions?: string[];

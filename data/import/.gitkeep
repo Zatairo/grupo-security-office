@@ -1,0 +1,2 @@
+# Mantiene el directorio data/import en Git
+# El archivo FINANZAS-1_1.xlsx NO se versiona (ver .gitignore)
