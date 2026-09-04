@@ -8,7 +8,7 @@
 
 | Task ID | Executor | Agent | Branch | Reserved file or directory | Purpose | Status | Reserved at | Expected release |
 |---|---|---|---|---|---|---|---|---|---|
-| NONE | NONE | NONE | NONE | NONE | NONE | NONE | NONE | NONE |
+| BE-LINT-FIX-001 | OpenCode | backend-engineer | main | src/backend/src/modules/products/products.controller.ts, src/backend/src/modules/products/products.service.ts | Replace empty-object lint types | ACTIVE | 2026-09-04T00:00:00Z | after commit |
 
 ## Reservation rules
 

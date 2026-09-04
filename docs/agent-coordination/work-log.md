@@ -112,3 +112,30 @@
   - Super Admin exception relies on `user.roles` containing 'Super Admin' (JWT payload); consistent with AclService.
   - Deferred deletion/purge scheduler, stock/supplier ACL and publish-schedule scoping are OUT OF SCOPE (prohibited) and remain unimplemented.
 - `Blockers`: NONE
+
+---
+
+## [BE-LINT-FIX-001] — Resolve no-empty-object-type ESLint errors (products)
+
+- `Executor`: OpenCode
+- `Agent`: backend-engineer
+- `Status`: `COMMITTED`
+- `Branch`: main
+- `Started at`: 2026-09-04T00:00:00Z
+- `Completed at`: 2026-09-04T00:00:00Z
+- `Requirement source`: Perplexity BE-LINT-FIX-001 (resolve four CI ESLint no-empty-object-type errors)
+- `Files opened`: products.controller.ts, products.service.ts, agent-status.md, file-ownership.md, work-log.md
+- `Files modified`: products.controller.ts, products.service.ts, agent-status.md, file-ownership.md, work-log.md
+- `Files reserved`: products.controller.ts, products.service.ts, agent-status.md, file-ownership.md, work-log.md (released after commit)
+- `Dependencies`: NONE
+- `Implementation summary`: Type-only, semantically-precise replacements to eliminate @typescript-eslint/no-empty-object-type. (1) products.controller.ts `@Body() _dto: {}` → `@Body() _dto: Record<string, never>`. (2) three `Promise<Prisma.ProductGetPayload<{}>>` → `Promise<Product>` using the generated scalar model type `Product` exported from `@prisma/client` (import updated to `import { Prisma, Product }`). NOTE: task directive literally specified `Prisma.Product`, but that member does not exist in this Prisma client; the equivalent scalar type resolved from `ProductGetPayload<{}>` is the top-level `Product` export (= `$Result.DefaultSelection<Prisma.$ProductPayload>`), which is semantically identical for the default (no-args) selection. No runtime behavior changed.
+- `Validation commands`: `npm run lint`, `npx tsc --noEmit`, `npx prisma validate`, `npm run build`, `npx jest src/common/guards/permissions.guard.spec.ts --silent`, `git diff --check`
+- `Validation results`: lint 0 errors; tsc 0 errors; prisma validate OK; nest build OK; permissions.guard.spec 11/11 pass; git diff --check clean (0 whitespace errors; only LF/CRLF normalization warnings on pre-existing frontend files).
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: (see commit)
+- `Handoff to`: Perplexity
+- `Known risks`:
+  - Pre-existing uncommitted frontend changes (App.tsx, ProductCard.tsx, ProductTableRow.tsx, ListaDetailPage.tsx, ProductDetailPage.tsx, ProductsPage.tsx) remain in working tree, unrelated to this task, not staged.
+  - `src/backend/prisma/schema_backup.prisma` remains untracked and untouched.
+  - Pre-existing jest failures (transition.service.spec.ts mojibake + bulkTransition applied=[]; listas.service.spec.ts ACL ordering) are unrelated and unchanged.
+- `Blockers`: NONE

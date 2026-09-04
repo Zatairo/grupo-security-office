@@ -32,7 +32,7 @@ import {
   EVENT_AUDIT_ACTION,
   PRODUCTS_WRITE_ROLES,
 } from './lifecycle.types';
-import { Prisma } from '@prisma/client';
+import { Prisma, Product } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { UPLOADS_DIR, UPLOADS_URL_PREFIX } from '../../common/uploads-path';
 import { normalizeText } from './import/helpers/text-normalizer';
@@ -1333,7 +1333,7 @@ export class ProductsService {
     id: string,
     dto: SchedulePublicationDto,
     ctx: AccessContext,
-  ): Promise<Prisma.ProductGetPayload<{}>> {
+  ): Promise<Product> {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
     if (product.listaId) {
@@ -1389,7 +1389,7 @@ export class ProductsService {
   async cancelScheduledPublication(
     id: string,
     ctx: AccessContext,
-  ): Promise<Prisma.ProductGetPayload<{}>> {
+  ): Promise<Product> {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Producto no encontrado');
     if (product.listaId) {
@@ -1435,7 +1435,7 @@ export class ProductsService {
     id: string,
     publishAt: Date,
     ctx: AccessContext,
-  ): Promise<Prisma.ProductGetPayload<{}>> {
+  ): Promise<Product> {
     return this.prisma.product.update({
       where: { id },
       data: {

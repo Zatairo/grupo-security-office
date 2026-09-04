@@ -278,7 +278,7 @@ export class ProductsController {
   @ApiResponse({ status: 404, description: 'Producto no encontrado' })
   cancelScheduledPublication(
     @Param('id') id: string,
-    @Body() _dto: {},
+    @Body() _dto: Record<string, never>,
     @CurrentUser() user: any,
   ) {
     return this.productsService.cancelScheduledPublication(id, this.ctx(user));
