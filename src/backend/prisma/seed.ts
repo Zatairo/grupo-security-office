@@ -12,12 +12,21 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'prices:read', 'prices:write',
     'users:read', 'users:write', 'users:manage',
     'audit:read',
+    // RBAC híbrido (BE-RBAC-001): permisos granulares canónicos.
+    'listas:create', 'listas:update', 'listas:duplicate', 'listas:import',
+    'listas:archive', 'listas:delete', 'listas:publish',
+    'products:publish',
+    'assignments:manage',
+    // Legacy: se mantiene por compatibilidad temporal con el guard.
+    // La excepción Super Admin del PermissionsGuard no depende de esta lista.
     'publish:manage',
   ],
   'Supervisor': [
     'products:read',
-    'publish:manage',
     'audit:read',
+    'listas:publish',
+    'products:publish',
+    'publish:manage',
   ],
   'Admin Comercial': [
     'products:read', 'products:write', 'products:delete',
@@ -26,6 +35,11 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'prices:read', 'prices:write',
     'users:read',
     'audit:read',
+    // RBAC híbrido (BE-RBAC-001): Admin Comercial administra listas y accesos.
+    'listas:create', 'listas:update', 'listas:duplicate', 'listas:import',
+    'listas:archive', 'listas:delete', 'listas:publish',
+    'products:publish',
+    'assignments:manage',
     'publish:manage',
   ],
   'Operador': [

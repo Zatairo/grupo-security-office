@@ -106,6 +106,7 @@ export class ListasController {
   }
 
   @Post()
+  @Permissions('listas:create')
   @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Crear Lista' })
@@ -117,6 +118,7 @@ export class ListasController {
   }
 
   @Post(':id/duplicate')
+  @Permissions('listas:duplicate')
   @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Duplicar Lista (copia de configuración; nace inactiva)' })
@@ -142,6 +144,7 @@ export class ListasController {
   }
 
   @Patch(':id/archive')
+  @Permissions('listas:archive')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Archivar Lista lógicamente (manage)' })
   archive(@Param('id') id: string, @CurrentUser() user: any) {
@@ -149,6 +152,7 @@ export class ListasController {
   }
 
   @Patch(':id/restore')
+  @Permissions('listas:archive')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Restaurar Lista archivada (manage)' })
   restore(@Param('id') id: string, @CurrentUser() user: any) {
@@ -173,6 +177,7 @@ export class ListasController {
   }
 
   @Delete(':id')
+  @Permissions('listas:delete')
   @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

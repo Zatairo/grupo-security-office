@@ -4,6 +4,7 @@ import { AssignmentsService } from './assignments.service';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { UpdateAssignmentDto } from './dto/update-assignment.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -55,6 +56,7 @@ export class AssignmentsController {
   }
 
   @Post()
+  @Permissions('assignments:manage')
   @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Crear o reactivar una asignación' })
@@ -67,6 +69,7 @@ export class AssignmentsController {
   }
 
   @Patch(':id')
+  @Permissions('assignments:manage')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Actualizar level y/o isActive de una asignación' })
   update(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: UpdateAssignmentDto) {
@@ -74,6 +77,7 @@ export class AssignmentsController {
   }
 
   @Delete(':id')
+  @Permissions('assignments:manage')
   @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Desactivar lógicamente una asignación' })

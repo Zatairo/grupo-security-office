@@ -7,7 +7,7 @@
 ## Active reservations
 
 | Task ID | Executor | Agent | Branch | Reserved file or directory | Purpose | Status | Reserved at | Expected release |
-|---|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|---|---|
 | NONE | NONE | NONE | NONE | NONE | NONE | NONE | NONE | NONE |
 
 ## Reservation rules
@@ -31,3 +31,4 @@
 |---|---|---|---|---|---|
 | COORD-RECONCILE-001 | OpenCode | tech-lead-orchestrator | AGENTS.md, docs/AGENT_TEAM.md, docs/WORKFLOW.md, docs/PROJECT_STATUS.md, docs/agent-coordination/*, opencode.json, .opencode/agents/*.md, .opencode/agent/excel-*.md, data/import/README.md, requirements.txt | (see work-log) | 2026-09-03T00:00:00Z |
 | FE-COMMERCIAL-NAV-001 | Kilo Code | GS Frontend Implementer | src/frontend/src/components/layout/Header.tsx, src/frontend/src/components/layout/CommercialLayout.tsx, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md | (see work-log) | 2026-09-04T00:00:00Z |
+| BE-RBAC-001 | OpenCode | backend-engineer | src/backend/src/app.module.ts, src/backend/src/common/guards/permissions.guard.ts, src/backend/src/common/guards/permissions.guard.spec.ts, src/backend/prisma/seed.ts, src/backend/src/modules/listas/listas.controller.ts, src/backend/src/modules/products/products.controller.ts, src/backend/src/modules/assignments/assignments.controller.ts, docs/agent-coordination/{agent-status,file-ownership,work-log}.md | (see work-log) | 2026-09-04T00:00:00Z |

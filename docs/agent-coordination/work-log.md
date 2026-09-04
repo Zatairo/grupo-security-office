@@ -78,3 +78,37 @@
 - `Blockers`: NONE
 - `Pending B-E`: Phases B (ProductsPage read-only), C (Lists operations plus PENDING_DELETION badge), D (ListaDetailPage six tabs plus read-only Access), and E (ProductDetailPage read mode from catalog) are NOT implemented and require separate tasks.
 - `Product decision required`: Does Configuracion provide secondary access to assignments, suppliers, purchase orders, and purchasing dashboard, or are those modules intentionally hidden?
+
+---
+
+## [BE-RBAC-001] — Make granular global permissions effective (PermissionsGuard + seed + @Permissions)
+
+- `Executor`: OpenCode
+- `Agent`: backend-engineer
+- `Status`: `COMMITTED`
+- `Branch`: main
+- `Started at`: 2026-09-04T00:00:00Z
+- `Requirement source`: Perplexity BE-RBAC-001 (after RBAC-PLAN-001 spec)
+- `Files opened`: app.module.ts, permissions.guard.ts, permissions.decorator.ts, roles.guard.ts, roles.guard.spec.ts, jwt.strategy.ts, auth.service.ts, acl.service.ts, seed.ts, listas.controller.ts, listas.service.ts, products.controller.ts, products.service.ts, assignments.controller.ts, assignments.service.ts, suppliers.controller.ts, suppliers.service.ts, file-ownership.md, agent-status.md, work-log.md, README.md
+- `Files modified`: src/backend/src/app.module.ts, src/backend/src/common/guards/permissions.guard.ts, src/backend/prisma/seed.ts, src/backend/src/modules/listas/listas.controller.ts, src/backend/src/modules/products/products.controller.ts, src/backend/src/modules/assignments/assignments.controller.ts, docs/agent-coordination/{agent-status,file-ownership,work-log}.md
+- `Files created`: src/backend/src/common/guards/permissions.guard.spec.ts
+- `Files reserved`: app.module.ts, permissions.guard.ts, permissions.guard.spec.ts, permissions.decorator.ts, seed.ts, listas.controller.ts, products.controller.ts, assignments.controller.ts, docs/agent-coordination/* (active reservation)
+- `Dependencies`: RBAC-PLAN-001 (spec)
+- `Implementation summary`:
+  1. Registered PermissionsGuard as global APP_GUARD (after JwtAuthGuard and ThrottlerGuard) in app.module.ts.
+  2. Rewrote PermissionsGuard: (a) Super Admin global exception (bypasses permission list), (b) temporary legacy alias `publish:manage` → `products:publish` via resolveGrantedPermissions, (c) `every(required)` semantics preserved.
+  3. Seeded new granular permissions (`listas:create/update/duplicate/import/archive/delete/publish`, `products:publish`, `assignments:manage`) into ROLE_PERMISSIONS for Super Admin, Admin Comercial and Supervisor (publish only); kept legacy `publish:manage`.
+  4. Applied `@Permissions` to: Listas create/duplicate/archive/restore/delete (+deletion-request already had listas:delete), ListasPublicationController publish/schedule/cancel (listas:publish), product publication schedule/cancel/bulk (products:publish), assignments create/update/remove (assignments:manage).
+  5. Added permissions.guard.spec.ts with 11 focused tests (positive, negative, every, Super Admin, legacy alias).
+  - ACL-by-Lista layer untouched (preserved as contextual authorization).
+- `Validation commands`: `npx tsc --noEmit`, `npx prisma validate`, `npm run build`, `npx jest <guard spec>`, `npx jest --silent`
+- `Validation results`: tsc 0 errors; prisma validate OK; nest build OK; guard spec 11/11 pass; full jest 633/643 pass — 10 failures are PRE-EXISTING (confirmed via `git stash` round-trip on base HEAD): listas.service.spec.ts (1: ACL assertListaAccess ordering) and transition.service.spec.ts (9: file-encoding mojibake + bulkTransition applied=[]). Unrelated to this task; service files not modified by BE-RBAC-001.
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: (see commit after BE-RBAC-001-COMMIT)
+- `Handoff to`: Perplexity + subsequent BE-RBAC-002/003/004/005
+- `Known risks`:
+  - `publish:manage` retained as temporary alias; must be retired when roles migrate to canonical `products:publish`.
+  - Global PermissionsGuard now runs on every request; endpoints WITHOUT @Permissions are unaffected (return true).
+  - Super Admin exception relies on `user.roles` containing 'Super Admin' (JWT payload); consistent with AclService.
+  - Deferred deletion/purge scheduler, stock/supplier ACL and publish-schedule scoping are OUT OF SCOPE (prohibited) and remain unimplemented.
+- `Blockers`: NONE

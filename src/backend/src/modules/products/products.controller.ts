@@ -14,6 +14,7 @@ import { DeleteProductDto } from './dto/delete-product.dto';
 import { BulkSchedulePublicationDto } from './dto/bulk-schedule-publication.dto';
 import { SchedulePublicationDto } from './dto/schedule-publication.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AccessContext } from '../../common/acl/acl.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -252,6 +253,7 @@ export class ProductsController {
 
   @Post(':id/publication/schedule')
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Permissions('products:publish')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Programar publicaciÃ³n de un producto' })
   @ApiResponse({ status: 200, description: 'ProgramaciÃ³n registrada', type: Object })
@@ -268,6 +270,7 @@ export class ProductsController {
 
   @Post(':id/publication/cancel')
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Permissions('products:publish')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Cancelar programaciÃ³n de publicaciÃ³n de un producto' })
   @ApiResponse({ status: 200, description: 'ProgramaciÃ³n cancelada', type: Object })
@@ -283,6 +286,7 @@ export class ProductsController {
 
   @Post("publication/schedule-bulk")
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Permissions('products:publish')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Programar publicaci\u00f3n masiva de productos' })
   @ApiResponse({ status: 200, description: "Resultado consolidado", type: Object })
@@ -295,6 +299,7 @@ export class ProductsController {
 
   @Post("publication/cancel-bulk")
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Permissions('products:publish')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Cancelar programaci\u00f3n masiva de publicaci\u00f3n' })
   @ApiResponse({ status: 200, description: "Resultado consolidado", type: Object })
@@ -318,6 +323,7 @@ export class ListasPublicationController {
   }
 
   @Post(':id/publication/publish')
+  @Permissions('listas:publish')
   @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Publicar todos los productos elegibles de una Lista' })
@@ -327,6 +333,7 @@ export class ListasPublicationController {
   }
 
   @Post(':id/publication/schedule')
+  @Permissions('listas:publish')
   @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Programar publicacion de una Lista completa' })
@@ -336,6 +343,7 @@ export class ListasPublicationController {
   }
 
   @Post(':id/publication/cancel')
+  @Permissions('listas:publish')
   @Roles('Super Admin', 'Admin Comercial')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancelar programaciones pendientes de una Lista' })

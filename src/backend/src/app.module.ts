@@ -17,6 +17,7 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { HealthModule } from './modules/health/health.module';
 import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
 
 @Module({
   imports: [
@@ -61,6 +62,13 @@ import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      // RBAC híbrido (BE-RBAC-001): hace efectivos los permisos granulares
+      // vía @Permissions(). Global para que se evalúe en todo endpoint decorado.
+      // Guarda contextual (ACL por Lista) permanece en los servicios.
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
     },
   ],
 })
