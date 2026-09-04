@@ -2,12 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '../../stores/auth.store'
 import { useNavigate, NavLink, useLocation } from 'react-router-dom'
 import api from '../../services/api'
-import { canManageListaAccess, canViewAudit, canViewUsers } from '../../lib/rbac'
+import { canViewAudit, canViewUsers } from '../../lib/rbac'
 
 const COMMERCIAL_ITEMS = [
   { to: '/commercial/products', label: 'Productos' },
   { to: '/commercial/lists', label: 'Listas' },
-  { to: '/commercial/assignments', label: 'Asignaciones', manageAccess: true },
   { to: '/commercial/settings', label: 'Configuración' },
 ]
 
@@ -230,9 +229,7 @@ export default function Header() {
             style={{ left: menuLeft }}
             className="absolute top-full z-[60] mt-1 min-w-[180px] py-1 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg shadow-lg"
           >
-            {COMMERCIAL_ITEMS.filter(
-              (item) => !item.manageAccess || canManageListaAccess()
-            ).map((item) => (
+            {COMMERCIAL_ITEMS.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}

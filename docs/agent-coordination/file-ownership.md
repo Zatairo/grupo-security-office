@@ -30,3 +30,4 @@
 | Task ID | Executor | Agent | Files | Commit | Released at |
 |---|---|---|---|---|---|
 | COORD-RECONCILE-001 | OpenCode | tech-lead-orchestrator | AGENTS.md, docs/AGENT_TEAM.md, docs/WORKFLOW.md, docs/PROJECT_STATUS.md, docs/agent-coordination/*, opencode.json, .opencode/agents/*.md, .opencode/agent/excel-*.md, data/import/README.md, requirements.txt | (see work-log) | 2026-09-03T00:00:00Z |
+| FE-COMMERCIAL-NAV-001 | Kilo Code | GS Frontend Implementer | src/frontend/src/components/layout/Header.tsx, src/frontend/src/components/layout/CommercialLayout.tsx, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md | (see work-log) | 2026-09-04T00:00:00Z |

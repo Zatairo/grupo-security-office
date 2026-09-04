@@ -51,3 +51,30 @@
 - `Handoff to`: Perplexity + later review task (COORD-VERIFY)
 - `Known risks`: docs/DECISIONS.md and docs/decisions/* ADR files remain out of scope and still carry FINANZAS/FastAPI/SQLAlchemy statements; they were not authorized for modification in this task. schema_backup.prisma and opencode.json.invalid-backup remain untracked (not staged).
 - `Blockers`: NONE
+
+
+---
+
+## [FE-COMMERCIAL-NAV-001] - Close and commit commercial navigation Phase A
+
+- `Executor`: Kilo Code
+- `Agent`: GS Frontend Implementer
+- `Status`: `COMMITTED`
+- `Branch`: main
+- `Started at`: 2026-09-04T00:00:00Z
+- `Completed at`: 2026-09-04T00:00:00Z
+- `Requirement source`: Perplexity task FE-COMMERCIAL-NAV-001 (commercial navigation Phase A, documentation/close phase)
+- `Files opened`: src/frontend/src/components/layout/Header.tsx, src/frontend/src/components/layout/CommercialLayout.tsx, docs/agent-coordination/README.md, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Files modified`: src/frontend/src/components/layout/Header.tsx, src/frontend/src/components/layout/CommercialLayout.tsx, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Files reserved`: Header.tsx, CommercialLayout.tsx, agent-status.md, file-ownership.md, work-log.md (released before commit)
+- `Dependencies`: NONE
+- `Implementation summary`: Phase A simplifies commercial navigation. The commercial dropdown now exposes only Productos, Listas and Configuracion; Asignaciones is removed from the dropdown. Primary commercial tabs no longer expose assignments, suppliers, purchase orders or purchasing dashboard; route definitions remain unchanged. Root RBAC conditions for Dashboard, Users and Audit remain unchanged. Phases B-E are NOT implemented and are explicitly out of this task scope.
+- `Validation commands`: cd src/frontend; npx tsc --noEmit | cd src/frontend; npm run build | git diff --check | git diff -- Header.tsx CommercialLayout.tsx
+- `Validation results`: tsc exit 0; build exit 0 (built in 17.61s); git diff --check clean (no whitespace errors; only LF/CRLF normalization warnings).
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: (reported after commit)
+- `Handoff to`: Perplexity for Phase B-E tasking decision
+- `Known risks`: opencode.json.invalid-backup and src/backend/prisma/schema_backup.prisma remain untracked and unstaged. Unresolved product decision recorded below.
+- `Blockers`: NONE
+- `Pending B-E`: Phases B (ProductsPage read-only), C (Lists operations plus PENDING_DELETION badge), D (ListaDetailPage six tabs plus read-only Access), and E (ProductDetailPage read mode from catalog) are NOT implemented and require separate tasks.
+- `Product decision required`: Does Configuracion provide secondary access to assignments, suppliers, purchase orders, and purchasing dashboard, or are those modules intentionally hidden?

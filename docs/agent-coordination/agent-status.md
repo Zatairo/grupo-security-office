@@ -9,7 +9,7 @@
 | Executor | Agent | Status | Task ID | Task title | Branch | Files reserved | Dependencies | Last commit | Blockers | Next action | Updated at |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | OpenCode | tech-lead-orchestrator | COMMITTED | COORD-RECONCILE-001 | Reconcile Grupo Security Office multi-agent identity and OpenCode configuration | main | (released) | NONE | (see work-log) | NONE | Await Perplexity assignment | 2026-09-03T00:00:00Z |
-| Kilo Code | NONE | IDLE | NONE | NONE | NONE | NONE | NONE | NONE | NONE | Await Perplexity assignment | YYYY-MM-DDTHH:MM:SSZ |
+| Kilo Code | GS Frontend Implementer | COMMITTED | FE-COMMERCIAL-NAV-001 | Close and commit commercial navigation Phase A | main | (released) | NONE | (see work-log) | NONE | Await Perplexity assignment | 2026-09-04T00:00:00Z |
 
 ## Allowed status values
 
