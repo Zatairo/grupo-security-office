@@ -132,7 +132,7 @@
 - `Validation commands`: `npm run lint`, `npx tsc --noEmit`, `npx prisma validate`, `npm run build`, `npx jest src/common/guards/permissions.guard.spec.ts --silent`, `git diff --check`
 - `Validation results`: lint 0 errors; tsc 0 errors; prisma validate OK; nest build OK; permissions.guard.spec 11/11 pass; git diff --check clean (0 whitespace errors; only LF/CRLF normalization warnings on pre-existing frontend files).
 - `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
-- `Commit hash`: (see commit)
+- `Commit hash`: b7e8ca45cb6810cb45f50a7c0e947055dbed8fdf
 - `Handoff to`: Perplexity
 - `Known risks`:
   - Pre-existing uncommitted frontend changes (App.tsx, ProductCard.tsx, ProductTableRow.tsx, ListaDetailPage.tsx, ProductDetailPage.tsx, ProductsPage.tsx) remain in working tree, unrelated to this task, not staged.
