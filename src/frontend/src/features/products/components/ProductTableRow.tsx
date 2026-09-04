@@ -16,6 +16,10 @@ interface ProductTableRowProps {
   accessUnavailable?: boolean
   onMoveCategory?: (product: Product) => void
   onAccess?: (product: Product) => void
+  /** En modo read-only, callback para navegar al detalle de solo lectura. */
+  onOpen?: (id: string) => void
+  /** Cuando es true, oculta todos los controles de mutación (catálogo global read-only). */
+  readOnly?: boolean
 }
 
 export function ProductTableRow({
@@ -28,6 +32,8 @@ export function ProductTableRow({
   accessUnavailable,
   onMoveCategory,
   onAccess,
+  onOpen,
+  readOnly = false,
 }: ProductTableRowProps) {
   return (
     <tr className="hover:bg-gray-50 transition-colors">
@@ -93,7 +99,15 @@ export function ProductTableRow({
       </td>
       <td className="px-6 py-4">
         <div className="flex items-center gap-1">
-          {hasPermission('products:write') && onMoveCategory && (
+          {readOnly && onOpen && (
+            <button
+              onClick={() => onOpen(product.id)}
+              className="px-2.5 py-1 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+            >
+              Ver
+            </button>
+          )}
+          {!readOnly && hasPermission('products:write') && onMoveCategory && (
             <button
               onClick={() => onMoveCategory(product)}
               className="p-2 text-gray-400 hover:text-security-600 hover:bg-security-50 rounded-lg transition-colors"
@@ -104,7 +118,7 @@ export function ProductTableRow({
               </svg>
             </button>
           )}
-          {(hasPermission('users:manage') || hasPermission('products:write')) && onAccess && (
+          {!readOnly && (hasPermission('users:manage') || hasPermission('products:write')) && onAccess && (
             <button
               onClick={() => onAccess(product)}
               className="p-2 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
@@ -115,7 +129,7 @@ export function ProductTableRow({
               </svg>
             </button>
           )}
-          {hasPermission('products:write') && (
+          {!readOnly && hasPermission('products:write') && (
             <button
               onClick={() => onEdit(product)}
               className="p-2 text-gray-400 hover:text-security-600 hover:bg-security-50 rounded-lg transition-colors"
@@ -126,7 +140,7 @@ export function ProductTableRow({
               </svg>
             </button>
           )}
-          {hasPermission('products:delete') && (
+          {!readOnly && hasPermission('products:delete') && (
             <button
               onClick={() => {
                 if (confirm('¿Eliminar este producto?')) {

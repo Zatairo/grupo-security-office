@@ -45,6 +45,10 @@ function App() {
           <Route path="products/:productId" element={<ProductDetailPage />} />
           <Route path="lists" element={<ListasPage />} />
           <Route path="lists/:id" element={<ListaDetailPage />} />
+          <Route
+            path="lists/:listaId/products/:productId"
+            element={<ProductDetailPage />}
+          />
           <Route path="assignments" element={<AssignmentsPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="purchase-orders" element={<PurchaseOrdersPage />} />

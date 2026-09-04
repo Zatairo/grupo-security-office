@@ -23,7 +23,7 @@ import {
 import { usePriceLists } from '../features/products/hooks/usePriceLists'
 import { getApiErrorMessage } from '../lib/apiError'
 import { formatCurrency, formatDate, formatBytes } from '../lib/format'
-import { canManageListaAccess, canViewAudit, hasPermission } from '../lib/rbac'
+import { canViewAudit, hasPermission } from '../lib/rbac'
 import { Button, Modal, Badge, Alert } from '../components/ui'
 import {
   useTransitionProduct,
@@ -54,7 +54,6 @@ import {
   fetchPriceLists,
   type Price,
 } from '../services/prices.service'
-import { ProductAccessModal } from '../features/products/components/ProductAccessModal'
 import { SpecEditor, deserializeSpecFields, serializeSpecFields } from '../features/products/components/SpecEditor'
 
 type DetailTab =
@@ -64,7 +63,6 @@ type DetailTab =
   | 'prices'
   | 'stock'
   | 'suppliers'
-  | 'access'
   | 'publish'
   | 'audit'
 
@@ -75,7 +73,6 @@ const TABS: { id: DetailTab; label: string }[] = [
   { id: 'prices', label: 'Precios' },
   { id: 'stock', label: 'Stock' },
   { id: 'suppliers', label: 'Proveedores' },
-  { id: 'access', label: 'Accesos' },
   { id: 'publish', label: 'Publicación' },
   { id: 'audit', label: 'Auditoría' },
 ]
@@ -404,10 +401,12 @@ function InfoTab({
   product,
   categories,
   brands,
+  readOnly = false,
 }: {
   product: Product
   categories: Category[]
   brands: Brand[]
+  readOnly?: boolean
 }) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState({
@@ -416,8 +415,6 @@ function InfoTab({
     description: product.description ?? '',
     categoryId: product.categoryId,
     brandId: product.brandId,
-    isActive: product.isActive,
-    isVisible: product.isVisible,
   })
   const [error, setError] = useState('')
 
@@ -445,6 +442,40 @@ function InfoTab({
     }
     setError('')
     mutation.mutate()
+  }
+
+  if (readOnly) {
+    return (
+      <div className="space-y-4">
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <dt className="text-xs font-medium text-neutral-500 uppercase tracking-wide">SKU</dt>
+            <dd className="mt-1 text-neutral-800 font-mono">{product.sku}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-neutral-500 uppercase tracking-wide">Nombre</dt>
+            <dd className="mt-1 text-neutral-800">{product.name}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-neutral-500 uppercase tracking-wide">Categoría</dt>
+            <dd className="mt-1 text-neutral-800">{product.category?.name || 'Sin categoría'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-neutral-500 uppercase tracking-wide">Marca</dt>
+            <dd className="mt-1 text-neutral-800">{product.brand?.name || 'Sin marca'}</dd>
+          </div>
+        </dl>
+        <div>
+          <dt className="text-xs font-medium text-neutral-500 uppercase tracking-wide">Descripción</dt>
+          <dd className="mt-1 text-sm text-neutral-700">
+            {product.description || 'Sin descripción'}
+          </dd>
+        </div>
+        <p className="text-xs text-neutral-400">
+          Esta vista de catálogo es de solo lectura. La edición se realiza desde su Lista comercial.
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -526,27 +557,6 @@ function InfoTab({
               ))}
             </select>
           </div>
-        </div>
-
-        <div className="flex gap-6">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.isActive}
-              onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-              className="w-4 h-4 text-[var(--color-primary)] border-neutral-300 rounded focus:ring-[var(--color-primary-focus-ring)]"
-            />
-            <span className="text-sm text-neutral-700">Activo</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.isVisible}
-              onChange={(e) => setForm({ ...form, isVisible: e.target.checked })}
-              className="w-4 h-4 text-[var(--color-primary)] border-neutral-300 rounded focus:ring-[var(--color-primary-focus-ring)]"
-            />
-            <span className="text-sm text-neutral-700">Visible</span>
-          </label>
         </div>
 
         <div className="flex justify-end">
@@ -1382,39 +1392,6 @@ function SuppliersTab({ product }: { product: Product }) {
   )
 }
 
-// ------------------------------ Accesos ------------------------------
-function AccessTab({ product }: { product: Product }) {
-  const [open, setOpen] = useState(false)
-  const canManageAccess = canManageListaAccess()
-  return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-200 p-4">
-        <h3 className="text-sm font-semibold text-neutral-700 mb-1">Accesos por producto</h3>
-        <p className="text-sm text-neutral-500 mb-3">
-          Asigna usuarios con niveles de permiso (ver, editar, gestionar o administrar accesos)
-          sobre este producto. La asignación se registra vía{' '}
-          <code className="text-xs">/api/assignments</code>.
-        </p>
-        {canManageAccess ? (
-          <Button onClick={() => setOpen(true)}>Gestionar accesos</Button>
-        ) : (
-          <p className="text-sm text-neutral-400">
-            No tienes permisos para gestionar accesos por producto.
-          </p>
-        )}
-      </div>
-
-      {open && canManageAccess && (
-        <ProductAccessModal
-          productId={product.id}
-          productName={product.name}
-          onClose={() => setOpen(false)}
-        />
-      )}
-    </div>
-  )
-}
-
 // ------------------------------ Publicación (ciclo de vida FSM) ------------------------------
 function PublishTab({
   product,
@@ -2012,8 +1989,10 @@ function AuditTab({ product }: { product: Product }) {
 
 // ------------------------------ Página ------------------------------
 export default function ProductDetailPage() {
-  const { productId } = useParams<{ productId: string }>()
+  const { productId, listaId } = useParams<{ productId: string; listaId?: string }>()
   const navigate = useNavigate()
+  // Modo contextual (desde Lista) → operativo; sin listaId → catálogo global read-only.
+  const isContextual = Boolean(listaId)
   const [tab, setTab] = useState<DetailTab>('info')
   const [selectedImage, setSelectedImage] = useState(0)
   const [lifecycleModal, setLifecycleModal] = useState<{ event: LifecycleModalEvent } | null>(null)
@@ -2093,7 +2072,9 @@ export default function ProductDetailPage() {
 
   // El tab Precios exige ACL edit_prices en el backend (Super Admin + Admin Comercial);
   // para el resto de roles se oculta para no disparar 403/404.
-  const visibleTabs = TABS.filter((t) => t.id !== 'prices' || canEdit)
+  const visibleTabs = isContextual
+    ? TABS.filter((t) => t.id !== 'prices' || canEdit)
+    : TABS.filter((t) => t.id === 'info' || t.id === 'audit')
   const effectiveTab: DetailTab = visibleTabs.some((t) => t.id === tab) ? tab : 'info'
 
   // ============ RETORNOS CONDICIONALES (ahora después de todos los hooks) ============
@@ -2194,15 +2175,37 @@ export default function ProductDetailPage() {
     <div className="space-y-6 pb-8">
       <nav aria-label="Breadcrumb">
         <ol className="flex items-center gap-1.5 text-sm text-neutral-500 flex-wrap">
-          <li>
-            <Link to="/commercial/products" className="hover:text-security-600">
-              Productos
-            </Link>
-          </li>
-          <li aria-hidden>›</li>
-          <li className="text-neutral-700">
-            {product.brand?.name || 'Producto'}
-          </li>
+          {isContextual ? (
+            <>
+              <li>
+                <Link to="/commercial/lists" className="hover:text-security-600">
+                  Listas
+                </Link>
+              </li>
+              <li aria-hidden>›</li>
+              <li>
+                <Link to={`/commercial/lists/${listaId}`} className="hover:text-security-600">
+                  Lista
+                </Link>
+              </li>
+              <li aria-hidden>›</li>
+              <li className="text-neutral-700">
+                {product.brand?.name || 'Producto'}
+              </li>
+            </>
+          ) : (
+            <>
+              <li>
+                <Link to="/commercial/products" className="hover:text-security-600">
+                  Productos
+                </Link>
+              </li>
+              <li aria-hidden>›</li>
+              <li className="text-neutral-700">
+                {product.brand?.name || 'Producto'}
+              </li>
+            </>
+          )}
         </ol>
       </nav>
 
@@ -2323,13 +2326,12 @@ export default function ProductDetailPage() {
         </div>
 
         <div className="p-6">
-          {effectiveTab === 'info' && <InfoTab product={product} categories={categories} brands={brands} />}
+          {effectiveTab === 'info' && <InfoTab product={product} categories={categories} brands={brands} readOnly={!isContextual} />}
           {effectiveTab === 'specs' && <AtributosTab product={product} />}
           {effectiveTab === 'images' && <ImagesTab product={product} />}
           {effectiveTab === 'prices' && <PricesTab product={product} />}
           {effectiveTab === 'stock' && <StockTab product={product} />}
           {effectiveTab === 'suppliers' && <SuppliersTab product={product} />}
-          {effectiveTab === 'access' && <AccessTab product={product} />}
           {effectiveTab === 'publish' && (
             <PublishTab
               product={product}

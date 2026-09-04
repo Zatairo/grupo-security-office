@@ -13,9 +13,11 @@ interface ProductCardProps {
   onDelete: (id: string) => void
   onMoveCategory?: (product: Product) => void
   onAccess?: (product: Product) => void
+  /** Cuando es true, oculta todos los controles de mutación (catálogo global read-only). */
+  readOnly?: boolean
 }
 
-export function ProductCard({ product, onEdit, onDelete, onMoveCategory, onAccess }: ProductCardProps) {
+export function ProductCard({ product, onEdit, onDelete, onMoveCategory, onAccess, readOnly = false }: ProductCardProps) {
   const navigate = useNavigate()
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -46,6 +48,7 @@ export function ProductCard({ product, onEdit, onDelete, onMoveCategory, onAcces
           <PublishBadge product={product} />
         </div>
         {/* Actions */}
+        {!readOnly && (
         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1">
           {hasPermission('products:write') && onMoveCategory && (
             <button
@@ -80,6 +83,7 @@ export function ProductCard({ product, onEdit, onDelete, onMoveCategory, onAcces
             </button>
           )}
         </div>
+        )}
       </div>
       <div className="p-4">
         <p className="text-[10px] font-semibold text-security-600 uppercase">{product.brand?.name}</p>
@@ -97,7 +101,7 @@ export function ProductCard({ product, onEdit, onDelete, onMoveCategory, onAcces
           )}
         </div>
         <div className="mt-3 flex items-center gap-2">
-          {hasPermission('products:delete') && (
+          {!readOnly && hasPermission('products:delete') && (
             <button
               onClick={() => {
                 if (confirm('¿Eliminar este producto?')) {

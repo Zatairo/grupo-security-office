@@ -276,7 +276,7 @@ function ProductosTab({
       </div>
 
       {view === 'folder' ? (
-        <FolderView products={products} onOpenProduct={(id) => navigate(`/commercial/products/${id}`)} />
+        <FolderView products={products} onOpenProduct={(id) => navigate(`/commercial/lists/${listaId}/products/${id}`)} />
       ) : (
         <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
           <div className="overflow-x-auto">
@@ -316,7 +316,7 @@ function ProductosTab({
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <Link
-                          to={`/commercial/products/${p.id}`}
+                          to={`/commercial/lists/${listaId}/products/${p.id}`}
                           className="px-2.5 py-1 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-bg-subtle)] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
                         >
                           Ver
