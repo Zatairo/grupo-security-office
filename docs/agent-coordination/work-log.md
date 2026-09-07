@@ -139,3 +139,25 @@
   - `src/backend/prisma/schema_backup.prisma` remains untracked and untouched.
   - Pre-existing jest failures (transition.service.spec.ts mojibake + bulkTransition applied=[]; listas.service.spec.ts ACL ordering) are unrelated and unchanged.
 - `Blockers`: NONE
+
+## [FE-CONTEXTUAL-PRODUCT-001] — Synchronize and commit contextual product operations
+
+- `Executor`: Kilo Code
+- `Agent`: GS Frontend Implementer
+- `Status`: `COMMITTED`
+- `Branch`: main
+- `Started at`: 2026-09-04T16:41:59Z
+- `Completed at`: 2026-09-04T17:03:33Z
+- `Requirement source`: Perplexity task FE-CONTEXTUAL-PRODUCT-001 (validation + commit after BE-RBAC-001/BE-LINT-FIX-001)
+- `Files opened`: src/frontend/src/App.tsx, src/frontend/src/features/products/components/ProductCard.tsx, src/frontend/src/features/products/components/ProductTableRow.tsx, src/frontend/src/pages/ListaDetailPage.tsx, src/frontend/src/pages/ProductDetailPage.tsx, src/frontend/src/pages/ProductsPage.tsx, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Files modified`: src/frontend/src/App.tsx, src/frontend/src/features/products/components/ProductCard.tsx, src/frontend/src/features/products/components/ProductTableRow.tsx, src/frontend/src/pages/ListaDetailPage.tsx, src/frontend/src/pages/ProductDetailPage.tsx, src/frontend/src/pages/ProductsPage.tsx, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Files reserved`: App.tsx, ProductCard.tsx, ProductTableRow.tsx, ListaDetailPage.tsx, ProductDetailPage.tsx, ProductsPage.tsx, agent-status.md, file-ownership.md, work-log.md (released in commit)
+- `Dependencies`: BE-RBAC-001, BE-LINT-FIX-001 (previous tasks on main)
+- `Implementation summary`: Synchronized frontend working tree with verified main branch. Implemented contextual product operations: added /commercial/lists/:listaId/products/:productId route; preserved global /commercial/products/:productId as read-only; removed all product mutation hooks/calls/modals from ProductsPage; removed Access tab from global ProductDetailPage; removed isActive/isVisible from Information save payload; ProductCard/ProductTableRow hide all mutation controls when readOnly=true; ProductDetailPage shows breadcrumb navigation to Lista context. All six frontend files modified with 127 insertions, 620 deletions. TypeScript typecheck clean, lint 0 errors, build OK. Validation confirmed: no mutation controls in read-only mode, no global product creation/editing/deletion, Information save excludes isActive/isVisible.
+- `Validation commands`: npx tsc --noEmit (exit 0); npm run lint (0 errors, 10 pre-existing warnings); npm run build (tsc -b + vite build, 228 modules transformed); git diff --check (clean); targeted grep checks for mutation hooks, Access tab, isActive/isVisible, readOnly guards.
+- `Validation results`: TypeScript: clean; Lint: 0 errors; Build: OK; git diff --check: clean. All mandatory integration checks passed.
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: aff21e2838a8b37a392c9419fb9bf3357ae116fd
+- `Handoff to`: Perplexity for subsequent tasking
+- `Known risks`: schema_backup.prisma remains untracked (pre-existing, never modified by Kilo). No backend changes, no Prisma modifications, no schema migrations. Fast-forward push to origin/main completed. No force push, reset, or amend performed.
+- `Blockers`: NONE
