@@ -161,3 +161,25 @@
 - `Handoff to`: Perplexity for subsequent tasking
 - `Known risks`: schema_backup.prisma remains untracked (pre-existing, never modified by Kilo). No backend changes, no Prisma modifications, no schema migrations. Fast-forward push to origin/main completed. No force push, reset, or amend performed.
 - `Blockers`: NONE
+
+## [CHORE-OBSIDIAN-IGNORE-001] — Ignore local Obsidian configuration so .obsidian/graph.json does not appear as untracked
+
+- `Executor`: OpenCode
+- `Agent`: tech-lead-orchestrator
+- `Status`: `COMMITTED`
+- `Branch`: agent/opencode/CHORE-OBSIDIAN-IGNORE-001-ignore-obsidian-local-config
+- `Started at`: 2026-09-07T00:00:00Z
+- `Completed at`: 2026-09-07T00:00:00Z
+- `Requirement source`: Perplexity task CHORE-OBSIDIAN-IGNORE-001
+- `Files opened`: .gitignore, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Files modified`: .gitignore, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Files reserved`: .gitignore, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Dependencies`: NONE
+- `Implementation summary`: Added `.obsidian/` rule to .gitignore to prevent local Obsidian workspace configuration files from being tracked by Git. The blanket rule covers .obsidian/graph.json and any other local Obsidian files that may exist developer-side. All existing .gitignore entries preserved.
+- `Validation commands`: git check-ignore -v .obsidian/graph.json, git status --short, git diff --check, git diff -- .gitignore, git diff --name-only, git diff -- src/backend/prisma/schema_backup.prisma
+- `Validation results`: git check-ignore -v .obsidian/graph.json identifies the .gitignore rule (.gitignore:15:.obsidian/ .obsidian/graph.json); .obsidian/graph.json no longer appears in git status --short; git diff --check returns no errors; only .gitignore and the three authorized coordination files are changed; schema_backup.prisma is not modified or staged.
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: 4253f11
+- `Handoff to`: Perplexity
+- `Known risks`: NONE
+- `Blockers`: NONE
