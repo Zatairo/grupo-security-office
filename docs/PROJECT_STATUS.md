@@ -66,6 +66,24 @@
 
 ---
 
+## Gobernanza de documentación
+
+| Recurso | Rol |
+|---------|-----|
+| `docs/README.md` | Punto de entrada canónico de la documentación |
+| `docs/agent-coordination/` | Fuente de coordinación de ejecución (estado, ownership, work-log) |
+| `docs/adr/` | Única ubicación para nuevas decisiones de arquitectura (ADR) |
+
+- La documentación heredada de **OpenClaw** y **FINANZAS 1:1** (incluyendo
+  FastAPI, SQLAlchemy, Alembic, Pydantic y el ORQUESTADOR heredado) fue eliminada
+  en la tarea `DOCS-CLEANUP-001`.
+- Los documentos de modelo de datos, arquitectura backend, autenticación, testing,
+  seguridad, alcance MVP y despliegue **requieren reconciliación verificada**
+  posterior (identificado en `DOCS-AUDIT-001`). No se tratan como verificados hasta
+  contrastarlos contra el código y la historia reciente de Git.
+
+---
+
 ## Historial de cambios
 
 | Fecha | Cambio | Autor |

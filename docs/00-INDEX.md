@@ -1,22 +1,34 @@
----
-tags: [index, vault, grupo-security]
-updated: 2026-07-16
----
+# Índice de documentación — Grupo Security Office
 
-# GRUPO_SECURITY — Base de Conocimiento Operativo
+> Navegación corta hacia los documentos vigentes y retenidos.
 
-## Navegación
+## Estado y coordinación
 
-| Sección | Descripción |
-|---|---|
-| [[arquitectura/README]] | Diseño del sistema, diagramas |
-| [[decisiones/README]] | ADRs — por qué se tomó cada decisión |
-| [[bitacora/README]] | Log cronológico de actividades |
-| [[procedimientos/README]] | SOPs y runbooks |
-| [[memoria/README]] | Contexto para IA/ORQUESTADOR |
-| [[seguimiento/README]] | Estado actual, tareas pendientes |
-| [[reuniones/README]] | Minutas y acuerdos |
+- [Estado actual del proyecto](./PROJECT_STATUS.md)
+- [Flujo de trabajo](./WORKFLOW.md)
+- [Equipo de agentes](./AGENT_TEAM.md)
+- [Coordinación de ejecución](./agent-coordination/README.md)
+- [Procedimiento Issue → PR → Merge → Handoff](./agent-coordination/worktree-issue-pr-procedure.md)
+- [Handoff actual](./handoffs/HANDOFF_ACTUAL.md)
 
-## Estado del proyecto
-- **Repositorio:** https://github.com/Zatairo/grupo-security-office
-- **Última actualización:** {{date}}
+## Arquitectura
+
+- [Arquitectura general](./architecture.md)
+- [Arquitectura detallada](./architecture-detailed.md)
+- [Arquitectura backend](./backend-architecture.md)
+- [Arquitectura de autenticación](./auth-architecture.md)
+- [Gobernanza de acceso backend](./backend-access-governance.md)
+- [Diagrama entidad-relación](./diagrama-er.md)
+
+## Decisiones (ADR)
+
+- [ADR: Arquitectura híbrida de importación masiva](./adr/ADR-001-import-hybrid-architecture.md)
+
+`docs/adr/` es la única ubicación para registrar nuevas decisiones de arquitectura.
+
+## Producto, testing, seguridad y UI
+
+- [Alcance MVP](./mvp-scope-v1.md)
+- [Estrategia de testing](./testing-strategy.md)
+- [Checklist de seguridad](./security-checklist-v1.md)
+- [Migración de filtros UI](./UI/ui-filters-migration.md)
