@@ -26,6 +26,10 @@ This protocol preserves task state, file ownership, validation evidence, and com
 - `file-ownership.md`: active and released file reservations.
 - `work-log.md`: append-only completed-task and handoff evidence.
 
+The canonical Issue → PR → Merge → Handoff procedure (branch and worktree naming,
+parallel-work rules, validation and close-out evidence, and Git prohibitions) lives
+in `worktree-issue-pr-procedure.md`. Refer to it for the operational workflow.
+
 ## Required preflight
 
 Before starting any task, the assigned agent must:
