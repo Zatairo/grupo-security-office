@@ -12,6 +12,7 @@ src/backend/coverage/
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
 .obsidian/cache
+.obsidian/
 .trash/
 
 # Python
