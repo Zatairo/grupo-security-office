@@ -8,8 +8,12 @@
 
 | Task ID | Executor | Agent | Branch | Reserved file or directory | Purpose | Status | Reserved at | Expected release |
 |---|---|---|---|---|---|---|---|---|
-| IMPL-DEV-ADMIN-BOOTSTRAP-001 | Kilo Code | Comercial-Backend-Implementer | agent/kilo/IMPL-DEV-ADMIN-BOOTSTRAP-001 | src/backend/scripts/dev-admin-bootstrap.ts, src/backend/package.json, src/backend/.env.example, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md | Implement dev-only admin bootstrap command | WORKING | 2026-09-08T04:00:39Z | before atomic commit |
 | DOCS-CLEANUP-001 | OpenCode | tech-lead-orchestrator | agent/opencode/DOCS-CLEANUP-001-remove-legacy-docs | docs/README.md, docs/00-INDEX.md, docs/PROJECT_STATUS.md, docs/agent-coordination/README.md, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md, docs/agent-coordination/worktree-issue-pr-procedure.md, docs/handoffs/HANDOFF_ACTUAL.md (create/update) + deletion targets (docs/DECISIONS.md, docs/decisions/, docs/decisiones/, docs/memoria/, docs/arquitectura/, docs/bitacora/, docs/reuniones/, docs/SOUL.md, docs/IDENTITY.md, docs/USER.md, docs/HEARTBEAT.md, docs/TOOLS.md, docs/seguimiento/, docs/archive/legacy-202607/, docs/data-model.md, docs/data-model-v1.md, docs/backend-remediation-plan.md, docs/frontend-phase1-stabilization.md, docs/qa-phase1-stabilization.md, docs/devops-phase1-stabilization.md, docs/deploy.md, docs/deployment-architecture.md) | Remove legacy docs + establish minimal canonical entry point | WORKING | 2026-09-07T00:00:00Z | before atomic commit |
+
+> Note (2026-09-08, Claude Code): IMPL-DEV-ADMIN-BOOTSTRAP-001's reservation below was left in this
+> table marked WORKING even though work-log.md and agent-status.md already show it COMMITTED
+> (commit c1dc8fdbc19c0dcdf113b15926a83a4060399cef). Moved to Released reservations to correct the
+> stale entry; no file content from that task was changed.
 
 ## Reservation rules
 
@@ -35,3 +39,5 @@
 | BE-RBAC-001 | OpenCode | backend-engineer | src/backend/src/app.module.ts, src/backend/src/common/guards/permissions.guard.ts, src/backend/src/common/guards/permissions.guard.spec.ts, src/backend/prisma/seed.ts, src/backend/src/modules/listas/listas.controller.ts, src/backend/src/modules/products/products.controller.ts, src/backend/src/modules/assignments/assignments.controller.ts, docs/agent-coordination/{agent-status,file-ownership,work-log}.md | (see work-log) | 2026-09-04T00:00:00Z |
 | BE-LINT-FIX-001 | OpenCode | backend-engineer | src/backend/src/modules/products/products.controller.ts, src/backend/src/modules/products/products.service.ts, docs/agent-coordination/{agent-status,file-ownership,work-log}.md | b7e8ca4 (code) | 2026-09-04T00:00:00Z |
 | CHORE-OBSIDIAN-IGNORE-001 | OpenCode | tech-lead-orchestrator | .gitignore, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md | chore(git): ignore local Obsidian configuration [CHORE-OBSIDIAN-IGNORE-001] | 2026-09-07T00:00:00Z |
+| IMPL-DEV-ADMIN-BOOTSTRAP-001 | Kilo Code | Comercial-Backend-Implementer | src/backend/scripts/dev-admin-bootstrap.ts, src/backend/package.json, src/backend/.env.example, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md | c1dc8fdbc19c0dcdf113b15926a83a4060399cef | 2026-09-08T05:32:03Z |
+| IMPL-DEV-RBAC-BOOTSTRAP-001 | Claude Code | (direct session) | src/backend/scripts/dev-rbac-bootstrap.ts, src/backend/package.json, src/frontend/src/services/api.ts, src/frontend/src/vite-env.d.ts, src/frontend/.env.production, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md | (see work-log) | 2026-09-08T00:00:00Z |

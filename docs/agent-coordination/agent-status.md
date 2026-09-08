@@ -15,6 +15,7 @@
 | OpenCode | tech-lead-orchestrator | CHORE-OBSIDIAN-IGNORE-001 | Ignore local Obsidian configuration so .obsidian/graph.json does not appear as untracked | CHORE-OBSIDIAN-IGNORE-001 | (see file-ownership) | COMMITTED | (pending) | Await Perplexity review | 2026-09-07T00:00:00Z |
 | OpenCode | tech-lead-orchestrator | WORKING | DOCS-CLEANUP-001 | Remove legacy documentation and establish minimal canonical entry point | agent/opencode/DOCS-CLEANUP-001-remove-legacy-docs | (see file-ownership) | DOCS-AUDIT-001 | (pending) | NONE | Validate + atomic commit | 2026-09-07T00:00:00Z |
 | Kilo Code | Comercial-Backend-Implementer | COMMITTED | IMPL-DEV-ADMIN-BOOTSTRAP-001 | Add confirmed admin bootstrap/reset command for Neon DEV | agent/kilo/IMPL-DEV-ADMIN-BOOTSTRAP-001 | (see file-ownership) | NONE | (see work-log) | NONE | Await Perplexity review | 2026-09-08T05:32:03Z |
+| Claude Code | (direct session, no formal profile) | COMMITTED | IMPL-DEV-RBAC-BOOTSTRAP-001 | Bootstrap canonical RBAC roles/permissions in Neon DEV, run admin bootstrap, fix frontend API base URL for Hostinger prod build | agent/claude/IMPL-DEV-RBAC-BOOTSTRAP-001 | (released) | IMPL-DEV-ADMIN-BOOTSTRAP-001 | (see work-log) | NONE | User manually uploads updated dist zip to Hostinger; verify live login/admin UI | 2026-09-08T00:00:00Z |
 
 ## Allowed status values
 

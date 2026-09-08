@@ -193,6 +193,42 @@
 - `Known risks`: schema_backup.prisma remains untracked (pre-existing, never modified by Kilo). No backend changes, no Prisma modifications, no schema migrations. Fast-forward push to origin/main completed. No force push, reset, or amend performed.
 - `Blockers`: NONE
 
+## [IMPL-DEV-RBAC-BOOTSTRAP-001] — Bootstrap canonical RBAC roles in Neon DEV, run admin bootstrap, fix frontend API base URL
+
+- `Executor`: Claude Code
+- `Agent`: (direct interactive session, no formal .opencode/.kilo profile — executed at explicit user request, outside the Perplexity/Kilo/OpenCode assignment flow, superseding the originally-scoped PLAN-DEV-RBAC-BOOTSTRAP-001 planning-only task)
+- `Status`: `COMMITTED`
+- `Branch`: agent/claude/IMPL-DEV-RBAC-BOOTSTRAP-001 (branched from agent/kilo/IMPL-DEV-ADMIN-BOOTSTRAP-001 @ 6379cd2, the branch used to validate this work)
+- `Started at`: 2026-09-08T00:00:00Z
+- `Completed at`: 2026-09-08T00:00:00Z
+- `Requirement source`: User request to unblock DEV admin panel visibility on Hostinger, following up on IMPL-DEV-ADMIN-BOOTSTRAP-001's documented BLOCKED state (Super Admin role missing in Neon DEV).
+- `Files opened`: src/backend/prisma/seed.ts, src/backend/prisma/schema.prisma, src/backend/src/common/guards/permissions.guard.ts, src/backend/src/common/guards/roles.guard.ts, src/backend/scripts/dev-admin-bootstrap.ts, src/backend/package.json, src/backend/.env (presence-only, never read/exposed contents), src/frontend/src/services/api.ts, src/frontend/vite.config.ts, src/frontend/src/modules/auth/* (backend auth.controller.ts, jwt.strategy.ts), docs/agent-coordination/*
+- `Files modified`: src/backend/package.json (added `db:bootstrap:dev-rbac` script), src/frontend/src/services/api.ts (baseURL now reads `VITE_API_URL`), docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Files created`: src/backend/scripts/dev-rbac-bootstrap.ts, src/frontend/src/vite-env.d.ts, src/frontend/.env.production
+- `Files reserved`: (see file-ownership, released at commit)
+- `Dependencies`: IMPL-DEV-ADMIN-BOOTSTRAP-001 (Kilo Code, COMMITTED c1dc8fd — required the Super Admin role to exist before it could complete)
+- `Implementation summary`:
+  1. **RBAC bootstrap script** (`dev-rbac-bootstrap.ts`): DEV-only, writes ONLY to `roles`/`role_permissions`. Guards: `NODE_ENV==='development'` before `PrismaClient`, exact `YES` confirmation before `PrismaClient`. Canonical permission matrix copied verbatim from `seed.ts`. Per role: if absent, create + insert full permission set (pure insert); if present, insert only missing permissions (additive, no `deleteMany`, no overwrite of existing rows or description), and log (never remove) any extra permission not in the matrix. `prisma.$disconnect()` in `finally`. No user/catalog/legacy-migration/raw-SQL logic.
+  2. **Executed against Neon DEV** (`ep-shiny-recipe-a5ae3udx-pooler.us-east-2.aws.neon.tech/neondb`, confirmed via parsed `DATABASE_URL` host — password/credentials never printed) with explicit user confirmation. Result: 5 roles created — Super Admin (23 perms), Supervisor (5), Admin Comercial (21), Operador (4), Consulta (4).
+  3. **Re-ran `dev-admin-bootstrap.ts`** (already COMMITTED by Kilo, unmodified) now that the Super Admin role exists. Generated a new random `SEED_ADMIN_PASSWORD` via `crypto.randomBytes(24).toString('base64url')`, written directly to `src/backend/.env` (gitignored) without ever being printed in any tool output or chat response, per the project's compromised-credentials policy. Bootstrap completed successfully: `admin@gruposecurity.co` upserted with `Super Admin` role.
+  4. **Live verification**: `POST https://api-dev.gruposecurity.com.co/api/auth/login` with the new admin credentials returned `200` with `roles: ["Super Admin"]` and the full 23-permission set — confirms the public Hostinger backend (`api-dev.gruposecurity.com.co`) reads the same Neon DEV database just bootstrapped, resolving the "which DB does Hostinger use" open question from the original handoff.
+  5. **Root-caused the frontend symptom** ("no admin buttons visible"): `src/frontend/src/services/api.ts` used `baseURL: '/api'` (relative). Locally this works only because `vite.config.ts`'s dev-server proxy forwards `/api` → `localhost:3000`; that proxy does not exist in a static production build, so the deployed frontend on `dev.gruposecurity.com.co` never reached `api-dev.gruposecurity.com.co` at all. Fixed by reading `import.meta.env.VITE_API_URL` (fallback `/api` preserves local dev behavior unchanged) and adding `src/frontend/.env.production` with `VITE_API_URL=https://api-dev.gruposecurity.com.co/api` (public URL, not a secret). Added the standard `src/vite-env.d.ts` (`/// <reference types="vite/client" />`) required for this to typecheck.
+  6. Rebuilt the frontend (`npm run build`); confirmed via `grep` that the compiled bundle contains the correct `api-dev.gruposecurity.com.co/api` string. Recreated `dist/.htaccess` (SPA rewrite rules) by reading the content of the user's existing manually-uploaded `src/frontend/grupo-security-frontend.zip` (untracked, pre-existing in working tree) so the new build's zip matches the exact structure already known to work with Hostinger's static hosting. Packaged the new `dist/` into a zip and delivered it to the user (current Hostinger deploy path is manual zip upload; no GitHub auto-deploy connected yet).
+  7. Corrected a stale `file-ownership.md` entry: IMPL-DEV-ADMIN-BOOTSTRAP-001's reservation was still listed as `WORKING` in the Active table despite being `COMMITTED` in `agent-status.md`/`work-log.md`; moved it to Released reservations with its real commit hash. No content from that task was altered.
+- `Validation commands`: `npx tsc --noEmit` (backend, after adding the script), `npm run build` (backend), guard-path dry runs (`NODE_ENV=production` → exit 1 before PrismaClient; confirmation denied → exit 0 before PrismaClient) for `dev-rbac-bootstrap.ts`; `npx tsc --noEmit` (frontend, before and after `vite-env.d.ts`), `npm run build` (frontend); `grep` on the built bundle for the expected API host; live `curl` login + read-only Prisma query against Neon DEV (role names + permission counts + admin user role, no secrets printed) as post-execution evidence.
+- `Validation results`: All static checks 0 errors. Guard paths behaved exactly as designed (verified no PrismaClient/DB connection occurs on the rejected paths). RBAC bootstrap run: 5/5 roles created with expected permission counts (verified by direct read-only query post-run, not just script stdout). Admin bootstrap run: completed successfully; live login against public `api-dev` returned HTTP 200 with correct role/permissions. Frontend build: 0 errors; bundle contains correct API host.
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: (reported after commit)
+- `Handoff to`: User — pending manual upload of the delivered zip to Hostinger and live UI verification (admin buttons visible). Follow-up needed: connect Hostinger to GitHub for auto-deploy (user's stated preference; not done in this task — requires Hostinger panel access this session does not have).
+- `Known risks`:
+  - This task was executed directly by Claude Code at the user's explicit request, bypassing the originally-assigned `PLAN-DEV-RBAC-BOOTSTRAP-001` (OpenCode/solution-architect, planning-only). No conflicting concurrent work was found, but this deviates from the documented Perplexity-as-sole-coordinator model; flagging for Perplexity awareness.
+  - `SEED_ADMIN_PASSWORD` now lives in `src/backend/.env` (gitignored, local only) — user was instructed to move it to a password manager; not verified as done.
+  - Unrelated pre-existing working-tree changes (`src/frontend/package.json`/`package-lock.json` `allowScripts` diff, untracked `.opencode/agent/*.md` files, untracked `src/frontend/grupo-security-frontend.zip`) were left untouched and unstaged.
+  - `docs/agent-coordination/file-ownership.md`'s stale-reservation correction for IMPL-DEV-ADMIN-BOOTSTRAP-001 is a documentation-only fix; it does not change that task's actual COMMITTED status or code.
+- `Blockers`: NONE
+
+---
+
 ## [CHORE-OBSIDIAN-IGNORE-001] — Ignore local Obsidian configuration so .obsidian/graph.json does not appear as untracked
 
 - `Executor`: OpenCode
