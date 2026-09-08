@@ -463,6 +463,106 @@ export class ImportService {
   }
 
   /**
+   * Versión agrupada de `getCurrentPriceBySku`: resuelve N SKUs en 2 queries
+   * (productos + precios) en vez de N round-trips. El wizard de importación
+   * (paso de comparación de precios) llamaba al endpoint individual una vez
+   * por SKU vía Promise.all — con listas de más de ~20 filas (el límite del
+   * throttler global) esto disparaba 429 en cascada y tumbaba el paso
+   * siguiente (execute) por agotar la cuota de rate-limit de la sesión.
+   * Devuelve un array alineado 1:1 con el array de `skus` de entrada
+   * (mismo orden, `null` en la posición de cualquier SKU sin producto).
+   */
+  async getCurrentPricesBySkus(
+    skus: string[],
+    listaId?: string,
+  ): Promise<{ data: (CurrentPriceResult | null)[] }> {
+    const trimmedSkus = skus.map((s) => s?.trim()).filter((s): s is string => !!s);
+    if (trimmedSkus.length === 0) return { data: [] };
+
+    const products = await this.prisma.product.findMany({
+      where: {
+        OR: trimmedSkus.map((sku) => ({ sku: { equals: sku, mode: 'insensitive' as const } })),
+        ...(listaId ? { listaId } : {}),
+      },
+      select: { id: true, sku: true, name: true },
+    });
+
+    const productBySkuUpper = new Map(products.map((p) => [p.sku.toUpperCase(), p]));
+    const productIds = products.map((p) => p.id);
+
+    const allPrices = productIds.length
+      ? await this.prisma.price.findMany({
+          where: { productId: { in: productIds } },
+          orderBy: { updatedAt: 'desc' },
+        })
+      : [];
+
+    const pricesByProductId = new Map<string, typeof allPrices>();
+    for (const price of allPrices) {
+      const list = pricesByProductId.get(price.productId) ?? [];
+      list.push(price);
+      pricesByProductId.set(price.productId, list);
+    }
+
+    const now = new Date();
+    const resolveVigente = (product: {
+      id: string;
+      sku: string;
+      name: string;
+    }): CurrentPriceResult => {
+      // Mismo fallback que la versión individual: si no hay precios con
+      // listaId, usar el precio vigente global del producto.
+      let prices = pricesByProductId.get(product.id) ?? [];
+      if (listaId) {
+        const scoped = prices.filter((p) => p.listaId === listaId);
+        if (scoped.length > 0) prices = scoped;
+      }
+
+      const vigentes = prices.filter(
+        (p) =>
+          (!p.validFrom || p.validFrom <= now) &&
+          (!p.validUntil || p.validUntil >= now),
+      );
+      const vigente = vigentes.reduce<(typeof prices)[number] | null>(
+        (best, p) =>
+          !best || (p.updatedAt?.getTime() ?? 0) >= (best.updatedAt?.getTime() ?? 0)
+            ? p
+            : best,
+        null,
+      );
+
+      if (!vigente) {
+        return {
+          sku: product.sku,
+          productId: product.id,
+          name: product.name,
+          price: null,
+          currency: null,
+          validUntil: null,
+          exists: false,
+        };
+      }
+
+      return {
+        sku: product.sku,
+        productId: product.id,
+        name: product.name,
+        price: Number(vigente.value),
+        currency: vigente.currency,
+        validUntil: vigente.validUntil ?? null,
+        exists: true,
+      };
+    };
+
+    const data = trimmedSkus.map((sku) => {
+      const product = productBySkuUpper.get(sku.toUpperCase());
+      return product ? resolveVigente(product) : null;
+    });
+
+    return { data };
+  }
+
+  /**
    * Lista todos los presets del usuario.
    */
   async listPresets(userId: string): Promise<MappingPreset[]> {
