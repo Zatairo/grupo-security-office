@@ -141,7 +141,7 @@
 - `Validation commands`: `npx tsc --noEmit`, `npm run build`, and three no-DB guard-path runs (non-development NODE_ENV; development+missing password; development+valid dummy password+rejected confirmation).
 - `Validation results`: tsc exit 0 (0 errors, includes scripts/dev-admin-bootstrap.ts); nest build exit 0; Guard A exit 1 (DEV-only error); Guard B exit 1 (missing password error); Guard C exit 0 (confirmation denied). No Prisma connection in any guard path; no DATABASE_URL provided.
 - `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
-- `Commit hash`: (reported after commit)
+- `Commit hash`: c1dc8fdbc19c0dcdf113b15926a83a4060399cef
 - `Handoff to`: Perplexity for review and merge
 - `Known risks`: Script is DEV-only and must never run with confirmation YES against production or an external database. Unrelated working-tree changes (frontend package files, .opencode/agent/*, grupo-security-frontend.zip) were left unstaged and untouched. schema_backup.prisma has no diff and was not staged.
 - `Blockers`: NONE
