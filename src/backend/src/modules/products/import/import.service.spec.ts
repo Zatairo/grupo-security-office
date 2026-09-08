@@ -95,6 +95,29 @@ describe('ImportService — Lista destino (listaId)', () => {
 
     mockPrisma.product.findMany.mockResolvedValue([]);
 
+    // ImportService persiste el contexto entre preview() y execute() en
+    // `importSession` (antes vivía en un Map interno del servicio). Estos
+    // tests llaman preview() y luego execute() con el mismo importId dentro
+    // del mismo caso, así que el mock necesita comportarse como una tabla
+    // real (guardar y devolver), no solo resolver un valor fijo.
+    const importSessionStore = new Map<string, { id: string; userId: string; data: unknown }>();
+    mockPrisma.importSession.upsert.mockImplementation(async (args: any) => {
+      const record = {
+        id: args.where.id,
+        userId: args.create?.userId,
+        data: args.update?.data ?? args.create?.data,
+      };
+      importSessionStore.set(args.where.id, record);
+      return record;
+    });
+    mockPrisma.importSession.findUnique.mockImplementation(async (args: any) =>
+      importSessionStore.get(args.where.id) ?? null,
+    );
+    mockPrisma.importSession.deleteMany.mockImplementation(async (args: any) => {
+      const existed = importSessionStore.delete(args.where.id);
+      return { count: existed ? 1 : 0 };
+    });
+
     service = new ImportService(
       mockPrisma as unknown as PrismaService,
       auditService as unknown as AuditService,

@@ -293,6 +293,37 @@
 
 ---
 
+## [FIX-IMPORT-SESSION-PERSISTENCE-001] — Persist import wizard state in the DB instead of an in-memory Map
+
+- `Executor`: Claude Code
+- `Agent`: (direct interactive session, no formal .opencode/.kilo profile)
+- `Status`: `COMMITTED`
+- `Branch`: agent/claude/FIX-IMPORT-SESSION-PERSISTENCE-001 (branched from agent/claude/FIX-IMPORT-BATCH-ISOLATION-001 @ 19784a2)
+- `Started at`: 2026-09-08T00:00:00Z
+- `Completed at`: 2026-09-08T00:00:00Z
+- `Requirement source`: While live-verifying FIX-IMPORT-BATCH-ISOLATION-001 against api-dev, a repeated preview→execute call sequence (seconds apart) returned `400 "Importación no encontrada. Ejecute primero el endpoint de preview."` on the first attempt, then succeeded on an identical immediate retry — confirming live, in production, the risk flagged earlier in IMPL-DEV-RBAC-BOOTSTRAP-001's handoff notes: `ImportService.importContexts` was a plain in-memory `Map`, lost whenever Hostinger routes the two requests to different Node processes/instances or restarts between them. User explicitly approved fixing this now, including the schema migration it requires.
+- `Files opened`: src/backend/src/modules/products/import/import.service.ts, src/backend/src/modules/products/import/interfaces/import-context.ts, src/backend/prisma/schema.prisma, src/backend/src/modules/products/import/import.service.spec.ts, src/backend/src/__test__/mocks/prisma.mock.ts, docs/agent-coordination/*
+- `Files modified`: src/backend/prisma/schema.prisma, src/backend/src/modules/products/import/import.service.ts, src/backend/src/modules/products/import/import.service.spec.ts, src/backend/src/__test__/mocks/prisma.mock.ts, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Files created`: src/backend/prisma/migrations/20260908172738_add_import_session/migration.sql
+- `Dependencies`: FIX-IMPORT-BATCH-ISOLATION-001 (branched from it; found while verifying it live)
+- `Implementation summary`:
+  1. **New model `ImportSession`** (`schema.prisma`): `id` (= importId), `userId`, `data` (Json — the full serialized `ImportContext`), `createdAt`/`updatedAt`, mapped to `import_sessions`. Migration `20260908172738_add_import_session` generated and applied to Neon DEV via `prisma migrate dev` (explicit user approval obtained before running it — this session does not run migrations without a direct ask). No existing table touched, no data migration needed (purely additive).
+  2. **`ImportService`**: removed `private importContexts = new Map<string, ImportContext>()`. Added `saveContext`/`loadContext`/`deleteContext` private helpers backed by `prisma.importSession` (upsert/findUnique/deleteMany). `startedAt` (a `Date`) is serialized to an ISO string explicitly before writing (Prisma `Json` doesn't reconstruct `Date` instances) and parsed back to a `Date` on read — everything else in `ImportContext` is already plain-JSON-safe (verified by reading `import-context.ts` in full: no `Map`/`Set`/functions).
+  3. `preview()` now calls `saveContext` instead of `Map.set` at the point the context is finalized. `execute()` calls `loadContext` instead of `Map.get` (throwing the same `BadRequestException` on miss as before), and `deleteContext` instead of `Map.delete` once the batch completes. Added one extra `saveContext` call right before invoking the batch executor so `getProgress()` reflects the `batch_execution` stage if polled mid-run (previously that stage-only existed in memory and was never separately visible via the Map either, so this is a mild improvement, not a behavior change users could have relied on).
+  4. `getProgress()` changed from sync to `async` (controller already awaits/returns it correctly — NestJS awaits controller handler return values regardless).
+  5. Added `importSession: { findUnique, upsert, deleteMany }` to the shared `createPrismaMock()` test factory (`src/__test__/mocks/prisma.mock.ts` — used by 17 spec files; additive only). `import.service.spec.ts`'s `beforeEach` now gives these three mocks a small `Map`-backed stateful implementation (save/load/delete by importId) since its existing tests call `preview()` then `execute()` with the same importId within one test and need the persisted context to actually round-trip through the mock, not just resolve a fixed value.
+- `Validation commands`: `npx prisma migrate dev --name add_import_session` (against Neon DEV, explicit approval), `npx prisma generate`, `npx tsc --noEmit`, `npx jest src/modules/products/import` (full import module), `npx jest` (full backend suite), `npm run lint`, `npm run build`; live-and-local reproduction: (a) against `api-dev` post-deploy, `SKU_DUPLICATE` correctly caught at preview, 2 valid rows created and confirmed via direct read-only DB query (not just the API's reported summary); (b) locally, `NODE_ENV=development nest start` with `preview` and `execute` invoked from two entirely separate one-shot Node processes (not just separate HTTP calls) sharing state only via the new DB table — confirmed the product was actually created and visible via a third, independent read; all temporary scripts and test data deleted after use.
+- `Validation results`: Migration applied cleanly to Neon DEV, no drift. tsc 0 errors. Import module: 89/89 passing (8 that broke transiently when the shared mock lacked `importSession` were fixed by adding it, not by weakening any assertion). Full suite: 635/645 — same 10 pre-existing failures documented since BE-RBAC-001. Lint: 0 errors. Build: 0 errors.
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: (reported after commit)
+- `Handoff to`: User — needs the migration to reach Neon DEV (already applied directly by this session, confirmed above) and this code deployed to `api-dev` on Hostinger (same manual zip-upload process as the prior two fixes) before re-testing real imports. The original two failing files (LISTA AUTOMATIZACION PUERTAS/CERCOS - AJUSTADA) still have not been reproduced with their actual content in this session.
+- `Known risks`:
+  - `import_sessions` rows are only cleaned up on a successful `execute()` (`deleteContext`) or never (an abandoned preview with no matching execute leaves an orphan row forever — same lifecycle gap that existed before with the in-memory Map, which would eventually get garbage-collected on process restart; the DB table does not self-expire). Worth a follow-up: either a scheduled cleanup of old `import_sessions` rows, or an explicit TTL check in `loadContext`. Not implemented in this task — flagged, not fixed, to keep this change scoped to the reliability bug itself.
+  - `data: Json` stores the full parsed file (all raw rows, headers, mappings) per in-progress import — for very large files this could be a non-trivial row size; still far below Postgres's practical Json/Jsonb limits for any realistic product-list size seen so far (hundreds of rows).
+- `Blockers`: Backend deploy mechanism to Hostinger `api-dev` is manual zip upload; still needed for this fix (migration already live in Neon DEV, code not yet deployed) to take effect end-to-end.
+
+---
+
 ## [CHORE-OBSIDIAN-IGNORE-001] — Ignore local Obsidian configuration so .obsidian/graph.json does not appear as untracked
 
 - `Executor`: OpenCode

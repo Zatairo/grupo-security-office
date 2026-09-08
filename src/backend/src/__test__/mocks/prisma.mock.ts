@@ -151,6 +151,11 @@ export const createPrismaMock = () => ({
     updateMany: jest.fn(),
     count: jest.fn(),
   },
+  importSession: {
+    findUnique: jest.fn(),
+    upsert: jest.fn(),
+    deleteMany: jest.fn(),
+  },
   $queryRawUnsafe: jest.fn(),
   $executeRaw: jest.fn().mockResolvedValue(0),
   $executeRawUnsafe: jest.fn().mockResolvedValue(0),

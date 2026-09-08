@@ -295,6 +295,23 @@ model ImportMapping {
   @@map("import_mappings")
 }
 
+/// Estado del wizard de importación (preview → execute) persistido en BD.
+/// Antes vivía en un Map en memoria del proceso de ImportService: si Hostinger
+/// enruta la petición de `execute` a otra instancia/proceso distinto al que
+/// atendió `preview` (o el proceso se reinicia entre medio), el contexto se
+/// perdía y el usuario recibía "Importación no encontrada" sin causa visible.
+/// `data` serializa el ImportContext completo (ver import-context.ts).
+model ImportSession {
+  id        String   @id
+  userId    String
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("import_sessions")
+}
+
 model Supplier {
   id        String   @id @default(uuid())
   name      String
