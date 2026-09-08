@@ -369,3 +369,27 @@
 - `Handoff to`: User uploads updated backend zip to Hostinger (api-dev); user re-tests real PUERTAS/CERCOS imports (files with SKU + price columns, no Nombre column) from the UI.
 - `Known risks`: Live end-to-end verification against a running server (local or deployed) was not performed for this specific fix — only unit-level. Recommend the user's next import attempt be treated as the real end-to-end confirmation.
 - `Blockers`: NONE
+
+---
+
+## [FIX-PRISMA-BINARY-ENGINE-001] — Switch Prisma query engine from library (in-process) to binary (child process) to survive engine panics on shared hosting
+
+- `Executor`: Claude Code
+- `Agent`: (direct session, no formal profile)
+- `Status`: `COMMITTED`
+- `Branch`: agent/claude/FIX-PRISMA-BINARY-ENGINE-001
+- `Started at`: 2026-09-08T00:00:00Z
+- `Completed at`: 2026-09-08T00:00:00Z
+- `Requirement source`: After deploying FIX-IMPORT-MAPPING-GATE-001, the user reported api-dev stuck returning 503 (Hostinger's own edge error page, "server temporarily busy") for ~1 hour despite the deploy showing "Completado". User pulled the app's runtime logs (not build logs) and found: `Error: PANIC: timer has gone away`, repeated twice ~1.3s apart right after the deploy. This is a Rust/Tokio runtime panic from Prisma's query engine, not a NestJS/application-level error — it matches a known Prisma failure mode where the engine's internal async timer is invalidated after the OS suspends/resumes the Node process (plausible on shared hosting that idles inactive app processes). Because the default `engineType` is `"library"` (the query engine runs as an in-process native addon sharing the Node process's memory/threads), a panic there is not catchable from JS and can take down the entire host process — explaining the sustained 503 crash loop with no code-level cause.
+- `Files opened`: src/backend/prisma/schema.prisma
+- `Files modified`: src/backend/prisma/schema.prisma (generator engineType), src/backend/node_modules/@prisma/client (regenerated, not committed — see .gitignore)
+- `Files reserved`: (see file-ownership.md)
+- `Dependencies`: NONE (independent of the import-pipeline fixes; addresses an infrastructure-level crash, not application logic)
+- `Implementation summary`: Added `engineType = "binary"` to the `generator client` block in `schema.prisma`. This makes Prisma spawn the query engine as a separate child process (communicating over HTTP/stdio) instead of loading it as an in-process N-API addon. If the engine panics (as in this incident), only the child process dies; the parent Node/NestJS process survives and Prisma's client can surface a catchable JS error instead of crashing the whole app. No application code changed — this is a Prisma generator config change only. Hostinger's own `npm install` step (which triggers `@prisma/client`'s postinstall `prisma generate`) will regenerate the correct binary-engine executable for their Linux runtime automatically, the same mechanism that already worked for the previous 4 deploys with the library engine.
+- `Validation commands`: `npx prisma generate`; `npx tsc --noEmit`; `npx jest` (full suite); `npm run build`; local smoke test — `new PrismaClient().user.count()` against the real Neon DEV database using the newly generated binary engine.
+- `Validation results`: `prisma generate` succeeded, log confirms `engine=binary`; tsc 0 errors; full suite 637/647 passing (same 10 pre-existing unrelated failures in `transition.service.spec.ts`/`listas.service.spec.ts`, unchanged); build 0 errors; local smoke query against Neon DEV succeeded (`user.count()` returned correctly) confirming the binary engine can connect and query the real database, not just generate.
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: (see next commit after this entry)
+- `Handoff to`: User uploads the updated backend zip to Hostinger (api-dev) and redeploys. This does not guarantee the underlying process-suspension trigger won't recur (that depends on Hostinger's hosting behavior, outside this repo's control) — but it should prevent a recurrence from taking down the whole app. If Hostinger's panel exposes an "auto-sleep on idle" setting for the Node.js app, the user should also check/disable it, and confirm "auto-restart on crash" is enabled as a second layer of resilience.
+- `Known risks`: The binary engine spawns an extra OS process per app instance, with marginally higher memory/startup overhead than the library engine — acceptable trade-off for crash isolation on a low-traffic DEV environment. The root trigger (process suspension by the host) is not fixed by this change, only its blast radius — if it recurs, the child engine process should restart cleanly instead of killing the whole app, but this has not been proven under an actual suspend/resume cycle in production (only validated via clean local generate/build/query).
+- `Blockers`: NONE

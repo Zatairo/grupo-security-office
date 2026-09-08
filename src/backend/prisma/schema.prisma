@@ -1,5 +1,12 @@
+// engineType = "binary": el motor de consultas corre como proceso hijo
+// separado en vez de un addon nativo in-process. Si el motor sufre un
+// panic (ej. "PANIC: timer has gone away", visto en runtime tras
+// suspensión/reanudación del proceso en hosting compartido), se cae solo
+// el hijo y Prisma puede recuperarse, en vez de tumbar todo el proceso
+// de Node (lo que causaba caídas 503 sostenidas de toda la app).
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "binary"
 }
 
 datasource db {
