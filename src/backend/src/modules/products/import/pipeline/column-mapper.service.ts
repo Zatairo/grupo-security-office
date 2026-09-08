@@ -118,14 +118,19 @@ export class ColumnMapperService {
    * Retorna lista de campos faltantes.
    */
   validateMapping(mapping: ColumnMapping): string[] {
-    const requiredFields: SystemField[] = ['sku', 'name'];
     const missingFields: string[] = [];
+    const hasField = (field: SystemField) =>
+      mapping.entries.some((e) => e.targetField === field);
 
-    for (const field of requiredFields) {
-      const hasField = mapping.entries.some((e) => e.targetField === field);
-      if (!hasField) {
-        missingFields.push(field);
-      }
+    if (!hasField('sku')) {
+      missingFields.push('sku');
+    }
+    // 'name' no es estrictamente requerido si existe una columna mapeada a
+    // 'description': resolveEffectiveName() deriva el nombre desde la
+    // descripción a nivel de fila (ver text-normalizer.ts). Solo se exige
+    // 'name' cuando no hay ninguna fuente de la que derivarlo.
+    if (!hasField('name') && !hasField('description')) {
+      missingFields.push('name');
     }
 
     return missingFields;

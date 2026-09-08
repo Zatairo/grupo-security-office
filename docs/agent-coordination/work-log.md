@@ -345,3 +345,27 @@
 - `Handoff to`: Perplexity
 - `Known risks`: NONE
 - `Blockers`: NONE
+
+---
+
+## [FIX-IMPORT-MAPPING-GATE-001] — Fix products import: mapping-level gate blocked execute() when no 'name' column was mapped, even when 'description' was mapped and the row-level name fallback could derive it
+
+- `Executor`: Claude Code
+- `Agent`: (direct session, no formal profile)
+- `Status`: `COMMITTED`
+- `Branch`: agent/claude/FIX-IMPORT-MAPPING-GATE-001
+- `Started at`: 2026-09-08T00:00:00Z
+- `Completed at`: 2026-09-08T00:00:00Z
+- `Requirement source`: User reported "Request failed with status code 400" clicking "Ejecutar Importación" on a real file with SKU + price tiers and no Nombre column, on the wizard's Confirmar step (after preview/mapeo/validacion all passed). Reproduced live against api-dev with a minimal synthetic file (SKU + Descripcion, no Nombre): `execute()` returned 404/400 depending on payload, root cause identified as `column-mapper.service.ts` `validateMapping()` requiring an explicit `'name'`-mapped column regardless of whether `'description'` was mapped (the row-level fallback `resolveEffectiveName()` from FIX-IMPORT-NAME-FALLBACK-001 never got a chance to run because this gate rejects the request first).
+- `Files opened`: src/backend/src/modules/products/import/pipeline/column-mapper.service.ts, src/backend/src/modules/products/import/pipeline/column-mapper.service.spec.ts, src/backend/src/modules/products/import/import.service.ts (read-only, confirmed call site at execute() line ~271)
+- `Files modified`: src/backend/src/modules/products/import/pipeline/column-mapper.service.ts, src/backend/src/modules/products/import/pipeline/column-mapper.service.spec.ts
+- `Files reserved`: (see file-ownership.md)
+- `Dependencies`: FIX-IMPORT-NAME-FALLBACK-001 (row-level fallback this gate was blocking)
+- `Implementation summary`: `validateMapping(mapping)` still requires `'sku'` strictly. For `'name'`, it is only added to `missingFields` when there is NEITHER a `'name'`-mapped column NOR a `'description'`-mapped column — matching exactly what `resolveEffectiveName()` can derive from at row level. If a file has no name and no description mapped at all, the gate still correctly rejects (no source to derive a name from). Added two unit tests: mapping with sku+description (no name) → `[]` missing; mapping with only sku → `['name']` missing.
+- `Validation commands`: `npx tsc --noEmit`; `npx jest column-mapper`; `npx jest` (full suite); `npm run lint`; `npm run build`
+- `Validation results`: tsc 0 errors; column-mapper suite 9/9 passing (2 new); full suite 637/647 passing, 10 pre-existing failures in `transition.service.spec.ts`/`listas.service.spec.ts` (documented baseline, unrelated to this change, unchanged by this commit); lint 0 errors; build 0 errors. Live verification against api-dev was skipped for this task (api-dev still runs the previously deployed code, so it would only re-confirm the bug, not validate the fix; starting a local dev server against Neon DEV to validate end-to-end was not carried out in this session) — confidence rests on the unit tests directly covering `validateMapping()`'s exact branch logic plus the existing row-level fallback tests from FIX-IMPORT-NAME-FALLBACK-001.
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: (see next commit after this entry)
+- `Handoff to`: User uploads updated backend zip to Hostinger (api-dev); user re-tests real PUERTAS/CERCOS imports (files with SKU + price columns, no Nombre column) from the UI.
+- `Known risks`: Live end-to-end verification against a running server (local or deployed) was not performed for this specific fix — only unit-level. Recommend the user's next import attempt be treated as the real end-to-end confirmation.
+- `Blockers`: NONE

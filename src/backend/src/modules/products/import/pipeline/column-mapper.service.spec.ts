@@ -79,6 +79,32 @@ describe('ColumnMapperService', () => {
       const missing = service.validateMapping(mapping);
       expect(missing).toHaveLength(0);
     });
+
+    it('no debe marcar name como faltante cuando existe description (fallback por fila)', () => {
+      const mapping = {
+        entries: [
+          { sourceColumn: 'REFERENCIA', targetField: 'sku' as SystemField, isRequired: true, confidence: 1.0 },
+          { sourceColumn: 'DESCRIPCION', targetField: 'description' as SystemField, isRequired: false, confidence: 1.0 },
+        ],
+        confirmed: true,
+      };
+
+      const missing = service.validateMapping(mapping);
+      expect(missing).not.toContain('name');
+      expect(missing).toHaveLength(0);
+    });
+
+    it('debe marcar name como faltante cuando no hay name ni description', () => {
+      const mapping = {
+        entries: [
+          { sourceColumn: 'SKU', targetField: 'sku' as SystemField, isRequired: true, confidence: 1.0 },
+        ],
+        confirmed: true,
+      };
+
+      const missing = service.validateMapping(mapping);
+      expect(missing).toContain('name');
+    });
   });
 
   describe('applyMapping', () => {
