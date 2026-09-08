@@ -1,18 +1,11 @@
 ﻿import { createPrismaMock } from '../../__test__/mocks/prisma.mock';
 import * as XLSX from 'xlsx';
 
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  existsSync: jest.fn().mockReturnValue(true),
-  unlinkSync: jest.fn()}));
-
 jest.mock('bcrypt', () => ({
   compare: jest.fn().mockResolvedValue(false),
   hash: jest.fn().mockResolvedValue('$2b$10$mockhash')}));
 
 import * as bcrypt from 'bcrypt';
-
-import * as fs from 'fs';
 
 const mockPrisma = createPrismaMock();
 mockPrisma.price.deleteMany = jest.fn();
@@ -27,8 +20,15 @@ import { ProductsService } from './products.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService } from '../../common/acl/acl.service';
 import { AuditService } from '../audit/audit.service';
+import { FilesService } from '../files/files.service';
 
 const mockAudit = { log: jest.fn().mockResolvedValue(undefined) };
+
+const mockFiles = {
+  store: jest.fn().mockResolvedValue({ id: 'file-1', url: '/api/files/file-1' }),
+  get: jest.fn(),
+  deleteByUrl: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockAcl = {
   isSuperAdmin: jest.fn().mockReturnValue(false),
@@ -84,6 +84,7 @@ describe('ProductsService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AclService, useValue: mockAcl },
         { provide: AuditService, useValue: mockAudit },
+        { provide: FilesService, useValue: mockFiles },
       ]}).compile();
 
     service = module.get<ProductsService>(ProductsService);
@@ -550,10 +551,9 @@ describe('ProductsService', () => {
       noData();
       mockPrisma.product.findUnique.mockResolvedValue(mockProduct);
       mockPrisma.productImage.findMany.mockResolvedValue([
-        { id: 'img-1', url: '/uploads/img-1.png' },
-        { id: 'img-2', url: '/uploads/img-2.png' },
+        { id: 'img-1', url: '/api/files/img-1' },
+        { id: 'img-2', url: '/api/files/img-2' },
       ]);
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
       mockPrisma.price.deleteMany.mockResolvedValue({ count: 0 });
       mockPrisma.productImage.deleteMany.mockResolvedValue({ count: 0 });
       mockPrisma.product.delete.mockResolvedValue(mockProduct);
@@ -563,8 +563,8 @@ describe('ProductsService', () => {
       expect(result.message).toBe('Producto eliminado exitosamente');
       expect(mockPrisma.price.deleteMany).toHaveBeenCalledWith({ where: { productId: 'prod-1' } });
       expect(mockPrisma.productImage.deleteMany).toHaveBeenCalledWith({ where: { productId: 'prod-1' } });
-      expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('img-1.png'));
-      expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('img-2.png'));
+      expect(mockFiles.deleteByUrl).toHaveBeenCalledWith('/api/files/img-1');
+      expect(mockFiles.deleteByUrl).toHaveBeenCalledWith('/api/files/img-2');
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'delete',
@@ -572,21 +572,6 @@ describe('ProductsService', () => {
           entityId: 'prod-1',
           oldValues: expect.objectContaining({ sku: 'CAM-001', name: 'CÃ¡mara IP' })}),
       );
-    });
-
-    it('debe borrar el producto aunque el archivo de imagen no exista en disco', async () => {
-      noData();
-      mockPrisma.product.findUnique.mockResolvedValue(mockProduct);
-      mockPrisma.productImage.findMany.mockResolvedValue([{ id: 'img-1', url: '/uploads/img-1.png' }]);
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
-      mockPrisma.price.deleteMany.mockResolvedValue({ count: 0 });
-      mockPrisma.productImage.deleteMany.mockResolvedValue({ count: 0 });
-      mockPrisma.product.delete.mockResolvedValue(mockProduct);
-
-      const result = await service.remove('prod-1', { confirm: true });
-
-      expect(result.message).toBe('Producto eliminado exitosamente');
-      expect(fs.unlinkSync).not.toHaveBeenCalled();
     });
 
     it('debe lanzar NotFoundException si el producto no existe', async () => {
@@ -1412,7 +1397,7 @@ describe('ProductsService', () => {
 
     beforeEach(() => {
       acl = new AclService(mockPrisma as any);
-      svc = new ProductsService(mockPrisma as any, acl, mockAudit as any);
+      svc = new ProductsService(mockPrisma as any, acl, mockAudit as any, mockFiles as any);
       mockPrisma.assignment.findMany.mockImplementation(async (args: any) => {
         const u = args?.where?.userId;
         const rt = args?.where?.resourceType;

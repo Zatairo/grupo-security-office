@@ -1,12 +1,31 @@
 import axios from 'axios'
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: API_BASE_URL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 })
+
+// Origen del backend (sin el sufijo /api), para resolver rutas relativas
+// devueltas por la API (ej. imágenes de producto, logos de marca:
+// /api/files/:id) en un `<img src>`. En dev, VITE_API_URL no está
+// definida y baseURL cae a '/api' relativo (proxy de Vite) — el origen
+// queda vacío y la ruta se usa tal cual. En producción, frontend y
+// backend viven en subdominios distintos (dev.* / api-dev.*), así que una
+// ruta relativa sin resolver apuntaría al origen equivocado (el propio
+// frontend, que nunca sirve esos archivos).
+const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '')
+
+/** Resuelve una ruta relativa devuelta por la API a una URL absoluta usable en <img src>. */
+export function resolveAssetUrl(path?: string | null): string {
+  if (!path) return ''
+  if (/^https?:\/\//i.test(path)) return path
+  return `${BACKEND_ORIGIN}${path}`
+}
 
 api.interceptors.request.use(
   (config) => {

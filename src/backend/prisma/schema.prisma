@@ -231,6 +231,23 @@ model ProductImage {
   @@map("product_images")
 }
 
+/// Bytes de archivos subidos (imágenes de producto, logos de marca),
+/// almacenados directamente en Postgres. Reemplaza el guardado en disco
+/// local (process.cwd()/uploads): en Hostinger cada despliegue corre en un
+/// directorio de versión nuevo (confirmado en runtime logs), y el disco no
+/// se comparte entre instancias — los archivos subidos se perdían o eran
+/// invisibles para la instancia que atendía la lectura, aunque el registro
+/// en BD (ProductImage.url / Brand.logo) sobreviviera. Servido vía
+/// GET /api/files/:id (FilesController).
+model UploadedFile {
+  id        String   @id @default(uuid())
+  mimeType  String
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@map("uploaded_files")
+}
+
 model PriceList {
   id         String    @id @default(uuid())
   name       String

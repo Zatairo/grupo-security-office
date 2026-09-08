@@ -1,16 +1,5 @@
 import { createPrismaMock } from '../../__test__/mocks/prisma.mock';
 
-jest.mock('fs', () => ({
-  existsSync: jest.fn().mockReturnValue(true),
-  unlinkSync: jest.fn(),
-  mkdirSync: jest.fn(),
-  promises: {
-    writeFile: jest.fn().mockResolvedValue(undefined),
-  },
-}));
-
-import * as fs from 'fs';
-
 const mockPrisma = createPrismaMock();
 
 jest.mock('../../prisma/prisma.service', () => ({
@@ -21,6 +10,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { BrandsService } from './brands.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { FilesService } from '../files/files.service';
+
+const mockFiles = {
+  store: jest.fn().mockResolvedValue({ id: 'file-1', url: '/api/files/file-1' }),
+  get: jest.fn(),
+  deleteByUrl: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockBrand = {
   id: 'brand-1',
@@ -57,6 +53,7 @@ describe('BrandsService', () => {
       providers: [
         BrandsService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: FilesService, useValue: mockFiles },
       ],
     }).compile();
 
@@ -196,35 +193,37 @@ describe('BrandsService', () => {
     } as Express.Multer.File;
 
     it('debe guardar el logo y actualizar la marca', async () => {
+      mockFiles.store.mockResolvedValue({ id: 'file-nuevo', url: '/api/files/file-nuevo' });
       mockPrisma.brand.findUnique.mockResolvedValue(mockBrand);
-      mockPrisma.brand.update.mockResolvedValue({ ...mockBrand, logo: '/uploads/logo-nuevo.png' });
+      mockPrisma.brand.update.mockResolvedValue({ ...mockBrand, logo: '/api/files/file-nuevo' });
 
       const result = await service.uploadLogo('brand-1', validFile);
 
-      expect(result.logo).toMatch(/^\/uploads\/.+\.png$/);
-      expect(fs.promises.writeFile).toHaveBeenCalledTimes(1);
+      expect(result.logo).toBe('/api/files/file-nuevo');
+      expect(mockFiles.store).toHaveBeenCalledWith(validFile.buffer, validFile.mimetype);
       expect(mockPrisma.brand.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { logo: expect.stringMatching(/^\/uploads\//) } }),
+        expect.objectContaining({ data: { logo: '/api/files/file-nuevo' } }),
       );
     });
 
     it('debe borrar el logo anterior cuando es un upload interno', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-      mockPrisma.brand.findUnique.mockResolvedValue({ ...mockBrand, logo: '/uploads/anterior.png' });
-      mockPrisma.brand.update.mockResolvedValue({ ...mockBrand, logo: '/uploads/nuevo.png' });
+      mockFiles.store.mockResolvedValue({ id: 'file-nuevo', url: '/api/files/file-nuevo' });
+      mockPrisma.brand.findUnique.mockResolvedValue({ ...mockBrand, logo: '/api/files/anterior' });
+      mockPrisma.brand.update.mockResolvedValue({ ...mockBrand, logo: '/api/files/file-nuevo' });
 
       await service.uploadLogo('brand-1', validFile);
 
-      expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('anterior.png'));
+      expect(mockFiles.deleteByUrl).toHaveBeenCalledWith('/api/files/anterior');
     });
 
     it('no debe intentar borrar logos externos (no gestionados)', async () => {
+      mockFiles.store.mockResolvedValue({ id: 'file-nuevo', url: '/api/files/file-nuevo' });
       mockPrisma.brand.findUnique.mockResolvedValue(mockBrand);
-      mockPrisma.brand.update.mockResolvedValue({ ...mockBrand, logo: '/uploads/nuevo.png' });
+      mockPrisma.brand.update.mockResolvedValue({ ...mockBrand, logo: '/api/files/file-nuevo' });
 
       await service.uploadLogo('brand-1', validFile);
 
-      expect(fs.unlinkSync).not.toHaveBeenCalled();
+      expect(mockFiles.deleteByUrl).not.toHaveBeenCalled();
     });
 
     it('debe lanzar BadRequestException con mimetype no permitido', async () => {
