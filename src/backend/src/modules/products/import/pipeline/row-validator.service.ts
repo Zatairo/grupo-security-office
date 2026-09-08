@@ -6,6 +6,7 @@ import {
 } from '../interfaces/import-context';
 import { SystemField, ColumnMapping } from '../interfaces/column-mapping';
 import { RawRow } from '../interfaces/import-source.adapter';
+import { resolveEffectiveName } from '../helpers/text-normalizer';
 
 /**
  * Servicio de validación de filas de importación.
@@ -105,14 +106,20 @@ export class RowValidatorService {
     }
 
     // === Validar Nombre ===
+    // Un nombre explícito no es la única fuente válida: si la columna de nombre
+    // no viene mapeada o está vacía, RowNormalizerService deriva un nombre breve
+    // desde la descripción (ver resolveEffectiveName). Validar solo el valor
+    // crudo de `name` rechazaría filas que sí terminan con un nombre válido,
+    // como ocurre en archivos de proveedor que solo traen SKU + descripción.
     const nameValue = getFieldValue('name');
-    const name = this.normalizeString(nameValue);
+    const descriptionValue = getFieldValue('description');
+    const name = resolveEffectiveName(nameValue, descriptionValue);
 
     if (!name) {
       errors.push({
         field: 'name',
         code: 'NAME_REQUIRED',
-        message: 'El nombre es requerido',
+        message: 'El nombre es requerido (ni la columna de nombre ni la descripción tienen texto usable)',
       });
     } else if (name.length > 500) {
       errors.push({

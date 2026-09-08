@@ -229,6 +229,37 @@
 
 ---
 
+## [FIX-IMPORT-NAME-FALLBACK-001] — Fix products import rejecting rows with no explicit name column
+
+- `Executor`: Claude Code
+- `Agent`: (direct interactive session, no formal .opencode/.kilo profile)
+- `Status`: `COMMITTED`
+- `Branch`: agent/claude/FIX-IMPORT-NAME-FALLBACK-001 (branched from agent/claude/IMPL-DEV-RBAC-BOOTSTRAP-001 @ 00acee8)
+- `Started at`: 2026-09-08T00:00:00Z
+- `Completed at`: 2026-09-08T00:00:00Z
+- `Requirement source`: User-reported bug — uploaded a real product list through the import wizard, the UI completed without a visible error, but 0 products were saved.
+- `Files opened`: src/backend/src/modules/products/import/pipeline/row-validator.service.ts, src/backend/src/modules/products/import/pipeline/row-normalizer.service.ts, src/backend/src/modules/products/import/helpers/text-normalizer.ts, src/backend/src/modules/products/import/pipeline/batch-executor.service.ts, src/backend/src/modules/products/import/import.service.ts, src/backend/src/modules/products/import/import.controller.ts, src/backend/prisma/schema.prisma (Product model, read-only), docs/agent-coordination/*
+- `Files modified`: src/backend/src/modules/products/import/helpers/text-normalizer.ts, src/backend/src/modules/products/import/pipeline/row-normalizer.service.ts, src/backend/src/modules/products/import/pipeline/row-validator.service.ts, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Files reserved`: (see file-ownership, released at commit)
+- `Dependencies`: NONE
+- `Implementation summary`:
+  1. **Root cause, found via live forensics (read-only) + reproduction against api-dev**: the user's first real import (`LISTA AUTOMATIZACION PUERTAS - AJUSTADA.xlsx`, 204 rows) left an `AuditLog` entry (`action: IMPORT_PRODUCTS`) showing `created: 0, updated: 0, errors: 204` — the request completed, nothing was persisted, no error surfaced in the wizard's result screen beyond zero counts. A second real file the user provided (`LISTA HIKVISION TURBO GRUPO.xlsx`, 211 rows) was reproduced directly against the live `POST /api/products/import/preview` (dry-run, no DB writes): `validRows: 0, invalidRows: 211`, every row failing with `NAME_REQUIRED`.
+  2. **Mechanism**: `RowValidatorService.validateRow` checked only the raw value mapped to the `name` target field and rejected the row if empty — but `RowNormalizerService` already contained a purpose-built fallback (`resolveName`/`deriveNameFromDescription`, with a `HEADER_ARTIFACTS` constant literally naming `'TITLE HIKVISION TURBO'`) that derives a short name from `description` when no explicit name column exists — exactly the shape of vendor price lists that only have SKU + description (no separate short name), like both files the user tried. The normalizer's fallback never ran because the validator rejected the row first. The two pipeline stages were out of sync.
+  3. **Fix**: extracted the name-derivation logic (`resolveName` + `deriveNameFromDescription` + `escapeRegExp`, previously private methods on `RowNormalizerService`) into a new shared pure function `resolveEffectiveName(rawName, rawDescription)` in `helpers/text-normalizer.ts`. Both `RowValidatorService` (validation) and `RowNormalizerService` (persistence) now call the exact same function, so a row that validates is guaranteed to normalize with the same name — no duplicated/diverging logic.
+  4. Did not touch `batch-executor.service.ts`, `import.service.ts`, `import.controller.ts`, or `schema.prisma` — the bug was isolated to the validator/normalizer mismatch; no schema or execution-flow change needed for this fix.
+  5. **Separate, still-open finding (not fixed here, flagged to user)**: `ImportService.importContexts` is a plain in-memory `Map` (not persisted to DB, not shared across processes) — a real reliability risk if Hostinger recycles the Node process or runs multiple instances between a wizard's `preview` and `execute` calls. Out of scope for this fix; would need either a DB-backed context store (schema migration) or a stateless preview→execute redesign, both requiring explicit user sign-off before implementation.
+- `Validation commands`: `npx tsc --noEmit`, `npx jest src/modules/products/import` (full import module), `npx jest` (full backend suite), `npm run build`; live reproduction via a temporary local script against `POST /products/import/preview` — first against the deployed `api-dev` (confirmed the bug, `invalidRows: 211`), then against a local `NODE_ENV=development nest start` instance pointed at the same Neon DEV (confirmed the fix, `validRows: 211, invalidRows: 0`) before writing anything to the DB. All temporary scripts deleted after use.
+- `Validation results`: tsc 0 errors. Import module: 87/87 passing. Full suite: 633/643 passing — the 10 failures are the same pre-existing `listas.service.spec.ts` (1) and `transition.service.spec.ts` (9) failures documented as PRE-EXISTING in BE-RBAC-001's work-log entry; unrelated files, unchanged by this fix. Build: 0 errors. Live repro before fix: 0/211 valid (100% `NAME_REQUIRED`). Live repro after fix (local server against Neon DEV): 211/211 valid, 0 invalid — confirmed via dry-run preview only, no products were actually created (user asked to test the real import from the UI themselves after this fix is deployed, rather than have it run directly against Neon DEV from this session).
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: (reported after commit)
+- `Handoff to`: User — needs this fix deployed to `api-dev` on Hostinger (deployment mechanism for the backend not yet established in this session — ask user) before re-testing the real Hikvision import from the UI. Separately, the in-memory `importContexts` reliability risk (point 5 above) needs a scoped follow-up task with explicit user sign-off on the persistence approach.
+- `Known risks`:
+  - Only the "no name column, has description" failure mode was root-caused and fixed. The FIRST file the user tried (`LISTA AUTOMATIZACION PUERTAS - AJUSTADA.xlsx`) is a different case — its audit log shows `NOMBRE`/`MARCA`/`CATEGORIA` were already mapped correctly, so it must have failed for a different reason (likely inside `executeBatch`, post-validation) that was not reproduced or fixed here; that file was not made available to this session, only its audit-log summary. Do not assume this fix resolves that first failure until it is re-tested.
+  - This is a validation-layer behavior change: rows that previously hard-failed with `NAME_REQUIRED` will now silently get an auto-derived name from `description` when no name column is mapped. This is the intended fix, but worth knowing if a future report says "the product name looks auto-generated / truncated" for a file with no name column — that is this fallback working as designed, not a new bug.
+- `Blockers`: Backend deploy mechanism to Hostinger `api-dev` unconfirmed — needed to get this fix live for the user's UI re-test.
+
+---
+
 ## [CHORE-OBSIDIAN-IGNORE-001] — Ignore local Obsidian configuration so .obsidian/graph.json does not appear as untracked
 
 - `Executor`: OpenCode
