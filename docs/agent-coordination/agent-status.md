@@ -14,6 +14,7 @@
 | OpenCode | backend-engineer | COMMITTED | BE-LINT-FIX-001 | Resolve no-empty-object-type ESLint errors (products) | main | (released) | NONE | b7e8ca4 | NONE | Await Perplexity assignment | 2026-09-04T00:00:00Z |
 | OpenCode | tech-lead-orchestrator | CHORE-OBSIDIAN-IGNORE-001 | Ignore local Obsidian configuration so .obsidian/graph.json does not appear as untracked | CHORE-OBSIDIAN-IGNORE-001 | (see file-ownership) | COMMITTED | (pending) | Await Perplexity review | 2026-09-07T00:00:00Z |
 | OpenCode | tech-lead-orchestrator | WORKING | DOCS-CLEANUP-001 | Remove legacy documentation and establish minimal canonical entry point | agent/opencode/DOCS-CLEANUP-001-remove-legacy-docs | (see file-ownership) | DOCS-AUDIT-001 | (pending) | NONE | Validate + atomic commit | 2026-09-07T00:00:00Z |
+| Kilo Code | Comercial-Backend-Implementer | COMMITTED | IMPL-DEV-ADMIN-BOOTSTRAP-001 | Add confirmed admin bootstrap/reset command for Neon DEV | agent/kilo/IMPL-DEV-ADMIN-BOOTSTRAP-001 | (see file-ownership) | NONE | (see work-log) | NONE | Await Perplexity review | 2026-09-08T05:32:03Z |
 
 ## Allowed status values
 

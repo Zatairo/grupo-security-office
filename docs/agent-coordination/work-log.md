@@ -115,6 +115,37 @@
 
 ---
 
+## [IMPL-DEV-ADMIN-BOOTSTRAP-001] — Add confirmed admin bootstrap/reset command for Neon DEV
+
+- `Executor`: Kilo Code
+- `Agent`: Comercial-Backend-Implementer
+- `Status`: `COMMITTED`
+- `Branch`: agent/kilo/IMPL-DEV-ADMIN-BOOTSTRAP-001
+- `Started at`: 2026-09-08T04:00:39Z
+- `Completed at`: 2026-09-08T05:32:03Z
+- `Requirement source`: Perplexity task IMPL-DEV-ADMIN-BOOTSTRAP-001
+- `Files opened`: src/backend/scripts/dev-admin-bootstrap.ts, src/backend/package.json, src/backend/.env.example, src/backend/src/modules/auth/dto/login.dto.ts, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Files modified`: src/backend/scripts/dev-admin-bootstrap.ts, src/backend/package.json, src/backend/.env.example, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Files reserved`: src/backend/scripts/dev-admin-bootstrap.ts, src/backend/package.json, src/backend/.env.example, docs/agent-coordination/agent-status.md, docs/agent-coordination/file-ownership.md, docs/agent-coordination/work-log.md
+- `Dependencies`: NONE
+- `Implementation summary`:
+  1. Created `src/backend/scripts/dev-admin-bootstrap.ts` — a DEV-only admin bootstrap/reset command with three strict guards (all evaluated before any PrismaClient instantiation):
+     - NODE_ENV must be "development" (else exit 1 with DEV-only error)
+     - SEED_ADMIN_PASSWORD must be set, non-empty, and at least 8 characters (matching LoginDto `@MinLength(8)`)
+     - Interactive confirmation requires exact "YES" (any other input exits cleanly with exit 0, no DB mutation)
+     - After all guards pass: resolves existing "Super Admin" role by exact name (no role create/update/delete), hashes SEED_ADMIN_PASSWORD with bcrypt salt round 12 (repo convention from seed.ts), upserts the single declared admin user by the existing email contract, assigns Super Admin via user-role relationship, always disconnects Prisma in a finally block
+  2. Removed top-level await by wrapping execution in an async `main()` function (compatible with `module: commonjs` + `target: ES2021`).
+  3. Updated `src/backend/package.json` — added script `db:bootstrap:dev-admin` = `ts-node scripts/dev-admin-bootstrap.ts`. Does NOT invoke db:seed, migrate, db push, or any broad seed command.
+  4. Created `src/backend/.env.example` — minimal file containing only `SEED_ADMIN_PASSWORD=` empty placeholder. No credentials, connection strings, JWT values, or speculative config.
+  5. Updated coordination documents per project protocol.
+- `Validation commands`: `npx tsc --noEmit`, `npm run build`, and three no-DB guard-path runs (non-development NODE_ENV; development+missing password; development+valid dummy password+rejected confirmation).
+- `Validation results`: tsc exit 0 (0 errors, includes scripts/dev-admin-bootstrap.ts); nest build exit 0; Guard A exit 1 (DEV-only error); Guard B exit 1 (missing password error); Guard C exit 0 (confirmation denied). No Prisma connection in any guard path; no DATABASE_URL provided.
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: (reported after commit)
+- `Handoff to`: Perplexity for review and merge
+- `Known risks`: Script is DEV-only and must never run with confirmation YES against production or an external database. Unrelated working-tree changes (frontend package files, .opencode/agent/*, grupo-security-frontend.zip) were left unstaged and untouched. schema_backup.prisma has no diff and was not staged.
+- `Blockers`: NONE
+
 ## [BE-LINT-FIX-001] — Resolve no-empty-object-type ESLint errors (products)
 
 - `Executor`: OpenCode
