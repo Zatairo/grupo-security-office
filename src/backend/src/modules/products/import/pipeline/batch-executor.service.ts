@@ -176,107 +176,149 @@ export class BatchExecutorService {
     errors: BatchError[];
     defaults: { category: number; brand: number };
   }> {
-    return this.prisma.$transaction(async (tx) => {
-      const batchResult = {
-        created: 0,
-        updated: 0,
-        skipped: 0,
-        productIds: [] as string[],
-        errors: [] as BatchError[],
-        defaults: { category: 0, brand: 0 },
-      };
+    return this.prisma.$transaction(
+      async (tx) => {
+        const batchResult = {
+          created: 0,
+          updated: 0,
+          skipped: 0,
+          productIds: [] as string[],
+          errors: [] as BatchError[],
+          defaults: { category: 0, brand: 0 },
+        };
 
-      // Pre-cargar SKUs existentes en este batch
-      const skus = batch.map((r) => r.sku);
-      const existingProducts = await tx.product.findMany({
-        where: { sku: { in: skus } },
-        select: { id: true, sku: true },
-      });
-      const existingSkuMap = new Map<string, string>(
-        existingProducts.map((p) => [p.sku, p.id]),
-      );
+        // Pre-cargar SKUs existentes en este batch
+        const skus = batch.map((r) => r.sku);
+        const existingProducts = await tx.product.findMany({
+          where: { sku: { in: skus } },
+          select: { id: true, sku: true },
+        });
+        const existingSkuMap = new Map<string, string>(
+          existingProducts.map((p) => [p.sku, p.id]),
+        );
 
-      for (const row of batch) {
-        try {
-          // Resolver categoría (siempre retorna un ID — default "Sin categoría" si vacío)
-          const categoryResult = await this.resolveCategory(
-            tx,
-            row.categoryName,
-            row.categoryInferredSlug,
-            categoryMap,
-            batchResult.defaults,
-            ctx.sectionDecisions,
-          );
+        for (const row of batch) {
+          // Aislamiento por fila con SAVEPOINT: sin esto, un error real de Postgres
+          // en UNA fila (ej. una violación de restricción única) deja la transacción
+          // completa del lote "abortada" — Postgres rechaza TODAS las consultas
+          // siguientes con 25P02 "current transaction is aborted", así que el resto
+          // de filas del lote fallan en cascada aunque sus datos sean válidos, y al
+          // intentar hacer commit del callback (que no relanzó ninguna excepción),
+          // Postgres descarta el lote entero — incluidas filas que ya se habían
+          // insertado y se contaban como exitosas. Con SAVEPOINT por fila, un error
+          // real solo revierte esa fila; el resto del lote sigue intacto.
+          const categoryMapKeysBefore = new Set(categoryMap.keys());
+          const brandMapKeysBefore = new Set(brandMap.keys());
+          const priceListMapKeysBefore = new Set(priceListMap.keys());
 
-          // Resolver marca (siempre retorna un ID — default "Sin marca" si vacío)
-          const brandResult = await this.resolveBrand(
-            tx,
-            row.brandName,
-            row.brandInferredSlug,
-            brandMap,
-            batchResult.defaults,
-          );
+          await tx.$executeRawUnsafe('SAVEPOINT row_sp');
 
-          const existingProductId = existingSkuMap.get(row.sku);
+          try {
+            // Resolver categoría (siempre retorna un ID — default "Sin categoría" si vacío)
+            const categoryResult = await this.resolveCategory(
+              tx,
+              row.categoryName,
+              row.categoryInferredSlug,
+              categoryMap,
+              batchResult.defaults,
+              ctx.sectionDecisions,
+            );
 
-          if (existingProductId) {
-            // UPDATE: producto ya existe
-            await tx.product.update({
-              where: { id: existingProductId },
-              data: {
-                name: row.name,
-                description: row.description ?? undefined,
-                categoryId: categoryResult.id,
-                brandId: brandResult.id,
-                technicalSpecs: (row.technicalSpecs as Prisma.InputJsonValue) ?? Prisma.JsonNull,
-                extraAttributes: (row.extraAttributes as Prisma.InputJsonValue) ?? Prisma.JsonNull,
-              },
-            });
+            // Resolver marca (siempre retorna un ID — default "Sin marca" si vacío)
+            const brandResult = await this.resolveBrand(
+              tx,
+              row.brandName,
+              row.brandInferredSlug,
+              brandMap,
+              batchResult.defaults,
+            );
 
-            // Actualizar precios
-            if (row.prices.length > 0) {
-              await this.upsertPrices(tx, existingProductId, row.prices, priceListMap);
+            const existingProductId = existingSkuMap.get(row.sku);
+
+            if (existingProductId) {
+              // UPDATE: producto ya existe
+              await tx.product.update({
+                where: { id: existingProductId },
+                data: {
+                  name: row.name,
+                  description: row.description ?? undefined,
+                  categoryId: categoryResult.id,
+                  brandId: brandResult.id,
+                  technicalSpecs: (row.technicalSpecs as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+                  extraAttributes: (row.extraAttributes as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+                },
+              });
+
+              // Actualizar precios
+              if (row.prices.length > 0) {
+                await this.upsertPrices(tx, existingProductId, row.prices, priceListMap);
+              }
+
+              await tx.$executeRawUnsafe('RELEASE SAVEPOINT row_sp');
+              batchResult.updated++;
+              batchResult.productIds.push(existingProductId);
+            } else {
+              // CREATE: producto nuevo
+              const newProduct = await tx.product.create({
+                data: {
+                  sku: row.sku,
+                  name: row.name,
+                  description: row.description ?? undefined,
+                  categoryId: categoryResult.id,
+                  brandId: brandResult.id,
+                  listaId,
+                  technicalSpecs: (row.technicalSpecs as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+                  extraAttributes: (row.extraAttributes as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+                  isActive: true,
+                  isVisible: defaultVisibility,
+                },
+              });
+
+              // Crear precios
+              if (row.prices.length > 0) {
+                await this.upsertPrices(tx, newProduct.id, row.prices, priceListMap);
+              }
+
+              await tx.$executeRawUnsafe('RELEASE SAVEPOINT row_sp');
+              batchResult.created++;
+              batchResult.productIds.push(newProduct.id);
+              // Defensa adicional: si una fila posterior del mismo lote resuelve al
+              // mismo SKU normalizado (no debería pasar tras el fix de validación,
+              // pero evita un segundo choque de restricción única si ocurre), la
+              // trata como UPDATE en vez de repetir el CREATE.
+              existingSkuMap.set(row.sku, newProduct.id);
+            }
+          } catch (error) {
+            await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT row_sp');
+
+            // Revertir entradas de caché añadidas DURANTE esta fila: sus filas en BD
+            // se revirtieron con el SAVEPOINT, así que dejar la referencia en memoria
+            // causaría un error de llave foránea en una fila posterior que la reuse.
+            // Las entradas que ya existían antes de esta fila (de la BD o de una fila
+            // anterior ya liberada con RELEASE SAVEPOINT) no se tocan.
+            for (const key of categoryMap.keys()) {
+              if (!categoryMapKeysBefore.has(key)) categoryMap.delete(key);
+            }
+            for (const key of brandMap.keys()) {
+              if (!brandMapKeysBefore.has(key)) brandMap.delete(key);
+            }
+            for (const key of priceListMap.keys()) {
+              if (!priceListMapKeysBefore.has(key)) priceListMap.delete(key);
             }
 
-            batchResult.updated++;
-            batchResult.productIds.push(existingProductId);
-          } else {
-            // CREATE: producto nuevo
-            const newProduct = await tx.product.create({
-              data: {
-                sku: row.sku,
-                name: row.name,
-                description: row.description ?? undefined,
-                categoryId: categoryResult.id,
-                brandId: brandResult.id,
-                listaId,
-                technicalSpecs: (row.technicalSpecs as Prisma.InputJsonValue) ?? Prisma.JsonNull,
-                extraAttributes: (row.extraAttributes as Prisma.InputJsonValue) ?? Prisma.JsonNull,
-                isActive: true,
-                isVisible: defaultVisibility,
-              },
+            batchResult.errors.push({
+              rowIndex: row.rowIndex,
+              sku: row.sku,
+              error: error.message || 'Error desconocido',
             });
-
-            // Crear precios
-            if (row.prices.length > 0) {
-              await this.upsertPrices(tx, newProduct.id, row.prices, priceListMap);
-            }
-
-            batchResult.created++;
-            batchResult.productIds.push(newProduct.id);
+            batchResult.skipped++;
           }
-        } catch (error) {
-          batchResult.errors.push({
-            rowIndex: row.rowIndex,
-            sku: row.sku,
-            error: error.message || 'Error desconocido',
-          });
-          batchResult.skipped++;
         }
-      }
 
-      return batchResult;
-    });
+        return batchResult;
+      },
+      { timeout: 30000 },
+    );
   }
 
   /**

@@ -6,7 +6,7 @@ import {
 } from '../interfaces/import-context';
 import { SystemField, ColumnMapping } from '../interfaces/column-mapping';
 import { RawRow } from '../interfaces/import-source.adapter';
-import { resolveEffectiveName } from '../helpers/text-normalizer';
+import { resolveEffectiveName, normalizeSku } from '../helpers/text-normalizer';
 
 /**
  * Servicio de validación de filas de importación.
@@ -83,8 +83,16 @@ export class RowValidatorService {
         message: 'El SKU es requerido',
       });
     } else {
-      // Verificar SKU duplicado dentro del archivo
-      const existingRowIndex = seenSkus.get(sku);
+      // Verificar SKU duplicado dentro del archivo. La clave de comparación usa
+      // normalizeSku (mayúsculas, sin espacios) — la MISMA normalización que
+      // BatchExecutorService aplica antes de persistir. Comparar el valor crudo
+      // (como antes) deja pasar SKUs que solo difieren en mayúsculas/espacios;
+      // esas filas colisionan igual en la base de datos, y un choque real de
+      // restricción única en medio de un lote aborta la transacción de Postgres
+      // completa (todas las filas restantes del lote fallan en cascada, incluso
+      // filas válidas no relacionadas).
+      const dedupeKey = normalizeSku(sku);
+      const existingRowIndex = seenSkus.get(dedupeKey);
       if (existingRowIndex !== undefined) {
         errors.push({
           field: 'sku',
@@ -92,7 +100,7 @@ export class RowValidatorService {
           message: `SKU duplicado en fila ${existingRowIndex + 2} (esta fila: ${rowIndex + 2})`,
         });
       } else {
-        seenSkus.set(sku, rowIndex);
+        seenSkus.set(dedupeKey, rowIndex);
       }
 
       // Verificar longitud
