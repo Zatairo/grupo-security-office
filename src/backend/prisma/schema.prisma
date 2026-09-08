@@ -1,12 +1,14 @@
-// engineType = "binary": el motor de consultas corre como proceso hijo
-// separado en vez de un addon nativo in-process. Si el motor sufre un
-// panic (ej. "PANIC: timer has gone away", visto en runtime tras
-// suspensión/reanudación del proceso en hosting compartido), se cae solo
-// el hijo y Prisma puede recuperarse, en vez de tumbar todo el proceso
-// de Node (lo que causaba caídas 503 sostenidas de toda la app).
+// driverAdapters: las consultas van por el driver JS de Neon
+// (@prisma/adapter-neon + @neondatabase/serverless) en vez de por el
+// conector nativo en Rust del motor de Prisma. Esto evita por completo
+// el panic "PANIC: timer has gone away" (crate futures-timer) visto en
+// runtime en Hostinger — un bug conocido del motor nativo de Prisma en
+// hosting compartido (github.com/prisma/prisma/issues/26073 y otros,
+// sin fix oficial de Prisma al momento de este cambio). engineType no
+// puede usarse junto con driverAdapters.
 generator client {
-  provider   = "prisma-client-js"
-  engineType = "binary"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
