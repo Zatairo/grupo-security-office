@@ -28,7 +28,7 @@ export function ProductCard({ product, onEdit, onDelete, onMoveCategory, onAcces
 
   return (
     <div
-      className="rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow group cursor-pointer"
+      className="rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow group cursor-pointer flex flex-col"
       onClick={handleCardClick}
     >
       <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center relative">
@@ -86,9 +86,11 @@ export function ProductCard({ product, onEdit, onDelete, onMoveCategory, onAcces
         </div>
         )}
       </div>
-      <div className="p-4">
-        <p className="text-[10px] font-semibold text-security-600 uppercase">{product.brand?.name}</p>
-        <h3 className="text-sm font-medium text-gray-800 mt-1 line-clamp-2 leading-tight min-h-[2.5rem]">{product.name}</h3>
+      <div className="p-4 flex flex-col grow">
+        <p className="text-[10px] font-semibold whitespace-nowrap uppercase">
+      {product.brand?.name ? `${product.brand.name.length > 25 ? `${product.brand.name.substring(0, 25)}...` : product.brand.name}` : ''}
+    </p>
+        <h3 className="text-sm font-medium text-gray-800 mt-1 leading-normal flex-grow" title={product.name}>{product.name}</h3>
         <p className="text-xs text-gray-400 font-mono mt-1">{product.sku}</p>
         <div className="mt-2">
           {product.prices[0] ? (
