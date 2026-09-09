@@ -69,6 +69,8 @@
 3. **Evaluar Context7 y SkillsMP** (seguimiento): MCP de documentación actualizada de librerías y marketplace de skills por dominio para reforzar cada agente.
 4. **Monitoreo activo**: ver `docs/agent-coordination/issues/` para tareas en vuelo; no dejar este archivo obsoleto — actualizar con nueva fase cuando Etapa 8.1 cierre.
 
+**Ticket abierto**: `FSM-LIFECYCLE-MIGRATION-8.1-001` (`docs/agent-coordination/issues/fsm-lifecycle-migration-8-1-001.md`), status `pending`, asignado a `opencode`/`backend-engineer`.
+
 ---
 
 ## Gobernanza de documentación
