@@ -1,8 +1,8 @@
 {
   ".claude/settings.local.json": {
-    "mtime": 1788989958.1022015,
-    "seen": 1788989988.8807495,
-    "ast_hash": "f73170b761ade202bcb2d5049c4299f3",
+    "mtime": 1788977676.780623,
+    "seen": 1788988081.333348,
+    "ast_hash": "92814a4cf925b9297f3088a6030ca40e",
     "semantic_hash": ""
   },
   "opencode.json": {
@@ -1104,9 +1104,9 @@
     "semantic_hash": ""
   },
   "src/frontend/src/features/products/components/ProductCard.tsx": {
-    "mtime": 1788989814.5101635,
-    "seen": 1788989988.9342806,
-    "ast_hash": "ffdf728cf4cc66bf6ec9eb01e10243f2",
+    "mtime": 1788974588.0812106,
+    "seen": 1788988081.3336012,
+    "ast_hash": "56d9734181078901efebfce83fc990bb",
     "semantic_hash": ""
   },
   "src/frontend/src/features/products/components/ProductFormModal.tsx": {
@@ -1950,9 +1950,9 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1788988850.544752,
-    "seen": 1788989988.9779944,
-    "ast_hash": "3ed7b7f14db5e833a1b0b43949a3f182",
+    "mtime": 1788988036.3229523,
+    "seen": 1788988081.3338046,
+    "ast_hash": "a3399dc7cbbd41df1943568b9ac51cce",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2040,9 +2040,9 @@
     "semantic_hash": ""
   },
   "docs/agent-coordination/README.md": {
-    "mtime": 1788988854.1210444,
-    "seen": 1788989988.9809284,
-    "ast_hash": "d3d1a08fe26664403cd4c29c46c60309",
+    "mtime": 1788988040.7577872,
+    "seen": 1788988081.3338237,
+    "ast_hash": "779fd35337c0f90ef30a6816973be46c",
     "semantic_hash": ""
   },
   "docs/agent-coordination/agent-status.md": {
@@ -2229,12 +2229,6 @@
     "mtime": 1785354608.6706815,
     "seen": 1788988081.3338926,
     "ast_hash": "00e28c7dbc9810ba463ebdb8d9f6b367",
-    "semantic_hash": ""
-  },
-  "docs/agent-coordination/orca-runtime.md": {
-    "mtime": 1788988845.439923,
-    "seen": 1788989988.9819217,
-    "ast_hash": "997dee4f0876be4c5c03cf77da943952",
     "semantic_hash": ""
   }
 }
