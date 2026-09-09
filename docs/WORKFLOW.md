@@ -1,7 +1,7 @@
 # WORKFLOW.md — Fases, Puertas de Aprobación y Contratos de Delegación
 
 > Flujo de trabajo del proyecto **Grupo Security Office / Plataforma Comercial Grupo Security**.
-> Coordinador estratégico: **Perplexity**. Ejecutores técnicos: **Kilo Code** y **OpenCode**.
+> Coordinador estratégico: **Usuario + Claude Code**. Ejecutores técnicos: **Kilo Code** y **OpenCode**.
 
 ## Visión general de fases
 
@@ -138,7 +138,7 @@ Cada ejecutor **debe responder** con:
 | Integración del resultado aprobado en NestJS/Prisma | `GS Excel Import Implementer` (Kilo) |
 | Planificación de migración/import y revisión de riesgo de datos PostgreSQL/Prisma | `data-migration-engineer` |
 
-Ningún agente puede ser dueño simultáneo de la política de mapeo y de la integración a la aplicación sin una tarea separada de Perplexity.
+Ningún agente puede ser dueño simultáneo de la política de mapeo y de la integración a la aplicación sin una tarea separada asignada por el coordinador (usuario + Claude Code).
 
 ---
 

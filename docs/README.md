@@ -5,9 +5,9 @@
 ## Identidad del proyecto
 
 - **Proyecto**: Grupo Security Office / Plataforma Comercial Grupo Security.
-- **Coordinador estratégico**: Perplexity.
+- **Coordinador estratégico**: Usuario + Claude Code.
 - **Ejecutores técnicos**: Kilo Code (reglas `.kilo/`) y OpenCode (perfiles `.opencode/`).
-- **Coordinación técnica OpenCode**: `tech-lead-orchestrator` (no reemplaza a Perplexity).
+- **Coordinación técnica OpenCode**: `tech-lead-orchestrator` (no reemplaza al coordinador).
 
 ## Stack activo
 

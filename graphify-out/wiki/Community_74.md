@@ -1,0 +1,37 @@
+# Community 74
+
+> 11 nodes · cohesion 0.18
+
+## Key Concepts
+
+- **UpdateSupplierDto** (15 connections) — `src/backend/src/modules/suppliers/dto/update-supplier.dto.ts`
+- **ApiPropertyOptional** (1 connections)
+- **IsIn** (1 connections)
+- **IsNumber** (1 connections)
+- **IsObject** (1 connections)
+- **IsOptional** (1 connections)
+- **IsString** (1 connections)
+- **Max** (1 connections)
+- **MaxLength** (1 connections)
+- **Min** (1 connections)
+- **MinLength** (1 connections)
+
+## Relationships
+
+- [Community 32](Community_32.md) (3 shared connections)
+- [Community 15](Community_15.md) (1 shared connections)
+- [Community 100](Community_100.md) (1 shared connections)
+
+## Source Files
+
+- `src/backend/src/modules/suppliers/dto/update-supplier.dto.ts`
+
+## Audit Trail
+
+- EXTRACTED: 15 (100%)
+- INFERRED: 0 (0%)
+- AMBIGUOUS: 0 (0%)
+
+---
+
+*Part of the graphify knowledge wiki. See [index](index.md) to navigate.*

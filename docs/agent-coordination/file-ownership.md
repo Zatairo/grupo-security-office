@@ -2,7 +2,7 @@
 
 > This file prevents concurrent edits and merge conflicts.
 > An agent must reserve files before modifying them and release them after committing.
-> Perplexity must inspect this file before every new delegation.
+> The coordinator (user + Claude Code) must inspect this file before every new delegation.
 
 ## Active reservations
 
@@ -26,7 +26,7 @@
    - package manifest or lock file
    - deployment configuration
    - shared UI component
-4. A conflicting task remains `WAITING` until Perplexity resolves ownership.
+4. A conflicting task remains `WAITING` until the coordinator (user + Claude Code) resolves ownership.
 5. Release reservations only after documentation, validation, and commit are complete.
 6. Historical released reservations remain below for traceability.
 

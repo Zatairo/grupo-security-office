@@ -5,6 +5,7 @@
     "docs/agent-coordination/README.md",
     "docs/agent-coordination/agent-status.md",
     "docs/agent-coordination/file-ownership.md",
-    "docs/agent-coordination/work-log.md"
+    "docs/agent-coordination/work-log.md",
+    "docs/agent-coordination/issues/README.md"
   ]
 }

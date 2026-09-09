@@ -38,8 +38,8 @@
 
 ## Current coordination decision
 
-- `Coordinator`: Perplexity (strategic only)
-- `OpenCode technical coordinator`: tech-lead-orchestrator (does not replace Perplexity)
+- `Coordinator`: User + Claude Code (strategic authority)
+- `OpenCode technical coordinator`: tech-lead-orchestrator (does not replace the coordinator)
 - `Default branch`: `main`
 - `Parallel work allowed`: only with non-overlapping file ownership
 - `Active project`: Grupo Security Office / Plataforma Comercial Grupo Security
