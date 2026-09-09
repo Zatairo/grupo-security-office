@@ -59,11 +59,15 @@ if errorlevel 1 (
 )
 
 REM Detectar procesos existentes sin detenerlos.
+REM Nota: cada servicio se lanza via un .bat auxiliar (_run-*.bat) que hace su
+REM propio "cd /d" al directorio correcto. Pasar el comando completo (con cd,
+REM directorio y npm/npx) inline a "wt.exe ... cmd /k ..." rompe el parseo de
+REM argumentos de Windows Terminal cuando hay varias comillas anidadas.
 netstat -ano | findstr /R /C:":3000 .*LISTENING" >nul
 if errorlevel 1 (
     echo Iniciando backend en puerto 3000...
     if "%USE_WT%"=="1" (
-        start "" wt.exe -w 0 nt -d "%BACKEND_DIR%" --title "Backend" cmd /k "npm run dev"
+        start "" wt.exe -w 0 nt --title "Backend" cmd /k "%REPO_ROOT%_run-backend.bat"
         timeout /t 2 /nobreak >nul
     ) else (
         start "Grupo Security - Backend" /D "%BACKEND_DIR%" cmd /k "npm run dev"
@@ -76,7 +80,7 @@ netstat -ano | findstr /R /C:":5173 .*LISTENING" >nul
 if errorlevel 1 (
     echo Iniciando frontend en puerto 5173...
     if "%USE_WT%"=="1" (
-        start "" wt.exe -w 0 nt -d "%FRONTEND_DIR%" --title "Frontend" cmd /k "npm run dev"
+        start "" wt.exe -w 0 nt --title "Frontend" cmd /k "%REPO_ROOT%_run-frontend.bat"
         timeout /t 2 /nobreak >nul
     ) else (
         start "Grupo Security - Frontend" /D "%FRONTEND_DIR%" cmd /k "npm run dev"
@@ -90,7 +94,7 @@ netstat -ano | findstr /R /C:":4747 .*LISTENING" >nul
 if errorlevel 1 (
     echo Iniciando servidor Agentation en puerto 4747...
     if "%USE_WT%"=="1" (
-        start "" wt.exe -w 0 nt -d "%REPO_ROOT%" --title "Agentation" cmd /k "npx -y agentation-mcp server"
+        start "" wt.exe -w 0 nt --title "Agentation" cmd /k "%REPO_ROOT%_run-agentation.bat"
         timeout /t 2 /nobreak >nul
     ) else (
         start "Grupo Security - Agentation" /D "%REPO_ROOT%" cmd /k "npx -y agentation-mcp server"
