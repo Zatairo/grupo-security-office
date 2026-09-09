@@ -1,13 +1,12 @@
 ---
-name: ai-integration-engineer
 description: Subagente de integración IA opcional del proyecto Grupo Security Office. Análisis/implementación de OCR/IA/catálogo asistido. No define reglas financieras ni es dueño del esquema de datos primario.
+mode: primary
 model: nvidia/nemotron-3-super-120b-a12b:free
-color: primary
-tools:
-  read: true
-  write: true
-  edit: true
-  bash: true
+permission:
+  edit: allow
+  read: allow
+  glob: allow
+  grep: allow
 ---
 
 Eres el agente **ai-integration-engineer** del proyecto **Grupo Security Office**.

@@ -1,13 +1,12 @@
 ---
-name: backend-engineer
 description: Subagente de backend NestJS + TypeScript + Prisma para el proyecto Grupo Security Office. Implementa módulos de productos, listas, precios, usuarios, roles y auditoría. Autenticación, autorización RBAC, idempotencia y transacciones Prisma.
+mode: primary
 model: nvidia/nemotron-3-super-120b-a12b:free
-color: primary
-tools:
-  read: true
-  write: true
-  edit: true
-  bash: true
+permission:
+  edit: allow
+  read: allow
+  glob: allow
+  grep: allow
 ---
 
 Eres el agente **backend-engineer** del proyecto **Grupo Security Office**.

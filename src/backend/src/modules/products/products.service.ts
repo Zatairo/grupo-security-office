@@ -8,12 +8,10 @@
   Logger,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { randomUUID } from 'crypto';
-import * as fs from 'fs';
-import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService, AccessContext, LEVEL_RANK } from '../../common/acl/acl.service';
 import { AuditService } from '../audit/audit.service';
+import { FilesService } from '../files/files.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PublishProductDto } from './dto/publish-product.dto';
@@ -34,7 +32,6 @@ import {
 } from './lifecycle.types';
 import { Prisma, Product } from '@prisma/client';
 import * as XLSX from 'xlsx';
-import { UPLOADS_DIR, UPLOADS_URL_PREFIX } from '../../common/uploads-path';
 import { normalizeText } from './import/helpers/text-normalizer';
 
 const ALLOWED_IMAGE_MIMETYPES: Record<string, string> = {
@@ -78,6 +75,7 @@ export class ProductsService {
     private prisma: PrismaService,
     private acl: AclService,
     private audit: AuditService,
+    private files: FilesService,
     ) {}
 
   /**
@@ -1573,15 +1571,7 @@ export class ProductsService {
     await this.prisma.product.delete({ where: { id } });
 
     for (const image of images) {
-      const filename = path.basename(image.url);
-      const filePath = path.join(UPLOADS_DIR, filename);
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      } catch {
-        // El archivo puede no existir en disco; no bloquea el borrado lÃ³gico.
-      }
+      await this.files.deleteByUrl(image.url);
     }
 
     return { message: 'Producto eliminado exitosamente' };
@@ -1637,8 +1627,7 @@ export class ProductsService {
       throw new BadRequestException('Archivo requerido en el campo "file"');
     }
 
-    const ext = ALLOWED_IMAGE_MIMETYPES[file.mimetype];
-    if (!ext) {
+    if (!ALLOWED_IMAGE_MIMETYPES[file.mimetype]) {
       throw new BadRequestException('Tipo de archivo no permitido. Use JPEG, PNG, WEBP o GIF.');
     }
 
@@ -1646,13 +1635,7 @@ export class ProductsService {
       throw new BadRequestException('El archivo excede el tamaÃ±o mÃ¡ximo de 8MB');
     }
 
-    const filename = `${randomUUID()}.${ext}`;
-    if (!fs.existsSync(UPLOADS_DIR)) {
-      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-    }
-    await fs.promises.writeFile(path.join(UPLOADS_DIR, filename), file.buffer);
-
-    const url = `${UPLOADS_URL_PREFIX}/${filename}`;
+    const { url } = await this.files.store(file.buffer, file.mimetype);
 
     if (isPrimary) {
       await this.prisma.productImage.updateMany({
@@ -1673,7 +1656,7 @@ export class ProductsService {
   }
 
   /**
-   * Elimina una imagen: borra el registro y el archivo del disco si existe.
+   * Elimina una imagen: borra el registro y los bytes almacenados.
    */
   async deleteImage(imageId: string, ctx?: AccessContext) {
     const image = await this.prisma.productImage.findUnique({ where: { id: imageId } });
@@ -1684,15 +1667,7 @@ export class ProductsService {
       await this.acl.assertProductAccess(image.productId, ctx, 'edit_products');
     }
 
-    const filename = path.basename(image.url);
-    const filePath = path.join(UPLOADS_DIR, filename);
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch {
-      // El archivo puede no existir en disco; no bloquea el borrado lÃ³gico.
-    }
+    await this.files.deleteByUrl(image.url);
 
     await this.prisma.productImage.delete({ where: { id: imageId } });
     return { message: 'Imagen eliminada exitosamente' };

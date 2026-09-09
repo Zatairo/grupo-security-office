@@ -163,6 +163,27 @@ export class ImportController {
     return this.importService.getCurrentPriceBySku(sku, listaId);
   }
 
+  /**
+   * Versión agrupada de `current-price`: resuelve varios SKUs en una sola
+   * petición. El wizard debe usar este endpoint (no N llamadas a
+   * `current-price`) para el paso de comparación de precios — con listas
+   * grandes, N llamadas paralelas agotan el rate-limit global (429 en
+   * cascada) y tumban el paso siguiente de la importación.
+   */
+  @Post('current-prices')
+  @Roles('Super Admin', 'Supervisor', 'Admin Comercial', 'Operador', 'Consulta')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Precio vigente por SKU, en lote (wizard de importación)' })
+  @ApiResponse({
+    status: 200,
+    description: '{ data: ({ sku, productId, name, price, currency, validUntil, exists } | null)[] }',
+  })
+  getCurrentPrices(
+    @Body() body: { skus: string[]; listaId?: string },
+  ) {
+    return this.importService.getCurrentPricesBySkus(body?.skus ?? [], body?.listaId);
+  }
+
   @Get('mappings')
   @Roles('Super Admin', 'Admin Comercial')
   @ApiOperation({ summary: 'Listar presets de mapping del usuario' })

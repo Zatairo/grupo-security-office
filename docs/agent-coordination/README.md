@@ -3,21 +3,21 @@
 ## Purpose
 
 Kilo Code and OpenCode are peer technical executors working on the same repository.
-Perplexity is the sole strategic coordinator and assigns closed, non-overlapping tasks.
+The coordinator (user + Claude Code) is the strategic authority and assigns closed, non-overlapping tasks.
 
 This protocol preserves task state, file ownership, validation evidence, and commit history when chat memory or agent session memory is unavailable.
 
 ## Coordination hierarchy
 
-- **Perplexity**: only strategic coordinator. Defines scope, dependencies, ownership, acceptance criteria and task sequence.
+- **Coordinator (user + Claude Code)**: strategic authority. Defines scope, dependencies, ownership, acceptance criteria and task sequence.
 - **Kilo Code**: technical executor under `.kilo/` rules.
 - **OpenCode**: technical executor under `.opencode/` profiles and the shared coordination files.
-- **`tech-lead-orchestrator`**: OpenCode coordination agent only. It does **not** replace Perplexity as strategic authority.
+- **`tech-lead-orchestrator`**: OpenCode coordination agent only. It does **not** replace the coordinator (user + Claude Code) as strategic authority.
 
 ## Collaboration boundary
 
 - Kilo Code and OpenCode never modify the same file, endpoint, API contract, shared type, Prisma schema, migration, package manifest, lock file, or infrastructure configuration in parallel.
-- A task belongs to one executor at a time, assigned by Perplexity.
+- A task belongs to one executor at a time, assigned by the coordinator (user + Claude Code).
 - The `finance-orchestrator` profile is inactive and has no coordination authority.
 
 ## Mandatory files
@@ -50,7 +50,7 @@ Parallel work is allowed only when tasks:
 - Have no unresolved dependency on the other task.
 - Can be validated independently.
 
-If a conflict exists, the task status must be `WAITING` or `BLOCKED`. Do not proceed until Perplexity resolves the conflict.
+If a conflict exists, the task status must be `WAITING` or `BLOCKED`. Do not proceed until the coordinator (user + Claude Code) resolves the conflict.
 
 ## Required closure
 
@@ -70,7 +70,7 @@ A task is complete only after the agent:
 - Commit format: `<type>(<scope>): <imperative English summary> [<TASK_ID>]`.
 - Do not force-push.
 - Do not amend or rewrite another agent's commit.
-- Do not merge into `main` without an explicit Perplexity order and required user approval.
+- Do not merge into `main` without an explicit coordinator (user + Claude Code) order and required user approval.
 - Do not include secrets, `.env` files, keys, tokens, generated build artifacts, or unrelated files.
 
 ## Model policy

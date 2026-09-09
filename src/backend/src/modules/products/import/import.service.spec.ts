@@ -95,6 +95,29 @@ describe('ImportService — Lista destino (listaId)', () => {
 
     mockPrisma.product.findMany.mockResolvedValue([]);
 
+    // ImportService persiste el contexto entre preview() y execute() en
+    // `importSession` (antes vivía en un Map interno del servicio). Estos
+    // tests llaman preview() y luego execute() con el mismo importId dentro
+    // del mismo caso, así que el mock necesita comportarse como una tabla
+    // real (guardar y devolver), no solo resolver un valor fijo.
+    const importSessionStore = new Map<string, { id: string; userId: string; data: unknown }>();
+    mockPrisma.importSession.upsert.mockImplementation(async (args: any) => {
+      const record = {
+        id: args.where.id,
+        userId: args.create?.userId,
+        data: args.update?.data ?? args.create?.data,
+      };
+      importSessionStore.set(args.where.id, record);
+      return record;
+    });
+    mockPrisma.importSession.findUnique.mockImplementation(async (args: any) =>
+      importSessionStore.get(args.where.id) ?? null,
+    );
+    mockPrisma.importSession.deleteMany.mockImplementation(async (args: any) => {
+      const existed = importSessionStore.delete(args.where.id);
+      return { count: existed ? 1 : 0 };
+    });
+
     service = new ImportService(
       mockPrisma as unknown as PrismaService,
       auditService as unknown as AuditService,
@@ -385,6 +408,85 @@ describe('ImportService — Lista destino (listaId)', () => {
     it('devuelve data null para SKU vacío', async () => {
       const res = await service.getCurrentPriceBySku('');
       expect(res).toEqual({ data: null });
+    });
+  });
+
+  describe('getCurrentPricesBySkus (wizard de precios, en lote)', () => {
+    it('devuelve data vacía para lista de SKUs vacía', async () => {
+      const res = await service.getCurrentPricesBySkus([]);
+      expect(res).toEqual({ data: [] });
+      expect(mockPrisma.product.findMany).not.toHaveBeenCalled();
+    });
+
+    it('resuelve varios SKUs preservando el orden de entrada, con null para los que no existen', async () => {
+      const now = new Date();
+      mockPrisma.product.findMany.mockResolvedValue([
+        { id: 'prod-1', sku: 'SKU-1', name: 'Prod 1' },
+        { id: 'prod-2', sku: 'SKU-2', name: 'Prod 2' },
+      ]);
+      mockPrisma.price.findMany.mockResolvedValue([
+        { productId: 'prod-1', value: 1000, currency: 'COP', validFrom: null, validUntil: null, updatedAt: now, listaId: null },
+        { productId: 'prod-2', value: 2000, currency: 'COP', validFrom: null, validUntil: null, updatedAt: now, listaId: null },
+      ]);
+
+      const res = await service.getCurrentPricesBySkus(['SKU-1', 'SKU-NO-EXISTE', 'SKU-2']);
+
+      expect(res.data).toEqual([
+        expect.objectContaining({ sku: 'SKU-1', price: 1000, exists: true }),
+        null,
+        expect.objectContaining({ sku: 'SKU-2', price: 2000, exists: true }),
+      ]);
+      // 1 query de productos + 1 query de precios, sin importar cuántos SKUs.
+      expect(mockPrisma.product.findMany).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.price.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('busca los SKUs case-insensitive vía OR de equals', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([]);
+      mockPrisma.price.findMany.mockResolvedValue([]);
+
+      await service.getCurrentPricesBySkus(['  sku-1  ', 'sku-2']);
+
+      const where = mockPrisma.product.findMany.mock.calls[0][0].where;
+      expect(where.OR).toEqual([
+        { sku: { equals: 'sku-1', mode: 'insensitive' } },
+        { sku: { equals: 'sku-2', mode: 'insensitive' } },
+      ]);
+    });
+
+    it('filtra productos por listaId y hace fallback a precio global por producto cuando no hay precios con esa listaId', async () => {
+      const now = new Date();
+      mockPrisma.product.findMany.mockResolvedValue([
+        { id: 'prod-1', sku: 'SKU-1', name: 'Prod 1' },
+      ]);
+      // Sin precios con listaId 'lista-x' para prod-1: cae al fallback global.
+      mockPrisma.price.findMany.mockResolvedValue([
+        { productId: 'prod-1', value: 1200, currency: 'COP', validFrom: null, validUntil: null, updatedAt: now, listaId: null },
+      ]);
+
+      const res = await service.getCurrentPricesBySkus(['SKU-1'], 'lista-x');
+
+      expect(res.data).toEqual([
+        expect.objectContaining({ sku: 'SKU-1', price: 1200, exists: true }),
+      ]);
+      const productWhere = mockPrisma.product.findMany.mock.calls[0][0].where;
+      expect(productWhere.listaId).toBe('lista-x');
+    });
+
+    it('descarta precios vencidos', async () => {
+      const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      mockPrisma.product.findMany.mockResolvedValue([
+        { id: 'prod-1', sku: 'SKU-1', name: 'Prod 1' },
+      ]);
+      mockPrisma.price.findMany.mockResolvedValue([
+        { productId: 'prod-1', value: 900, currency: 'COP', validFrom: null, validUntil: past, updatedAt: past, listaId: null },
+      ]);
+
+      const res = await service.getCurrentPricesBySkus(['SKU-1']);
+
+      expect(res.data).toEqual([
+        expect.objectContaining({ sku: 'SKU-1', price: null, exists: false }),
+      ]);
     });
   });
 });

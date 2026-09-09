@@ -6,9 +6,10 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { AclModule } from '../../common/acl/acl.module';
 import { AuditModule } from '../audit/audit.module';
 import { ImportModule } from './import/import.module';
+import { FilesModule } from '../files/files.module';
 
 @Module({
-  imports: [PrismaModule, AclModule, AuditModule, ImportModule],
+  imports: [PrismaModule, AclModule, AuditModule, ImportModule, FilesModule],
   controllers: [ProductsController, ListasPublicationController],
   providers: [ProductsService],
   exports: [ProductsService],

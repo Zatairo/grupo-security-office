@@ -1,7 +1,7 @@
 # AGENT_TEAM.md — Matriz de Responsabilidades y Escalamiento
 
 > Equipo de agentes del proyecto **Grupo Security Office / Plataforma Comercial Grupo Security**.
-> Autoridad estratégica: **Perplexity**. Ejecutores técnicos: **Kilo Code** y **OpenCode**.
+> Autoridad estratégica: **Usuario + Claude Code**. Ejecutores técnicos: **Kilo Code** y **OpenCode**.
 
 ## Resumen del equipo (OpenCode)
 
@@ -24,7 +24,7 @@
 
 | Dominio | Owner principal | Colaboradores | Revisor (QA) |
 |---------|-----------------|---------------|--------------|
-| **Coordinación estratégica** | Perplexity | — | — |
+| **Coordinación estratégica** | Usuario + Claude Code | — | — |
 | **Coordinación técnica OpenCode** | tech-lead-orchestrator | — | — |
 | **Arquitectura, ADR, contratos** | solution-architect | tech-lead-orchestrator | qa-security-reviewer |
 | **Modelo datos, Prisma, import/migración** | data-migration-engineer | backend-engineer | qa-security-reviewer |
@@ -58,22 +58,22 @@
 ### Nivel 1: Conflicto técnico entre ejecutores
 1. Ejecutores reportan a su coordinador técnico (tech-lead-orchestrator para OpenCode) con evidencia.
 2. Se propone solución o se solicita diseño a `solution-architect`.
-3. Perplexity documenta la decisión final.
+3. El coordinador (usuario + Claude Code) documenta la decisión final.
 
 ### Nivel 2: Bloqueo de fase (Gate)
-1. Perplexity detecta criterios de puerta no cumplidos.
+1. El coordinador (usuario + Claude Code) detecta criterios de puerta no cumplidos.
 2. Documenta en `docs/PROJECT_STATUS.md`: qué falta, riesgos, opciones.
 3. Solicita aprobación al usuario con máx. 3 opciones + recomendación.
 
 ### Nivel 3: Hallazgo crítico de seguridad (qa-security-reviewer)
 1. QA emite hallazgo **Bloqueante** o **Alto** en reporte.
 2. Se **detiene** el trabajo afectado inmediatamente.
-3. Perplexity asigna corrección al owner del módulo + plazo.
+3. El coordinador (usuario + Claude Code) asigna corrección al owner del módulo + plazo.
 4. QA valida fix antes de reabrir gate.
 
 ### Nivel 4: Decisión de producto / alcance
-1. Perplexity presenta opciones al usuario (máx. 3).
-2. Usuario decide → Perplexity documenta la decisión.
+1. El coordinador (usuario + Claude Code) presenta opciones (máx. 3).
+2. Usuario decide → El coordinador documenta la decisión.
 3. Equipo alinea y continúa.
 
 ## Propiedad temporal de archivos (Locks)
@@ -83,7 +83,7 @@ El registro de propiedad vive en `docs/agent-coordination/file-ownership.md`:
 Reglas:
 - Un archivo = un owner a la vez.
 - Lock se libera al completar la tarea y commitear.
-- Perplexity inspecciona el registro antes de cada delegación.
+- El coordinador (usuario + Claude Code) inspecciona el registro antes de cada delegación.
 - Conflictos de lock → Nivel 1 escalamiento.
 
 ## Comunicación entre agentes

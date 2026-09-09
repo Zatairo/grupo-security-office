@@ -303,3 +303,131 @@ describe('BatchExecutorService — Decisiones de secciones del wizard', () => {
     );
   });
 });
+
+describe('BatchExecutorService — Aislamiento de filas con SAVEPOINT', () => {
+  let service: BatchExecutorService;
+
+  const auditService = {
+    log: jest.fn().mockResolvedValue(undefined),
+  };
+
+  const makeRow = (overrides?: Record<string, unknown>) => ({
+    rowIndex: 0,
+    sku: 'SKU-1',
+    name: 'Producto',
+    description: 'desc',
+    categoryName: 'cctv',
+    brandName: 'Hikvision',
+    prices: [],
+    technicalSpecs: {},
+    extraAttributes: {},
+    isUpdate: false,
+    ...overrides,
+  });
+
+  const makeCtx = (overrides?: Partial<ImportContext>): ImportContext => ({
+    importId: 'import-1',
+    userId: 'user-1',
+    fileName: 'test.xlsx',
+    fileSize: 1024,
+    rawRows: [],
+    headers: ['REFERENCIA', 'DESCRIPCION', 'CATEGORIA'],
+    columnMapping: {
+      entries: [
+        { sourceColumn: 'REFERENCIA', targetField: 'sku', isRequired: true, confidence: 1.0 },
+        { sourceColumn: 'DESCRIPCION', targetField: 'name', isRequired: true, confidence: 1.0 },
+      ],
+      confirmed: true,
+    },
+    ivaMode: 'with_iva',
+    validatedRows: [],
+    normalizedRows: [],
+    pipelineErrors: [],
+    startedAt: new Date(),
+    currentStage: 'batch_execution',
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    service = new BatchExecutorService(
+      mockPrisma as unknown as PrismaService,
+      auditService as unknown as AuditService,
+    );
+
+    mockPrisma.category.findMany.mockResolvedValue([]);
+    mockPrisma.brand.findMany.mockResolvedValue([]);
+    mockPrisma.priceList.findMany.mockResolvedValue([]);
+    (mockPrisma.category as any).findFirst = jest.fn().mockResolvedValue(null);
+    (mockPrisma.brand as any).findFirst = jest.fn().mockResolvedValue(null);
+    mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(mockPrisma));
+    mockPrisma.$executeRawUnsafe.mockResolvedValue(0);
+    mockPrisma.product.findMany.mockResolvedValue([]);
+    mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-x', defaultVisibility: false });
+    mockPrisma.brand.create.mockResolvedValue({ id: 'brand-1', name: 'Hikvision', slug: 'hikvision' });
+  });
+
+  it('un error real de Prisma en una fila no revierte ni bloquea las demás filas del lote', async () => {
+    mockPrisma.category.create.mockResolvedValue({ id: 'cat-1', name: 'CCTV', slug: 'cctv' });
+    let call = 0;
+    mockPrisma.product.create.mockImplementation(async (args: any) => {
+      call += 1;
+      if (call === 2) {
+        throw new Error('Unique constraint failed on the fields: (`sku`)');
+      }
+      return { id: `prod-${call}`, sku: args.data.sku, name: args.data.name, listaId: 'lista-x', isVisible: false };
+    });
+
+    const rows = [
+      makeRow({ rowIndex: 0, sku: 'SKU-1' }),
+      makeRow({ rowIndex: 1, sku: 'SKU-2' }),
+      makeRow({ rowIndex: 2, sku: 'SKU-3' }),
+    ];
+
+    const result = await service.execute(rows, makeCtx({ listaId: 'lista-x' }));
+
+    // Las filas 0 y 2 deben quedar creadas pese a que la fila 1 falló a nivel de BD.
+    expect(result.created).toBe(2);
+    expect(result.skipped).toBe(1);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].rowIndex).toBe(1);
+
+    // Una fila exitosa libera su SAVEPOINT; la fila fallida lo revierte — nunca
+    // se deja la transacción completa sin resolver un SAVEPOINT abierto.
+    const raw = mockPrisma.$executeRawUnsafe.mock.calls.map((c: any[]) => c[0]);
+    expect(raw.filter((sql: string) => sql === 'SAVEPOINT row_sp')).toHaveLength(3);
+    expect(raw.filter((sql: string) => sql === 'RELEASE SAVEPOINT row_sp')).toHaveLength(2);
+    expect(raw.filter((sql: string) => sql === 'ROLLBACK TO SAVEPOINT row_sp')).toHaveLength(1);
+  });
+
+  it('revierte la caché de categoría creada por una fila fallida, para que la siguiente fila no reuse un id revertido', async () => {
+    mockPrisma.category.create
+      .mockResolvedValueOnce({ id: 'cat-temp', name: 'Nueva', slug: 'nueva' })
+      .mockResolvedValueOnce({ id: 'cat-final', name: 'Nueva', slug: 'nueva' });
+    mockPrisma.product.create.mockImplementation(async (args: any) => {
+      if (args.data.sku === 'SKU-FAIL') {
+        throw new Error('violación de restricción simulada');
+      }
+      return { id: 'prod-x', sku: args.data.sku, name: args.data.name, listaId: 'lista-x', isVisible: false };
+    });
+
+    const rows = [
+      makeRow({ rowIndex: 0, sku: 'SKU-FAIL', categoryName: 'Nueva' }),
+      makeRow({ rowIndex: 1, sku: 'SKU-OK', categoryName: 'Nueva' }),
+    ];
+
+    const result = await service.execute(rows, makeCtx({ listaId: 'lista-x' }));
+
+    expect(result.created).toBe(1);
+    expect(result.errors).toHaveLength(1);
+    // La categoría "Nueva" se intenta crear dos veces: la primera (fila 0) se
+    // revierte con el SAVEPOINT, así que la fila 1 no puede reusar `cat-temp`
+    // desde el caché en memoria — debe volver a crearla.
+    expect(mockPrisma.category.create).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.product.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ categoryId: 'cat-final' }),
+      }),
+    );
+  });
+});

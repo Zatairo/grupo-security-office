@@ -10,11 +10,17 @@ import { ProductsService } from './products.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService } from '../../common/acl/acl.service';
 import { AuditService } from '../audit/audit.service';
+import { FilesService } from '../files/files.service';
 
 const mockPrisma = createPrismaMock();
 mockPrisma.price.deleteMany = jest.fn();
 
 const mockAudit = { log: jest.fn().mockResolvedValue(undefined) };
+const mockFiles = {
+  store: jest.fn().mockResolvedValue({ id: 'file-1', url: '/api/files/file-1' }),
+  get: jest.fn(),
+  deleteByUrl: jest.fn().mockResolvedValue(undefined),
+};
 const mockMasterKey = { validateMasterKey: jest.fn().mockResolvedValue(false) };
 
 const mockAcl = {
@@ -66,6 +72,7 @@ describe('ProductsService — scheduler P6 (cron cada minuto, programación sobr
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AclService, useValue: mockAcl },
         { provide: AuditService, useValue: mockAudit },
+        { provide: FilesService, useValue: mockFiles },
         { provide: Object, useValue: mockMasterKey },
       ],
     }).compile();

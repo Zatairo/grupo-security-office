@@ -1,5 +1,14 @@
+// driverAdapters: las consultas van por el driver JS de Neon
+// (@prisma/adapter-neon + @neondatabase/serverless) en vez de por el
+// conector nativo en Rust del motor de Prisma. Esto evita por completo
+// el panic "PANIC: timer has gone away" (crate futures-timer) visto en
+// runtime en Hostinger — un bug conocido del motor nativo de Prisma en
+// hosting compartido (github.com/prisma/prisma/issues/26073 y otros,
+// sin fix oficial de Prisma al momento de este cambio). engineType no
+// puede usarse junto con driverAdapters.
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -222,6 +231,23 @@ model ProductImage {
   @@map("product_images")
 }
 
+/// Bytes de archivos subidos (imágenes de producto, logos de marca),
+/// almacenados directamente en Postgres. Reemplaza el guardado en disco
+/// local (process.cwd()/uploads): en Hostinger cada despliegue corre en un
+/// directorio de versión nuevo (confirmado en runtime logs), y el disco no
+/// se comparte entre instancias — los archivos subidos se perdían o eran
+/// invisibles para la instancia que atendía la lectura, aunque el registro
+/// en BD (ProductImage.url / Brand.logo) sobreviviera. Servido vía
+/// GET /api/files/:id (FilesController).
+model UploadedFile {
+  id        String   @id @default(uuid())
+  mimeType  String
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@map("uploaded_files")
+}
+
 model PriceList {
   id         String    @id @default(uuid())
   name       String
@@ -293,6 +319,23 @@ model ImportMapping {
 
   @@index([userId])
   @@map("import_mappings")
+}
+
+/// Estado del wizard de importación (preview → execute) persistido en BD.
+/// Antes vivía en un Map en memoria del proceso de ImportService: si Hostinger
+/// enruta la petición de `execute` a otra instancia/proceso distinto al que
+/// atendió `preview` (o el proceso se reinicia entre medio), el contexto se
+/// perdía y el usuario recibía "Importación no encontrada" sin causa visible.
+/// `data` serializa el ImportContext completo (ver import-context.ts).
+model ImportSession {
+  id        String   @id
+  userId    String
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("import_sessions")
 }
 
 model Supplier {

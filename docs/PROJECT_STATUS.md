@@ -1,15 +1,15 @@
 # PROJECT_STATUS.md — Estado del Proyecto Grupo Security Office
 
-> Plataforma Comercial Grupo Security. Coordinador estratégico: **Perplexity**.
+> Plataforma Comercial Grupo Security. Coordinador estratégico: **Usuario + Claude Code**.
 
 ## Identidad activa
 
 | Campo | Valor |
 |-------|-------|
 | **Proyecto** | Grupo Security Office / Plataforma Comercial Grupo Security |
-| **Coordinador estratégico** | Perplexity |
+| **Coordinador estratégico** | Usuario + Claude Code |
 | **Ejecutores técnicos** | Kilo Code (reglas `.kilo/`) y OpenCode (perfiles `.opencode/`) |
-| **Coordinación técnica OpenCode** | tech-lead-orchestrator (no reemplaza a Perplexity) |
+| **Coordinación técnica OpenCode** | tech-lead-orchestrator (no reemplaza al coordinador) |
 
 ## Stack activo
 
@@ -28,8 +28,8 @@
 
 | Campo | Valor |
 |-------|-------|
-| **Fase activa** | Fase 1: Sistema interno modular (panel administrativo) |
-| **Última actualización** | 2026-09-03 |
+| **Fase activa** | FSM de ciclo de vida de Product validada (616 tests, 30 suites, 14 migraciones sin drift, 230 productos). Próximo: Etapa 8.1 (migración de lecturas/escrituras a `lifecycleStatus` sin destructivas) |
+| **Última actualización** | 2026-09-09 |
 
 ---
 
@@ -37,15 +37,19 @@
 
 | ID | Riesgo/Bloqueo | Severidad | Owner |
 |----|----------------|-----------|-------|
-| R001 | Integración ERP Yéminus sin confirmación de API | Medio | Perplexity (decisión de alcance) |
-| R002 | `cleanup-orphaned-list-products.ts` sin validar | Alto | Perplexity (autorizar ejecución solo con tarea explícita y aprobación del usuario) |
+| R001 | Integración ERP Yéminus sin confirmación de API | Medio | Coordinador (usuario + Claude Code) — decisión de alcance |
+| R002 | `cleanup-orphaned-list-products.ts` sin validar | Alto | Coordinador (usuario + Claude Code) — autorizar ejecución solo con tarea explícita y aprobación del usuario |
+| R003 | Throttler 429 agresivo en login | Bajo | Coordinador — proponer ajuste específico |
+| R004 | `limit` no válido en `/api/products` (usa `skip`/`take`) | Bajo | Coordinador — normalizar query params |
+| R005 | Scripts residuales `check-*.cjs`/`qa_*.js` en Temp/opencode | Bajo | Coordinador — limpiar post-QA |
+| R006 | Email seed `admin@gruposecurity.co` vs docs `admin@grupo-security.com` | Bajo | Coordinador — alinear en Etapa 8.1 |
 
 ---
 
 ## Script de limpieza Prisma
 
 - **Archivo**: `src/backend/prisma/cleanup-orphaned-list-products.ts`
-- **Estado**: `UNVERIFIED — DO NOT EXECUTE WITHOUT EXPLICIT PERPLEXITY TASK AND USER APPROVAL`
+- **Estado**: `UNVERIFIED — DO NOT EXECUTE WITHOUT EXPLICIT COORDINATOR (USER + CLAUDE CODE) TASK AND USER APPROVAL`
 - **Nota**: Es un script administrativo destructivo (borrado físico en transacción). No se ejecuta sin autorización explícita.
 
 ---
@@ -60,9 +64,10 @@
 
 ## Próximas acciones
 
-1. **Perplexity**: confirmar próximo incremento comercial (Fase 1).
-2. **Revisión**: validar baseline de coordinación reconciliado (tarea COORD-VERIFY posterior).
-3. **Ejecutores**: esperar asignación de Perplexity con alcance estricto y ownership de archivos.
+1. **Etapa 8.1** (no destructiva): inventario y migración de lecturas/escrituras a `lifecycleStatus` en import, trending, Listas, lazy repair, `allowedActions` en listado; dual-write mantenido; docs/tests actualizados; email canónico (`admin@grupo-security.com`).
+2. **Resolver hallazgos menores** (R003-R006): throttler 429, query params normalizados, scripts cleanup, email alineado.
+3. **Evaluar Context7 y SkillsMP** (seguimiento): MCP de documentación actualizada de librerías y marketplace de skills por dominio para reforzar cada agente.
+4. **Monitoreo activo**: ver `docs/agent-coordination/issues/` para tareas en vuelo; no dejar este archivo obsoleto — actualizar con nueva fase cuando Etapa 8.1 cierre.
 
 ---
 
@@ -88,4 +93,5 @@
 
 | Fecha | Cambio | Autor |
 |-------|--------|-------|
+| 2026-09-09 | Reestructuración de documentación: coordinador = usuario + Claude Code; OpenCode 11 agentes, Kilo 2 agentes; tablero de issues en `docs/agent-coordination/issues/`; Etapa 8.1 como próximo paso; hallazgos menores añadidos a riesgos | agente Haiku (plan enumerated-whistling-rivest) |
 | 2026-09-03 | Reconciliación de identidad a Grupo Security Office; stack NestJS/Prisma/React; finance-orchestrator inactivo; script Prisma marcado UNVERIFIED | tech-lead-orchestrator |

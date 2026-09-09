@@ -12,9 +12,15 @@ import { ProductsService } from './products.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AclService } from '../../common/acl/acl.service';
 import { AuditService } from '../audit/audit.service';
+import { FilesService } from '../files/files.service';
 import { LifecycleStatus } from './lifecycle.types';
 
 const mockAudit = { log: jest.fn().mockResolvedValue(undefined) };
+const mockFiles = {
+  store: jest.fn().mockResolvedValue({ id: 'file-1', url: '/api/files/file-1' }),
+  get: jest.fn(),
+  deleteByUrl: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockAcl = {
   isSuperAdmin: jest.fn().mockReturnValue(false),
@@ -83,6 +89,7 @@ describe('ProductsService — FSM canónico (DRAFT/PUBLISHED/ARCHIVED)', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AclService, useValue: mockAcl },
         { provide: AuditService, useValue: mockAudit },
+        { provide: FilesService, useValue: mockFiles },
       ],
     }).compile();
 

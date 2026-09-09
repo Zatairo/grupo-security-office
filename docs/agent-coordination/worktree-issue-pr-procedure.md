@@ -36,7 +36,7 @@ agent/<executor>/<TASK_ID>-<short-slug>
 - Two tasks may run in parallel only when they modify **different files** and do
   not share an endpoint, API contract, shared type, Prisma schema, migration,
   package manifest, lock file, or infrastructure configuration.
-- A conflicting task remains `WAITING` or `BLOCKED` until Perplexity resolves
+- A conflicting task remains `WAITING` or `BLOCKED` until the coordinator (user + Claude Code) resolves
   ownership.
 - Never edit the same file from two worktrees simultaneously.
 
@@ -59,7 +59,7 @@ Before closing, the agent must:
 - Do **not** use `git add .`, `git commit -a`, force-push, `reset --hard`, or
   mass cleanup.
 - Do **not** amend or rewrite another agent's commit.
-- Do **not** merge into `main` without an explicit Perplexity order and user approval.
+- Do **not** merge into `main` without an explicit coordinator (user + Claude Code) order and user approval.
 
 ## Archivos fuera de stage y commits
 

@@ -4,6 +4,7 @@ import { ProductStatusBadge } from './ProductStatusBadge'
 import { ProductIndicators } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
 import { formatCurrency } from '../../../lib/format'
+import { resolveAssetUrl } from '../../../services/api'
 
 interface ProductTableRowProps {
   product: Product
@@ -52,7 +53,7 @@ export function ProductTableRow({
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
             {product.images[0]?.url ? (
-              <img src={product.images[0].url} alt={product.name} className="w-10 h-10 object-cover" />
+              <img src={resolveAssetUrl(product.images[0].url)} alt={product.name} className="w-10 h-10 object-cover" />
             ) : (
               <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />

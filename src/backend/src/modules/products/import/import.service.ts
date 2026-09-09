@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../../modules/audit/audit.service';
@@ -45,9 +46,6 @@ import { generateSlug } from './helpers/text-normalizer';
 @Injectable()
 export class ImportService {
   private readonly logger = new Logger(ImportService.name);
-
-  /** Cache de contextos de importación activos (por importId) */
-  private importContexts = new Map<string, ImportContext>();
 
   constructor(
     private prisma: PrismaService,
@@ -161,8 +159,12 @@ export class ImportService {
     // 6b. Resolver existencia de SKUs en DB para preview correcto
     await this.resolveExistingProductFlags(normalized);
 
-    // Guardar contexto para la fase de ejecución
-    this.importContexts.set(importId, ctx);
+    // Guardar contexto para la fase de ejecución. Se persiste en BD (no en un
+    // Map en memoria del proceso): si Hostinger enruta el próximo `execute` a
+    // otra instancia, o el proceso se reinicia entre medio, el contexto debe
+    // seguir disponible — antes se perdía y el usuario recibía "Importación
+    // no encontrada" sin causa visible ni relación con sus datos.
+    await this.saveContext(ctx);
 
     // 7. Construir resultado de preview
     const toCreate = normalized.filter((n) => !n.isUpdate).length;
@@ -216,7 +218,7 @@ export class ImportService {
     },
     userId: string,
   ): Promise<ImportExecutionResult> {
-    const ctx = this.importContexts.get(importId);
+    const ctx = await this.loadContext(importId);
     if (!ctx) {
       throw new BadRequestException(
         'Importación no encontrada. Ejecute primero el endpoint de preview.',
@@ -295,6 +297,10 @@ export class ImportService {
 
     ctx.currentStage = 'batch_execution';
     ctx.userId = userId;
+    // Refleja la etapa en BD para que getProgress() sea preciso si se consulta
+    // mientras el batch corre (execute puede tardar varios segundos en archivos
+    // grandes).
+    await this.saveContext(ctx);
 
     // Ejecutar batch
     const result = await this.batchExecutor.execute(
@@ -314,8 +320,8 @@ export class ImportService {
       );
     }
 
-    // Limpiar contexto
-    this.importContexts.delete(importId);
+    // Limpiar contexto persistido
+    await this.deleteContext(importId);
 
     return {
       importId,
@@ -336,8 +342,8 @@ export class ImportService {
   /**
    * Obtiene el progreso de una importación activa.
    */
-  getProgress(importId: string): ImportProgressResult {
-    const ctx = this.importContexts.get(importId);
+  async getProgress(importId: string): Promise<ImportProgressResult> {
+    const ctx = await this.loadContext(importId);
 
     if (!ctx) {
       return {
@@ -457,6 +463,106 @@ export class ImportService {
   }
 
   /**
+   * Versión agrupada de `getCurrentPriceBySku`: resuelve N SKUs en 2 queries
+   * (productos + precios) en vez de N round-trips. El wizard de importación
+   * (paso de comparación de precios) llamaba al endpoint individual una vez
+   * por SKU vía Promise.all — con listas de más de ~20 filas (el límite del
+   * throttler global) esto disparaba 429 en cascada y tumbaba el paso
+   * siguiente (execute) por agotar la cuota de rate-limit de la sesión.
+   * Devuelve un array alineado 1:1 con el array de `skus` de entrada
+   * (mismo orden, `null` en la posición de cualquier SKU sin producto).
+   */
+  async getCurrentPricesBySkus(
+    skus: string[],
+    listaId?: string,
+  ): Promise<{ data: (CurrentPriceResult | null)[] }> {
+    const trimmedSkus = skus.map((s) => s?.trim()).filter((s): s is string => !!s);
+    if (trimmedSkus.length === 0) return { data: [] };
+
+    const products = await this.prisma.product.findMany({
+      where: {
+        OR: trimmedSkus.map((sku) => ({ sku: { equals: sku, mode: 'insensitive' as const } })),
+        ...(listaId ? { listaId } : {}),
+      },
+      select: { id: true, sku: true, name: true },
+    });
+
+    const productBySkuUpper = new Map(products.map((p) => [p.sku.toUpperCase(), p]));
+    const productIds = products.map((p) => p.id);
+
+    const allPrices = productIds.length
+      ? await this.prisma.price.findMany({
+          where: { productId: { in: productIds } },
+          orderBy: { updatedAt: 'desc' },
+        })
+      : [];
+
+    const pricesByProductId = new Map<string, typeof allPrices>();
+    for (const price of allPrices) {
+      const list = pricesByProductId.get(price.productId) ?? [];
+      list.push(price);
+      pricesByProductId.set(price.productId, list);
+    }
+
+    const now = new Date();
+    const resolveVigente = (product: {
+      id: string;
+      sku: string;
+      name: string;
+    }): CurrentPriceResult => {
+      // Mismo fallback que la versión individual: si no hay precios con
+      // listaId, usar el precio vigente global del producto.
+      let prices = pricesByProductId.get(product.id) ?? [];
+      if (listaId) {
+        const scoped = prices.filter((p) => p.listaId === listaId);
+        if (scoped.length > 0) prices = scoped;
+      }
+
+      const vigentes = prices.filter(
+        (p) =>
+          (!p.validFrom || p.validFrom <= now) &&
+          (!p.validUntil || p.validUntil >= now),
+      );
+      const vigente = vigentes.reduce<(typeof prices)[number] | null>(
+        (best, p) =>
+          !best || (p.updatedAt?.getTime() ?? 0) >= (best.updatedAt?.getTime() ?? 0)
+            ? p
+            : best,
+        null,
+      );
+
+      if (!vigente) {
+        return {
+          sku: product.sku,
+          productId: product.id,
+          name: product.name,
+          price: null,
+          currency: null,
+          validUntil: null,
+          exists: false,
+        };
+      }
+
+      return {
+        sku: product.sku,
+        productId: product.id,
+        name: product.name,
+        price: Number(vigente.value),
+        currency: vigente.currency,
+        validUntil: vigente.validUntil ?? null,
+        exists: true,
+      };
+    };
+
+    const data = trimmedSkus.map((sku) => {
+      const product = productBySkuUpper.get(sku.toUpperCase());
+      return product ? resolveVigente(product) : null;
+    });
+
+    return { data };
+  }
+
+  /**
    * Lista todos los presets del usuario.
    */
   async listPresets(userId: string): Promise<MappingPreset[]> {
@@ -555,6 +661,49 @@ export class ImportService {
   }
 
   // === Helpers privados ===
+
+  /**
+   * Persiste el ImportContext en `import_sessions` (upsert por importId).
+   * `startedAt` se serializa a ISO string explícitamente porque `Json` de
+   * Prisma no reconstruye instancias de `Date` — `loadContext` la revierte.
+   */
+  private async saveContext(ctx: ImportContext): Promise<void> {
+    const serializable = {
+      ...ctx,
+      startedAt: ctx.startedAt.toISOString(),
+    };
+
+    await this.prisma.importSession.upsert({
+      where: { id: ctx.importId },
+      update: { data: serializable as unknown as Prisma.InputJsonValue },
+      create: {
+        id: ctx.importId,
+        userId: ctx.userId,
+        data: serializable as unknown as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  /**
+   * Recupera un ImportContext previamente guardado con `saveContext`.
+   * Retorna `null` si no existe (importId inválido, ya ejecutado, o expirado).
+   */
+  private async loadContext(importId: string): Promise<ImportContext | null> {
+    const session = await this.prisma.importSession.findUnique({
+      where: { id: importId },
+    });
+    if (!session) return null;
+
+    const data = session.data as unknown as ImportContext & { startedAt: string };
+    return { ...data, startedAt: new Date(data.startedAt) };
+  }
+
+  /**
+   * Elimina el contexto persistido tras completar `execute()`.
+   */
+  private async deleteContext(importId: string): Promise<void> {
+    await this.prisma.importSession.deleteMany({ where: { id: importId } });
+  }
 
   /**
    * Normaliza un mapping recibido al formato interno `ColumnMapping`.

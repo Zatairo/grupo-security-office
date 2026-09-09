@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import api from '../../../services/api'
+import api, { resolveAssetUrl } from '../../../services/api'
 import type { Product, Category, Brand, ProductPayload } from '../types/product.types'
 import { usePriceLists } from '../hooks/usePriceLists'
 import { SpecEditor, type SpecField, deserializeSpecFields, serializeSpecFields } from './SpecEditor'
@@ -631,7 +631,7 @@ const [form, setForm] = useState({
                         {images.map((img) => (
                           <div key={img.id} className="border border-gray-200 rounded-lg p-2">
                             <img
-                              src={img.url}
+                              src={resolveAssetUrl(img.url)}
                               alt={img.alt ?? product.name}
                               className="w-full h-28 object-cover rounded-md bg-gray-100"
                             />

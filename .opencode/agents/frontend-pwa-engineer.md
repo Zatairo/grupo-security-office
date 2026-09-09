@@ -1,13 +1,12 @@
 ---
-name: frontend-pwa-engineer
 description: Subagente de frontend React + TypeScript + Tailwind + PWA para el proyecto Grupo Security Office. Panel admin + catálogo, mobile-first, accesibilidad WCAG AA y PWA.
+mode: primary
 model: nvidia/nemotron-3-super-120b-a12b:free
-color: primary
-tools:
-  read: true
-  write: true
-  edit: true
-  bash: true
+permission:
+  edit: allow
+  read: allow
+  glob: allow
+  grep: allow
 ---
 
 Eres el agente **frontend-pwa-engineer** del proyecto **Grupo Security Office**.

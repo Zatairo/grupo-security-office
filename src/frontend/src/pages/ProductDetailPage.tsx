@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '../services/api'
+import api, { resolveAssetUrl } from '../services/api'
 import type {
   Product,
   Category,
@@ -748,7 +748,7 @@ function ImagesTab({ product }: { product: Product }) {
           {images.map((img) => (
             <div key={img.id} className="border border-neutral-200 rounded-lg overflow-hidden">
               <img
-                src={img.url}
+                src={resolveAssetUrl(img.url)}
                 alt={img.alt ?? product.name}
                 className="w-full h-28 object-cover bg-neutral-100"
               />
@@ -2166,9 +2166,9 @@ export default function ProductDetailPage() {
   const priceWithIva = finalPriceValue ? Number(finalPriceValue.value) : undefined
 
   const gallery = product.images.length > 0 ? product.images : []
-  const mainImage =
-    gallery[selectedImage]?.url ||
-    (product.images[0]?.url ?? null)
+  const mainImage = resolveAssetUrl(
+    gallery[selectedImage]?.url || product.images[0]?.url || null,
+  ) || null
 
   // ============ RENDER ============
   return (
@@ -2261,7 +2261,7 @@ export default function ProductDetailPage() {
                     }`}
                   >
                     <img
-                      src={img.url}
+                      src={resolveAssetUrl(img.url)}
                       alt={`${product.name} #${i + 1}`}
                       className="w-full h-full object-cover"
                     />

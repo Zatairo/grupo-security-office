@@ -10,16 +10,16 @@
 
 ## Autoridad de coordinación
 
-- **Perplexity**: único coordinador estratégico. Define alcance, dependencias, propiedad de archivos, criterios de aceptación y secuencia de tareas.
-- **Kilo Code**: ejecutor técnico bajo las reglas de `.kilo/`.
-- **OpenCode**: ejecutor técnico bajo los perfiles de `.opencode/` y los archivos de coordinación compartidos.
-- **`tech-lead-orchestrator`**: agente de coordinación de OpenCode únicamente. No reemplaza a Perplexity como autoridad estratégica.
+- **Usuario + Claude Code**: coordinación estratégica — define alcance, dependencias, propiedad de archivos, criterios de aceptación y secuencia de tareas en sesión directa.
+- **Kilo Code**: ejecutor técnico bajo las reglas de `.kilo/` (ahora limitado a Excel e integración de resultados aprobados).
+- **OpenCode**: ejecutor técnico bajo los perfiles de `.opencode/` (dueño exclusivo de implementación backend/frontend/devops/QA).
+- **`tech-lead-orchestrator`**: agente de coordinación técnica de OpenCode únicamente. No reemplaza al coordinador (usuario + Claude Code) como autoridad estratégica.
 
 ## Equipo de agentes (OpenCode)
 
 | Agente | Rol | Modo | Permisos clave |
 |--------|-----|------|----------------|
-| `tech-lead-orchestrator` | Coordinación técnica OpenCode | Ejecución | Secuencia tareas, análisis de dependencias, validación de handoff; **no autoridad estratégica sobre Perplexity**; **no implementa código producto** |
+| `tech-lead-orchestrator` | Coordinación técnica OpenCode | Ejecución | Secuencia tareas, análisis de dependencias, validación de handoff; **no autoridad estratégica sobre el coordinador (usuario + Claude Code)**; **no implementa código producto** |
 | `solution-architect` | Arquitectura y contratos | **Solo análisis/diseño** | Revisión de arquitectura, contratos cross-layer, diseño técnico; **sin autoridad independiente de implementación** |
 | `data-migration-engineer` | Datos / import / migración | Implementación | Análisis import/export y planificación de migración para PostgreSQL/Prisma; **sin Alembic ni SQLAlchemy**; **no toca prod** |
 | `backend-engineer` | Backend NestJS | Implementación | `src/backend/**`, tests backend, lint/typecheck/prisma validate, **no secretos**, **no deploy prod** |
@@ -35,7 +35,7 @@
 - `GS Excel Import Implementer` (Kilo): integra el resultado aprobado en la aplicación comercial NestJS/Prisma.
 - `data-migration-engineer`: planificación de migración/import y revisión de riesgo de datos PostgreSQL/Prisma.
 
-Ningún agente puede ser dueño simultáneo de la política de mapeo y de la integración a la aplicación sin una tarea separada de Perplexity.
+Ningún agente puede ser dueño simultáneo de la política de mapeo y de la integración a la aplicación sin una tarea separada asignada por el coordinador (usuario + Claude Code).
 
 ## Reglas globales obligatorias
 
@@ -55,7 +55,7 @@ Ningún agente puede ser dueño simultáneo de la política de mapeo y de la int
 - **Reportes breves**: hecho, evidencia, riesgos, siguiente paso.
 
 ### Protección de archivos
-- El coordinador (Perplexity) asigna **propiedad temporal** de archivos/módulos a un solo agente a la vez.
+- El coordinador (usuario + Claude Code) asigna **propiedad temporal** de archivos/módulos a un solo agente a la vez.
 - No dos agentes editando el mismo archivo simultáneamente.
 - El registro de propiedad vive en `docs/agent-coordination/file-ownership.md`.
 
@@ -68,6 +68,20 @@ Ningún agente puede ser dueño simultáneo de la política de mapeo y de la int
 - Criterios de aceptación
 - Comandos de validación
 - Riesgos conocidos
+
+### Tablero de issues entre agentes
+
+Cuando el coordinador (usuario + Claude Code) planea una tarea y la delega a OpenCode, Kilo, o entre sí, queda registrada en `docs/agent-coordination/issues/` como un archivo `.md` por issue, con los campos: `id`, `title`, `status` (pending | in_progress | completed | blocked), `assigned_tool` (claude | opencode | kilo), `created_by`, `created_at`, `scope` (con los campos "Contratos de delegación" arriba), `completed_at`, `result_summary`.
+
+**Flujo operativo** (ver `docs/agent-coordination/worktree-issue-pr-procedure.md` para procedimiento completo):
+1. El coordinador crea un issue en `docs/agent-coordination/issues/<TASK_ID>.md` con `status: pending` y `scope` explícito.
+2. Orca (el orquestador técnico) descubre issues `pending`, abre un worktree (`agent/<executor>/<TASK_ID>-<slug>`), e invoca al agente correspondiente con el `scope` como contrato.
+3. El agente ejecuta, prueba y cierra el issue (`status: completed` + `result_summary`), corriendo `graphify update .` al terminar.
+4. Si la validación pasa, se abre PR automáticamente. El merge a `main` requiere aprobación humana explícita del coordinador (usuario + Claude Code) — es la misma regla de seguridad que ya existe, solo cambia quién otorga la autorización.
+
+**Paralelismo**: máx. 2 tareas simultáneas solo si no tocan los mismos archivos/contratos/schema; si hay conflicto, una queda `BLOCKED` hasta liberarse. Por defecto, un worktree y un agente activo por issue.
+
+Referencia cruzada: `docs/agent-coordination/worktree-issue-pr-procedure.md` (procedimiento técnico completo con branch naming, worktree, PR, merge rules).
 
 ### Respuesta de subagentes (obligatoria)
 - Estado: `completado` | `bloqueado` | `requiere decisión`
@@ -85,7 +99,7 @@ Ningún agente puede ser dueño simultáneo de la política de mapeo y de la int
 | Backend | NestJS + TypeScript | Módulos productos, listas, precios, usuarios, roles, auditoría |
 | Database | PostgreSQL 16 | Única fuente de verdad |
 | ORM | **Prisma 5.x** | Migraciones versionadas |
-| Auth | JWT + bcrypt + RBAC | Roles: Admin, Gerente, Operator, Viewer |
+| Auth | JWT + bcrypt + RBAC | Roles: Super Admin, Supervisor, Admin Comercial, Operador, Consulta |
 | Data Fetching | TanStack Query (React Query) | Server state |
 | Estado UI | Zustand | Client state |
 | API docs | Swagger (OpenAPI) | — |
@@ -108,3 +122,11 @@ Python (pandas/openpyxl) se utiliza únicamente como herramienta auxiliar de an�
 - `docs/PROJECT_STATUS.md` — Estado por fase, tareas, bloqueos, evidencia.
 
 > **Nota**: El proyecto **FINANZAS 1:1**, **FastAPI**, **SQLAlchemy**, **Alembic** y el agente **`finance-orchestrator`** no forman parte de este repositorio. El perfil `finance-orchestrator.md` se conserva únicamente como registro histórico inactivo.
+
+## graphify
+
+Knowledge graph for this project is at `graphify-out/graph.json` (covers código, documentación y contexto de coordinación).
+
+Agentes y usuarios: Para preguntas sobre la base de código y la coordinación, prefieren `graphify query "<question>"` a leer archivos fuente directamente. Usen `graphify path` para rastrear relaciones y `graphify explain` para conceptos específicos. Ejecuten `graphify update .` después de cambios (sin costo LLM).
+
+**Nota**: las consultas se formulan **en inglés** o con identificadores técnicos exactos (ej. `lifecycleStatus`, `AclService`, `RBAC`) — los nodos de documentación se indexaron con labels en inglés. La respuesta al usuario sigue siendo en español.

@@ -1,11 +1,8 @@
 import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
-import * as fs from 'fs';
-import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
-import { UPLOADS_DIR, UPLOADS_URL_PREFIX } from '../../common/uploads-path';
+import { FilesService, FILES_URL_PREFIX } from '../files/files.service';
 
 const ALLOWED_BRAND_IMAGE_MIMETYPES: Record<string, string> = {
   'image/png': 'png',
@@ -16,7 +13,10 @@ const MAX_BRAND_IMAGE_SIZE = 8 * 1024 * 1024; // 8 MB
 
 @Injectable()
 export class BrandsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private files: FilesService,
+  ) {}
 
   async findAll() {
     const brands = await this.prisma.brand.findMany({
@@ -105,8 +105,8 @@ export class BrandsService {
 
   /**
    * Sube el logo de una marca: valida mimetype (png/jpeg/webp) y tamaño
-   * máximo (8 MB), guarda el archivo en UPLOADS_DIR con nombre único y
-   * borra el logo anterior si era un upload interno.
+   * máximo (8 MB), guarda los bytes en BD y borra el logo anterior si era
+   * un upload interno (gestionado por este mismo almacén).
    */
   async uploadLogo(id: string, file: Express.Multer.File) {
     const brand = await this.prisma.brand.findUnique({ where: { id } });
@@ -116,8 +116,7 @@ export class BrandsService {
       throw new BadRequestException('Archivo requerido en el campo "file"');
     }
 
-    const ext = ALLOWED_BRAND_IMAGE_MIMETYPES[file.mimetype];
-    if (!ext) {
+    if (!ALLOWED_BRAND_IMAGE_MIMETYPES[file.mimetype]) {
       throw new BadRequestException('Tipo de archivo no permitido. Use PNG, JPEG o WEBP.');
     }
 
@@ -125,23 +124,10 @@ export class BrandsService {
       throw new BadRequestException('El archivo excede el tamaño máximo de 8MB');
     }
 
-    const filename = `${randomUUID()}.${ext}`;
-    if (!fs.existsSync(UPLOADS_DIR)) {
-      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-    }
-    await fs.promises.writeFile(path.join(UPLOADS_DIR, filename), file.buffer);
+    const { url } = await this.files.store(file.buffer, file.mimetype);
 
-    const url = `${UPLOADS_URL_PREFIX}/${filename}`;
-
-    if (brand.logo?.startsWith(UPLOADS_URL_PREFIX)) {
-      const oldPath = path.join(UPLOADS_DIR, path.basename(brand.logo));
-      try {
-        if (fs.existsSync(oldPath)) {
-          fs.unlinkSync(oldPath);
-        }
-      } catch {
-        // El logo anterior puede no existir en disco; no bloquea la actualización.
-      }
+    if (brand.logo?.startsWith(FILES_URL_PREFIX)) {
+      await this.files.deleteByUrl(brand.logo);
     }
 
     return this.prisma.brand.update({

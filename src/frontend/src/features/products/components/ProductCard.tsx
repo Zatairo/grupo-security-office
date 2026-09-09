@@ -3,6 +3,7 @@ import type { Product } from '../types/product.types'
 import { StockBadge, PublishBadge } from './ProductIndicators'
 import { hasPermission } from '../../../lib/rbac'
 import { formatCurrency } from '../../../lib/format'
+import { resolveAssetUrl } from '../../../services/api'
 
 import type { LifecycleEvent } from '../types/product.types'
 
@@ -33,7 +34,7 @@ export function ProductCard({ product, onEdit, onDelete, onMoveCategory, onAcces
       <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center relative">
         {product.images[0]?.url ? (
           <img
-            src={product.images[0].url}
+            src={resolveAssetUrl(product.images[0].url)}
             alt={product.name}
             className="w-full h-full object-cover"
           />
