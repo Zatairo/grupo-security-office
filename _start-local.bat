@@ -49,11 +49,25 @@ if not exist "%FRONTEND_DIR%\node_modules\" (
     exit /b 1
 )
 
+REM Detectar Windows Terminal: si esta disponible, se abre UNA sola ventana
+REM con una pestaña por servicio. Si no, cae a ventanas cmd separadas.
+where wt.exe >nul 2>&1
+if errorlevel 1 (
+    set "USE_WT=0"
+) else (
+    set "USE_WT=1"
+)
+
 REM Detectar procesos existentes sin detenerlos.
 netstat -ano | findstr /R /C:":3000 .*LISTENING" >nul
 if errorlevel 1 (
     echo Iniciando backend en puerto 3000...
-    start "Grupo Security - Backend" /D "%BACKEND_DIR%" cmd /k "npm run dev"
+    if "%USE_WT%"=="1" (
+        start "" wt.exe -w 0 nt -d "%BACKEND_DIR%" --title "Backend" cmd /k "npm run dev"
+        timeout /t 2 /nobreak >nul
+    ) else (
+        start "Grupo Security - Backend" /D "%BACKEND_DIR%" cmd /k "npm run dev"
+    )
 ) else (
     echo El puerto 3000 ya esta en uso. No se inicia otro backend.
 )
@@ -61,7 +75,12 @@ if errorlevel 1 (
 netstat -ano | findstr /R /C:":5173 .*LISTENING" >nul
 if errorlevel 1 (
     echo Iniciando frontend en puerto 5173...
-    start "Grupo Security - Frontend" /D "%FRONTEND_DIR%" cmd /k "npm run dev"
+    if "%USE_WT%"=="1" (
+        start "" wt.exe -w 0 nt -d "%FRONTEND_DIR%" --title "Frontend" cmd /k "npm run dev"
+        timeout /t 2 /nobreak >nul
+    ) else (
+        start "Grupo Security - Frontend" /D "%FRONTEND_DIR%" cmd /k "npm run dev"
+    )
 ) else (
     echo El puerto 5173 ya esta en uso. No se inicia otro frontend.
 )
@@ -70,7 +89,12 @@ REM Agentation: servidor de anotaciones visuales (boton en el frontend, dev-only
 netstat -ano | findstr /R /C:":4747 .*LISTENING" >nul
 if errorlevel 1 (
     echo Iniciando servidor Agentation en puerto 4747...
-    start "Grupo Security - Agentation" /D "%REPO_ROOT%" cmd /k "npx -y agentation-mcp server"
+    if "%USE_WT%"=="1" (
+        start "" wt.exe -w 0 nt -d "%REPO_ROOT%" --title "Agentation" cmd /k "npx -y agentation-mcp server"
+        timeout /t 2 /nobreak >nul
+    ) else (
+        start "Grupo Security - Agentation" /D "%REPO_ROOT%" cmd /k "npx -y agentation-mcp server"
+    )
 ) else (
     echo El puerto 4747 ya esta en uso. No se inicia otro servidor Agentation.
 )
@@ -128,7 +152,11 @@ echo Entorno local iniciado.
 echo Frontend: http://localhost:5173/
 echo Health API: http://localhost:3000/api/health
 echo Agentation: boton flotante abajo a la derecha (servidor en :4747)
-echo Mantén abiertas las ventanas de backend, frontend y Agentation.
+if "%USE_WT%"=="1" (
+    echo Backend, Frontend y Agentation corren como pestañas en una sola ventana de Windows Terminal.
+) else (
+    echo Mantén abiertas las ventanas de backend, frontend y Agentation.
+)
 echo ==========================================
 pause
 exit /b 0

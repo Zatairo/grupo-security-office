@@ -7,5 +7,12 @@
     "docs/agent-coordination/file-ownership.md",
     "docs/agent-coordination/work-log.md",
     "docs/agent-coordination/issues/README.md"
-  ]
+  ],
+  "mcp": {
+    "agentation": {
+      "type": "local",
+      "command": ["npx", "-y", "agentation-mcp", "server", "--mcp-only", "--http-url", "http://localhost:4747"],
+      "enabled": true
+    }
+  }
 }

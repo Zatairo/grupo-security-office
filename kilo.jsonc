@@ -4,5 +4,12 @@
     ".kilo/rules/*.md",
     ".kilo/context/*.md"
   ],
-  "snapshot": false
+  "snapshot": false,
+  "mcp": {
+    "agentation": {
+      "type": "local",
+      "command": ["npx", "-y", "agentation-mcp", "server", "--mcp-only", "--http-url", "http://localhost:4747"],
+      "enabled": true
+    }
+  }
 }
