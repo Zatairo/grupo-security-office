@@ -26,27 +26,13 @@ Panel administrativo + catálogo comercial integrado con ERP Yéminus para Grupo
 | ERP | Yéminus | **Integración pendiente de confirmación API** |
 | Python (auxiliar) | pandas + openpyxl | Solo para Excel parsing/mapping/validation, no es backend primario |
 
-## Gobernanza y Coordinación
+## Desarrollo y Coordinación
 
-### Autoridad Estratégica
-- **Usuario + Claude Code**: define alcance, dependencias, propiedad de archivos, criterios de aceptación, secuencia de tareas
+**Coordinador**: Usuario + Claude Code define alcance, dependencias y secuencia de tareas.
 
-### Ejecutores Técnicos
+**Flujo de trabajo**: Issues en `docs/agent-coordination/issues/` → Worktree → Validación → PR → Merge con aprobación.
 
-**OpenCode** (11 agentes):
-- `tech-lead-orchestrator`, `solution-architect`, `backend-engineer`, `frontend-pwa-engineer`, `ai-integration-engineer`
-- `data-migration-engineer`, `devops-release-engineer`, `qa-security-reviewer`
-- `excel-mapping-architect`, `python-excel-toolsmith`, `finance-orchestrator` (inactivo)
-
-**Kilo Code** (2 agentes):
-- `comercial-dev` — Gatekeeper: valida alcance y remite a OpenCode
-- `excel-import-implementer` — Integra resultados Excel a la app
-
-### Flujo de Trabajo
-1. Coordinador crea issue en `docs/agent-coordination/issues/<TASK_ID>.md` con alcance explícito
-2. Orca descubre issues `pending`, abre worktree, invoca agente correspondiente
-3. Agente ejecuta, prueba, cierra issue con `result_summary`
-4. PR automático → Merge requiere aprobación humana explícita del coordinador
+Detalles técnicos: Ver [AGENTS.md](AGENTS.md).
 
 ## Roles del Sistema (RBAC)
 
