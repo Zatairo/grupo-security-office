@@ -1,0 +1,42 @@
+name: Telegram Notify - Agent Activity
+
+on:
+  create:
+  pull_request:
+    types: [opened, ready_for_review]
+  issues:
+    types: [labeled]
+
+jobs:
+  notify-branch-created:
+    name: Notify when an agent branch is created (work started)
+    if: github.event_name == 'create' && github.event.ref_type == 'branch' && startsWith(github.event.ref, 'agent/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Telegram message
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=Un agente empezo a trabajar. Rama: ${{ github.event.ref }}"
+
+  notify-issue-ready-for-agent:
+    name: Notify when an issue is labeled ready-for-agent
+    if: github.event_name == 'issues' && github.event.label.name == 'ready-for-agent'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Telegram message
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=Issue #${{ github.event.issue.number }} etiquetado ready-for-agent: ${{ github.event.issue.title }}. Orca lo recogera en el proximo ciclo (~15 min)."
+
+  notify-pr-opened:
+    name: Notify when an agent opens a draft PR (work finished)
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Telegram message
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=PR draft listo para revision: ${{ github.event.pull_request.title }} - ${{ github.event.pull_request.html_url }}"
