@@ -1,89 +1,148 @@
-# Grupo Security - Plataforma Comercial Interna
+# Grupo Security Office — Plataforma Comercial Interna
 
-## Descripción del Proyecto
+Panel administrativo + catálogo comercial integrado con ERP Yéminus para Grupo Security (CCTV, alarmas, control de acceso, smart home).
 
-Sistema web/e-commerce para **Grupo Security**, empresa colombiana de seguridad electrónica con sedes en Pereira, Armenia, Manizales y Cali.
+## Estado Actual
 
-**Servicios:** CCTV, Sistemas de alarma, Control de acceso, Smart Home
-
-## Fases
-
-| Fase | Estado | Descripción |
-|------|--------|-------------|
-| Fase 1 | **ACTUAL** | Sistema Interno Modular (Panel Admin) |
-| Fase 2 | Futura | E-commerce Público |
-| Fase 3 | Futura | Portal Cliente |
+| Aspecto | Estado |
+|---|---|
+| **Fase** | FSM de ciclo de vida de Product validada (616 tests, 14 migraciones, 230 productos) |
+| **Próximo** | **Etapa 8.1** — Migración no destructiva a `lifecycleStatus` (dual-write mantenido) |
+| **Coordinador estratégico** | Usuario + Claude Code |
+| **Ejecutores técnicos** | OpenCode (11 agentes) + Kilo Code (2 agentes) |
+| **Última actualización** | 2026-09-09 — Reestructuración de documentación y coordinación |
 
 ## Stack Tecnológico
 
-- **Frontend:** React + TypeScript + Tailwind CSS
-- **Backend:** Node.js + TypeScript
-- **Base de datos:** PostgreSQL
-- **Auth:** OAuth2/OIDC + JWT + RBAC
-- **Integración ERP:** Yéminus (pendiente confirmación API)
+| Capa | Tecnología | Nota |
+|---|---|---|
+| Frontend | React 18 + TypeScript + Tailwind CSS + Vite | Panel admin + catálogo, mobile-first |
+| Backend | NestJS 11 + TypeScript | Módulos: productos, listas, precios, usuarios, roles, auditoría, suppliers |
+| Database | PostgreSQL 16 + Prisma 5.x | Migraciones versionadas, Neon adapter |
+| Auth | JWT + bcrypt + RBAC | 5 roles: Super Admin, Supervisor, Admin Comercial, Operador, Consulta |
+| State Management | TanStack Query + Zustand | Server state + client state |
+| Testing | Jest + Vitest + Playwright | 616 tests, E2E coverage |
+| CI/CD | GitHub Actions | Lint, test, build, security checks |
+| ERP | Yéminus | **Integración pendiente de confirmación API** |
+| Python (auxiliar) | pandas + openpyxl | Solo para Excel parsing/mapping/validation, no es backend primario |
+
+## Gobernanza y Coordinación
+
+### Autoridad Estratégica
+- **Usuario + Claude Code**: define alcance, dependencias, propiedad de archivos, criterios de aceptación, secuencia de tareas
+
+### Ejecutores Técnicos
+
+**OpenCode** (11 agentes):
+- `tech-lead-orchestrator`, `solution-architect`, `backend-engineer`, `frontend-pwa-engineer`, `ai-integration-engineer`
+- `data-migration-engineer`, `devops-release-engineer`, `qa-security-reviewer`
+- `excel-mapping-architect`, `python-excel-toolsmith`, `finance-orchestrator` (inactivo)
+
+**Kilo Code** (2 agentes):
+- `comercial-dev` — Gatekeeper: valida alcance y remite a OpenCode
+- `excel-import-implementer` — Integra resultados Excel a la app
+
+### Flujo de Trabajo
+1. Coordinador crea issue en `docs/agent-coordination/issues/<TASK_ID>.md` con alcance explícito
+2. Orca descubre issues `pending`, abre worktree, invoca agente correspondiente
+3. Agente ejecuta, prueba, cierra issue con `result_summary`
+4. PR automático → Merge requiere aprobación humana explícita del coordinador
+
+## Roles del Sistema (RBAC)
+
+| Rol | Permisos Clave |
+|---|---|
+| **Super Admin** | Productos, categorías, marcas, precios, usuarios, roles, auditoría, publicación |
+| **Supervisor** | Lectura de productos, gestión de publicación, auditoría |
+| **Admin Comercial** | CRUD productos, categorías, marcas, precios, publicación |
+| **Operador** | Lectura de productos, categorías, marcas, precios |
+| **Consulta** | Solo lectura (productos, categorías, marcas, precios) |
 
 ## Estructura del Repositorio
 
 ```
-GRUPO_SECURITY/
-├── vault/                  # Obsidian vault (documentación)
-│   ├── Home.md
-│   ├── 01-Proyecto/
-│   ├── 02-Agentes/
-│   ├── 03-Decisiones/
-│   ├── 04-Archivos/
-│   └── 05-Handoffs/
-├── src/                    # Código fuente
-│   ├── frontend/           # React + TypeScript
-│   └── backend/            # Node.js + TypeScript
-├── api/                    # Especificaciones API
-│   └── api-spec.yaml       # OpenAPI 3.0
-├── docs/                   # Documentación técnica
-├── .opencode/              # Agentes y skills
-├── skills/                 # Skills del orquestador
-├── config/                 # Configuración
-├── client/                 # Cliente OpenRouter
-├── memory/                 # Memoria persistente
-├── legacy_python/          # Código Python legacy
-├── AGENTS.md               # Gobernanza de agentes
-└── README.md
+grupo-security-office/
+├── src/
+│   ├── frontend/                    # React + TypeScript + Tailwind
+│   ├── backend/                     # NestJS + Prisma + PostgreSQL
+│   └── graphify-out/                # Knowledge graph (2564 nodos, 6202 edges)
+├── docs/
+│   ├── agent-coordination/          # Gobernanza: issues/, decisions, work-log
+│   ├── adr/                         # Architecture Decision Records
+│   └── PROJECT_STATUS.md            # Estado, próximos pasos, Etapa 8.1
+├── .opencode/agents/                # 11 perfiles OpenCode (ejecutores)
+├── .kilo/
+│   ├── agents/                      # 2 perfiles Kilo
+│   ├── rules/                       # Reglas globales
+│   └── context/                     # Contexto de Kilo
+├── AGENTS.md                        # Autoridad, roster, stack, reglas
+├── CLAUDE.md                        # Idioma, estilo, graphify, decisiones vigentes
+├── opencode.json                    # Config OpenCode
+└── README.md                        # Este archivo
 ```
 
-## Configuración de Obsidian
+## Conocimiento Indexado: graphify
 
-1. Abrir Obsidian
-2. File → Open vault → Seleccionar esta carpeta
-3. El plugin **obsidian-git** sincroniza automáticamente con GitHub cada 5 minutos
+**Graph**: `graphify-out/graph.json` (2564 nodos, 6202 edges, 168 comunidades)
 
-## Roles del Sistema
+**Cómo consultar** (⚠️ **EN INGLÉS o identificadores técnicos**):
+```bash
+graphify query "Who is the strategic coordinator"
+graphify query "What are the 5 RBAC roles"
+graphify path "Backend" "PostgreSQL"
+graphify explain "lifecycleStatus"
+graphify update .  # Después de cambios (AST-only, sin costo)
+```
 
-| Rol | Permisos |
-|-----|----------|
-| Admin | Acceso total |
-| Gerente | Productos, precios, publicación, reportes |
-| Operator | Edición limitada, consulta precios |
-| Viewer | Solo lectura |
+**Outputs**:
+- `graph.json` — Grafo (3.5MB)
+- `graph.html` — Visualización interactiva
+- `wiki/index.md` + 178 artículos — Navegación
 
-## Integración con OpenClaw
+## Documentación Clave
 
-El orquestador en el servidor Ubuntu (10.156.2.39) coordina los agentes:
-- **Orchestrator:** Coordinador central
-- **Backend:** Desarrollo de API
-- **Frontend:** Desarrollo UI
-- **Security:** Auditoría de seguridad
+| Documento | Propósito |
+|---|---|
+| **[AGENTS.md](AGENTS.md)** | Autoridad, roster, stack, reglas obligatorias |
+| **[CLAUDE.md](CLAUDE.md)** | Idioma, estilo, graphify, decisiones vigentes |
+| **[docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)** | Estado, riesgos, Etapa 8.1 |
+| **[docs/agent-coordination/issues/](docs/agent-coordination/issues/)** | Tablero de tareas centralizado |
+| **[docs/agent-coordination/decisiones-historicas.md](docs/agent-coordination/decisiones-historicas.md)** | Historial de decisiones |
+
+## Cómo Empezar
+
+```bash
+# Instalar y migrar
+npm install --workspace=src/frontend
+npm install --workspace=src/backend
+cd src/backend && npm run db:migrate && npm run db:seed
+
+# Iniciar dev
+npm run dev --workspace=src/backend   # puerto 3000
+npm run dev --workspace=src/frontend  # puerto 5173
+
+# Verificar estado
+opencode agent list
+graphify query "strategic coordinator"
+npm test --workspace=src/backend
+```
+
+## Próximos Pasos
+
+- **Etapa 8.1** (no destructiva): migración a `lifecycleStatus`, dual-write mantenido, docs actualizadas
+- **Etapa 8.2** (futura): DROP COLUMN legacy, desactivar dual-write
+- **Context7 + SkillsMP**: evaluar para mejorar skills de agentes
 
 ## Seguridad
 
-- HTTPS obligatorio
-- RBAC con 4 roles
-- Contraseñas bcrypt/argon2
-- Validación Zod
-- OWASP Top 10
-- MFA recomendado para admin
+- HTTPS obligatorio en producción
+- RBAC con 5 roles, decoradores `@Roles()` + `@Permissions()` + ACL guard
+- JWT + bcrypt para autenticación
+- AuditLog para todas las mutaciones
+- Validación class-validator + zod
+- **Sin secretos en Git** — usar variables de entorno
+- **Sin comandos destructivos** sin aprobación humana explícita
 
-## Última Actualización
+---
 
-- 2026-07-22: Configuración GitHub + Obsidian sync
-- 2026-07-21: Arquitectura v1 definida
-- 2026-07-21: Modelo de datos SQL
-- 2026-07-21: API spec OpenAPI 3.0
+**Repositorio:** Soproyectos/grupo-security-office | **Rama:** main | **Coordinador:** Usuario + Claude Code
