@@ -83,6 +83,8 @@ Cuando el coordinador (usuario + Claude Code) planea una tarea y la delega a Ope
 
 Referencia cruzada: `docs/agent-coordination/worktree-issue-pr-procedure.md` (procedimiento técnico completo con branch naming, worktree, PR, merge rules).
 
+**Runtime de Orca**: además del tablero interno de arriba, existe una automation de Orca corriendo headless en un servidor Ubuntu 24/7 que dispara directamente sobre **issues de GitHub** con label `ready-for-agent` (cada 15 min), independiente de que el equipo del coordinador esté encendido. Detalle completo, topología y comandos de operación en `docs/agent-coordination/orca-headless-runtime.md`.
+
 ### Respuesta de subagentes (obligatoria)
 - Estado: `completado` | `bloqueado` | `requiere decisión`
 - Archivos modificados
@@ -117,6 +119,7 @@ Python (pandas/openpyxl) se utiliza únicamente como herramienta auxiliar de an�
 - `docs/agent-coordination/agent-status.md` — Estado actual de cada ejecutor.
 - `docs/agent-coordination/file-ownership.md` — Reservas activas y liberadas.
 - `docs/agent-coordination/work-log.md` — Evidencia append-only de tareas completadas.
+- `docs/agent-coordination/orca-headless-runtime.md` — Runtime headless de Orca en servidor Ubuntu, automation de delegación por issues de GitHub (label `ready-for-agent`), y cómo delega a OpenCode/Kilo.
 - `docs/AGENT_TEAM.md` — Matriz de responsabilidades y escalamiento.
 - `docs/WORKFLOW.md` — Fases, puertas y contratos de delegación.
 - `docs/PROJECT_STATUS.md` — Estado por fase, tareas, bloqueos, evidencia.
