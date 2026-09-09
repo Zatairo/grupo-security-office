@@ -66,6 +66,15 @@ if errorlevel 1 (
     echo El puerto 5173 ya esta en uso. No se inicia otro frontend.
 )
 
+REM Agentation: servidor de anotaciones visuales (boton en el frontend, dev-only).
+netstat -ano | findstr /R /C:":4747 .*LISTENING" >nul
+if errorlevel 1 (
+    echo Iniciando servidor Agentation en puerto 4747...
+    start "Grupo Security - Agentation" /D "%REPO_ROOT%" cmd /k "npx -y agentation-mcp server"
+) else (
+    echo El puerto 4747 ya esta en uso. No se inicia otro servidor Agentation.
+)
+
 REM Esperar un maximo de 45 segundos a que el backend responda HTTP 200.
 echo Esperando el backend...
 set "BACKEND_READY=0"
@@ -118,7 +127,8 @@ echo ==========================================
 echo Entorno local iniciado.
 echo Frontend: http://localhost:5173/
 echo Health API: http://localhost:3000/api/health
-echo Mantén abiertas las ventanas de backend y frontend.
+echo Agentation: boton flotante abajo a la derecha (servidor en :4747)
+echo Mantén abiertas las ventanas de backend, frontend y Agentation.
 echo ==========================================
 pause
 exit /b 0
