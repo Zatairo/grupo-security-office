@@ -30,9 +30,9 @@ The canonical Issue → PR → Merge → Handoff procedure (branch and worktree 
 parallel-work rules, validation and close-out evidence, and Git prohibitions) lives
 in `worktree-issue-pr-procedure.md`. Refer to it for the operational workflow.
 
-Orca's headless runtime (systemd service on the Ubuntu server, GitHub-issue-driven
-automation, delegation split between OpenCode and Kilo) is documented in
-`orca-headless-runtime.md`.
+Orca's issue-driven delegation system (GitHub issues with the `ready-for-agent`
+label trigger automatic worktree creation and delegation to OpenCode/Kilo) is
+documented in `orca-runtime.md`.
 
 ## Required preflight
 

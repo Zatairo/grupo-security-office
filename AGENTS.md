@@ -119,7 +119,7 @@ Python (pandas/openpyxl) se utiliza únicamente como herramienta auxiliar de an�
 - `docs/agent-coordination/agent-status.md` — Estado actual de cada ejecutor.
 - `docs/agent-coordination/file-ownership.md` — Reservas activas y liberadas.
 - `docs/agent-coordination/work-log.md` — Evidencia append-only de tareas completadas.
-- `docs/agent-coordination/orca-headless-runtime.md` — Runtime headless de Orca en servidor Ubuntu, automation de delegación por issues de GitHub (label `ready-for-agent`), y cómo delega a OpenCode/Kilo.
+- `docs/agent-coordination/orca-runtime.md` — Sistema de orquestación automática de Orca: cómo delega issues de GitHub (label `ready-for-agent`) a OpenCode/Kilo en worktrees aislados.
 - `docs/AGENT_TEAM.md` — Matriz de responsabilidades y escalamiento.
 - `docs/WORKFLOW.md` — Fases, puertas y contratos de delegación.
 - `docs/PROJECT_STATUS.md` — Estado por fase, tareas, bloqueos, evidencia.
