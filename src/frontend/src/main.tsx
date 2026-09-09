@@ -6,6 +6,10 @@ import { ToastProvider } from './hooks/useToast'
 import App from './App'
 import './index.css'
 
+const Agentation = import.meta.env.DEV
+  ? React.lazy(() => import('agentation').then((m) => ({ default: m.Agentation })))
+  : null
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -22,6 +26,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <BrowserRouter>
           <App />
         </BrowserRouter>
+        {Agentation && (
+          <React.Suspense fallback={null}>
+            <Agentation endpoint="http://localhost:4747" />
+          </React.Suspense>
+        )}
       </ToastProvider>
     </QueryClientProvider>
   </React.StrictMode>,
