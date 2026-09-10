@@ -555,6 +555,27 @@ describe('ListasService â€” ACL (T1â€“T20)', () => {
       );
     });
 
+    it('findAll filtra por isActive=false (el spread de `false` era un no-op y devolvia todas)', async () => {
+      mockPrisma.lista.findMany.mockResolvedValue([]);
+
+      await service.findAll(VIEWER, { isActive: false });
+
+      expect(mockPrisma.lista.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ isActive: false, id: { in: [LISTA_ID] } }),
+        }),
+      );
+    });
+
+    it('findAll sin isActive no agrega el filtro al where', async () => {
+      mockPrisma.lista.findMany.mockResolvedValue([mockLista]);
+
+      await service.findAll(VIEWER);
+
+      const where = mockPrisma.lista.findMany.mock.calls[0][0].where;
+      expect(where).not.toHaveProperty('isActive');
+    });
+
     it('findProducts scopea por listaId y aplica search/categoryId', async () => {
       mockPrisma.product.findMany.mockResolvedValue([{ id: 'prod-1', sku: 'S', name: 'Cam' }]);
 
