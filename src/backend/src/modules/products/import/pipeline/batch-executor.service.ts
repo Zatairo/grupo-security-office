@@ -236,11 +236,16 @@ export class BatchExecutorService {
             const existingProductId = existingSkuMap.get(row.sku);
 
             if (existingProductId) {
-              // UPDATE: producto ya existe
+              // UPDATE: producto ya existe.
+              // `name` solo se sobrescribe si esta fila trae un nombre real
+              // (columna nombre o descripción). Si `nameIsFallback` es true
+              // (la fila solo traía SKU y precio), se conserva el nombre que
+              // el producto ya tenía en catálogo — de lo contrario un cargue
+              // mensual sin nombre borraría el nombre real ya guardado.
               await tx.product.update({
                 where: { id: existingProductId },
                 data: {
-                  name: row.name,
+                  ...(row.nameIsFallback ? {} : { name: row.name }),
                   description: row.description ?? undefined,
                   categoryId: categoryResult.id,
                   brandId: brandResult.id,

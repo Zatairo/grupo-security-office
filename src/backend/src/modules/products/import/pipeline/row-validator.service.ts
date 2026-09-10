@@ -116,20 +116,16 @@ export class RowValidatorService {
     // === Validar Nombre ===
     // Un nombre explícito no es la única fuente válida: si la columna de nombre
     // no viene mapeada o está vacía, RowNormalizerService deriva un nombre breve
-    // desde la descripción (ver resolveEffectiveName). Validar solo el valor
-    // crudo de `name` rechazaría filas que sí terminan con un nombre válido,
-    // como ocurre en archivos de proveedor que solo traen SKU + descripción.
+    // desde la descripción (ver resolveEffectiveName). Y si tampoco hay
+    // descripción (listas de proveedor que solo traen SKU/referencia y precio),
+    // RowNormalizerService usa el SKU como nombre provisional — por eso ya no
+    // se rechaza la fila aquí: bloquearla dejaba sin actualizar el precio de
+    // productos que ya existían en el catálogo solo por no traer nombre.
     const nameValue = getFieldValue('name');
     const descriptionValue = getFieldValue('description');
     const name = resolveEffectiveName(nameValue, descriptionValue);
 
-    if (!name) {
-      errors.push({
-        field: 'name',
-        code: 'NAME_REQUIRED',
-        message: 'El nombre es requerido (ni la columna de nombre ni la descripción tienen texto usable)',
-      });
-    } else if (name.length > 500) {
+    if (name && name.length > 500) {
       errors.push({
         field: 'name',
         code: 'NAME_TOO_LONG',

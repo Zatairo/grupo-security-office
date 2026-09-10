@@ -79,7 +79,14 @@ export class RowNormalizerService {
     // name: prevalece el nombre explícito (solo normalización de espacios). Si no hay
     // nombre útil y sí hay descripción con texto útil, se deriva un nombre breve desde
     // la descripción (evita que una descripción extensa supere la validación de name).
-    const name = resolveEffectiveName(rawName, rawDescription);
+    const effectiveName = resolveEffectiveName(rawName, rawDescription);
+    // Último recurso: listas de proveedor que solo traen SKU/referencia y precio,
+    // sin nombre ni descripción. Se usa el SKU como nombre provisional para no
+    // perder el producto/precio, marcando `nameIsFallback` para que
+    // BatchExecutorService NUNCA sobrescriba con esto un nombre real que el
+    // producto ya tenga en catálogo (solo se usa al CREAR productos nuevos).
+    const nameIsFallback = !effectiveName;
+    const name = effectiveName || sku;
     // description: se conserva completa, normalizando espacios (no se reemplaza por name).
     const description = normalizeDescription(rawDescription);
 
@@ -120,6 +127,7 @@ export class RowNormalizerService {
       rowIndex: validatedRow.rowIndex,
       sku,
       name,
+      nameIsFallback,
       description: description || undefined,
       categoryName: inference.categoryName,
       brandName: inference.brandName,
