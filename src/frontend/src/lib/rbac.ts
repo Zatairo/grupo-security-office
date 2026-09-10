@@ -57,14 +57,6 @@ export function canDeletePrices(): boolean {
   return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
 }
 
-export function canDeleteSuppliers(): boolean {
-  return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
-}
-
-export function canDeletePurchaseOrders(): boolean {
-  return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
-}
-
 export function canManageListaAccess(): boolean {
   return hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
 }

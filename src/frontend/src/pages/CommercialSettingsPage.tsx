@@ -1087,7 +1087,6 @@ const AUDIT_ENTITIES = [
   { value: 'Price', label: 'Precios' },
   { value: 'PriceList', label: 'Tarifas' },
   { value: 'Lista', label: 'Listas' },
-  { value: 'Supplier', label: 'Proveedores' },
 ]
 
 const AUDIT_ACTIONS = [

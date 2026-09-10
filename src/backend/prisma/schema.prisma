@@ -29,8 +29,6 @@ model User {
   updatedListas           Lista[]              @relation("ListaUpdater")
   responsibleListas       Lista[]              @relation("ListaResponsible")
   deletionRequestedListas Lista[]              @relation("ListaDeletionRequester")
-  supplierEvaluations     SupplierEvaluation[]
-  purchaseOrders          PurchaseOrder[]
   publishedProducts       Product[]            @relation("ProductPublishedBy")
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
@@ -111,7 +109,6 @@ model Lista {
   createdById           String?
   updatedById           String?
   responsibleId         String?
-  supplierId            String?
   validFrom             DateTime?
   validUntil            DateTime?
   createdAt             DateTime  @default(now())
@@ -120,7 +117,6 @@ model Lista {
   creator           User?     @relation("ListaCreator", fields: [createdById], references: [id], onDelete: SetNull)
   updater           User?     @relation("ListaUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   responsible       User?     @relation("ListaResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
-  supplier          Supplier? @relation("ListaSupplier", fields: [supplierId], references: [id], onDelete: SetNull)
   deletionRequester User?     @relation("ListaDeletionRequester", fields: [deletionRequestedById], references: [id], onDelete: SetNull)
 
   products Product[]
@@ -129,7 +125,6 @@ model Lista {
   @@index([isActive])
   @@index([archivedAt])
   @@index([responsibleId])
-  @@index([supplierId])
   @@index([deletionPurgeAt]) // para scheduler de purga de Listas vencidas
   @@map("listas")
 }
@@ -338,44 +333,6 @@ model ImportSession {
   @@map("import_sessions")
 }
 
-model Supplier {
-  id        String   @id @default(uuid())
-  name      String
-  nit       String   @unique
-  contact   Json?
-  category  String
-  status    String   @default("active")
-  rating    Decimal? @db.Decimal(3, 2)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  evaluations    SupplierEvaluation[]
-  purchaseOrders PurchaseOrder[]
-  listas         Lista[]              @relation("ListaSupplier")
-
-  @@index([status])
-  @@index([category])
-  @@map("suppliers")
-}
-
-model SupplierEvaluation {
-  id            String   @id @default(uuid())
-  supplierId    String
-  evaluatedById String?
-  date          DateTime @default(now())
-  criteria      Json
-  score         Decimal  @db.Decimal(5, 2)
-  observations  String?
-  createdAt     DateTime @default(now())
-
-  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  evaluatedBy User?    @relation(fields: [evaluatedById], references: [id], onDelete: SetNull)
-
-  @@index([supplierId])
-  @@index([evaluatedById])
-  @@map("supplier_evaluations")
-}
-
 model Stock {
   id           String   @id @default(uuid())
   productId    String   @unique
@@ -390,22 +347,3 @@ model Stock {
   @@map("stocks")
 }
 
-model PurchaseOrder {
-  id            String   @id @default(uuid())
-  code          String   @unique
-  supplierId    String
-  status        String   @default("requested")
-  requestedById String?
-  items         Json
-  notes         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  requestedBy User?    @relation(fields: [requestedById], references: [id], onDelete: SetNull)
-
-  @@index([supplierId])
-  @@index([status])
-  @@index([requestedById])
-  @@map("purchase_orders")
-}

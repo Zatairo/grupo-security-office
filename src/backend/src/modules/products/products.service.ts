@@ -1535,18 +1535,12 @@ export class ProductsService {
     }
 
     // Datos asociados â†’ exige la clave maestra (patrÃ³n Listas/removeLista).
-    // Las POs guardan `items` (JSONB); se resuelve con el mismo criterio que el
-    // mÃ³dulo suppliers (parsePoItems): array, objeto Ãºnico o { items: [...] }.
-    const [priceCount, imageCount, stock, auditCount, purchaseOrders] = await Promise.all([
+    const [priceCount, imageCount, stock, auditCount] = await Promise.all([
       this.prisma.price.count({ where: { productId: id } }),
       this.prisma.productImage.count({ where: { productId: id } }),
       this.prisma.stock.findUnique({ where: { productId: id } }),
       this.prisma.auditLog.count({ where: { entity: 'Product', entityId: id } }),
-      this.prisma.purchaseOrder.findMany({ select: { id: true, items: true } }),
     ]);
-    const poReferenced = (purchaseOrders ?? []).some((po) =>
-      this.parsePoItems(po.items).some((i) => i.productId === id),
-    );
 
     // AuditorÃ­a ANTES del borrado fÃ­sico: deja constancia del producto eliminado.
     await this.audit.log({
@@ -1577,33 +1571,6 @@ export class ProductsService {
     return { message: 'Producto eliminado exitosamente' };
   }
 
-  /**
-   * Normaliza el campo `items` (JSONB) de una orden de compra a una lista de
-   * { productId, quantity }. Mismo criterio que el mÃ³dulo suppliers
-   * (parsePoItems): soporta array de items, objeto Ãºnico o { items: [...] }.
-   */
-  private parsePoItems(items: unknown): Array<{ productId: string; quantity: number }> {
-    if (!items) return [];
-    if (Array.isArray(items)) {
-      return items
-        .filter(
-          (i): i is Record<string, unknown> =>
-            !!i && typeof i === 'object' && typeof (i as any).productId === 'string',
-        )
-        .map((i) => ({
-          productId: i.productId as string,
-          quantity: Number((i as any).quantity ?? (i as any).qty ?? 0),
-        }));
-    }
-    if (typeof items === 'object') {
-      const obj = items as Record<string, unknown>;
-      if (Array.isArray(obj.items)) return this.parsePoItems(obj.items);
-      if (typeof obj.productId === 'string') {
-        return [{ productId: obj.productId, quantity: Number(obj.quantity ?? obj.qty ?? 0) }];
-      }
-    }
-    return [];
-  }
 
   /**
    * Sube una imagen para un producto y registra la fila ProductImage.

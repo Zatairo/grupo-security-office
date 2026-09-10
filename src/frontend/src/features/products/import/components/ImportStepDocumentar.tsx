@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useImportStore } from '../store/import.store';
 import { fetchListas, createLista, type ListaPayload } from '../../../../services/listas.service';
-import { fetchSuppliers, type Supplier } from '../../../../services/suppliers.service';
 import { getApiErrorMessage } from '../../../../lib/apiError';
 import { Alert, Button } from '../../../../components/ui';
-import SupplierModal from './SupplierModal';
 
 const CURRENCIES = ['COP', 'USD', 'EUR'] as const;
 
@@ -35,9 +33,7 @@ export default function ImportStepDocumentar() {
   const queryClient = useQueryClient();
   const fileName = useImportStore((s) => s.fileName);
   const listaId = useImportStore((s) => s.listaId);
-  const supplierId = useImportStore((s) => s.supplierId);
   const setListaId = useImportStore((s) => s.setListaId);
-  const setSupplier = useImportStore((s) => s.setSupplier);
   const setListaMetadata = useImportStore((s) => s.setListaMetadata);
   const nextStep = useImportStore((s) => s.nextStep);
 
@@ -51,28 +47,14 @@ export default function ImportStepDocumentar() {
     validUntil: '',
     notes: '',
   });
-  const [supplier, setSupplierState] = useState<string>(supplierId ?? '');
-  const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const listasQuery = useQuery({ queryKey: ['listas'], queryFn: fetchListas });
-  const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: () => fetchSuppliers() });
 
   const availableListas = useMemo(
     () => (listasQuery.data ?? []).filter((l) => !l.archivedAt),
     [listasQuery.data],
   );
-  const suppliers = suppliersQuery.data ?? [];
-
-  useEffect(() => {
-    if (mode === 'select' && selectedListaId) {
-      const found = availableListas.find((l) => l.id === selectedListaId);
-      if (found && found.supplierId && !supplier) {
-        setSupplierState(found.supplierId);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, selectedListaId, availableListas]);
 
   const createMutation = useMutation({
     mutationFn: (payload: ListaPayload) => createLista(payload),
@@ -98,13 +80,10 @@ export default function ImportStepDocumentar() {
       setListaMetadata({
         mode,
         listaId: selectedListaId,
-        supplierId: supplier || null,
-        supplierName: supplier ? suppliers.find((s) => s.id === supplier)?.name ?? null : null,
         name: found?.name ?? '',
         codigo: found?.codigo ?? '',
         currency: found?.currency ?? 'COP',
       });
-      setSupplier(supplier || null, supplier ? suppliers.find((s) => s.id === supplier)?.name ?? null : null);
       nextStep();
       return;
     }
@@ -118,15 +97,11 @@ export default function ImportStepDocumentar() {
       setFormError('La fecha de inicio de vigencia no puede ser posterior a la de fin');
       return;
     }
-    if (supplier) {
-      setSupplier(supplier, suppliers.find((s) => s.id === supplier)?.name ?? null);
-    }
     createMutation.mutate({
       name,
       code: buildUniqueCode(form.codigo || name),
       codigo: form.codigo.trim() || null,
       currency: form.currency,
-      supplierId: supplier || null,
       validFrom: form.validFrom || null,
       validUntil: form.validUntil || null,
       description: form.notes.trim() || null,
@@ -134,9 +109,7 @@ export default function ImportStepDocumentar() {
   };
 
   const listasLoading = listasQuery.isLoading;
-  const suppliersLoading = suppliersQuery.isLoading;
   const listasError = listasQuery.error ? getApiErrorMessage(listasQuery.error, 'No se pudieron cargar las Listas') : null;
-  const suppliersError = suppliersQuery.error ? getApiErrorMessage(suppliersQuery.error, 'No se pudieron cargar los proveedores') : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -144,7 +117,7 @@ export default function ImportStepDocumentar() {
         <h2 className="text-lg font-semibold text-security-900">Documentar la Lista</h2>
         <p className="mt-1 text-sm text-gray-500">
           Define dónde vivirán los productos importados: crea una Lista nueva o reutiliza una
-          existente, e identifica el proveedor.
+          existente.
         </p>
       </div>
 
@@ -303,47 +276,6 @@ export default function ImportStepDocumentar() {
           </div>
         )}
       </div>
-
-      <div className="border border-gray-200 rounded-lg p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-gray-700">Proveedor</p>
-          <Button variant="secondary" onClick={() => setShowSupplierModal(true)}>
-            Crear proveedor
-          </Button>
-        </div>
-        <div>
-          <label htmlFor="doc-supplier" className="block text-sm font-medium text-gray-700 mb-1.5">
-            Proveedor asociado
-          </label>
-          <select
-            id="doc-supplier"
-            value={supplier}
-            onChange={(e) => setSupplierState(e.target.value)}
-            className={FIELD_CLASS}
-            disabled={suppliersLoading}
-          >
-            <option value="">Sin proveedor</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} {s.nit ? `(${s.nit})` : ''}
-              </option>
-            ))}
-          </select>
-          {suppliersLoading && <p className="text-xs text-gray-400 mt-1">Cargando proveedores...</p>}
-          {suppliersError && <p className="text-xs text-red-600 mt-1">{suppliersError}</p>}
-        </div>
-      </div>
-
-      {showSupplierModal && (
-        <SupplierModal
-          onClose={() => setShowSupplierModal(false)}
-          onSaved={(created: Supplier) => {
-            setShowSupplierModal(false);
-            setSupplierState(created.id);
-            queryClient.invalidateQueries({ queryKey: ['suppliers'] });
-          }}
-        />
-      )}
 
       <div className="flex justify-end">
         <Button

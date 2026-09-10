@@ -6,7 +6,6 @@ import { fetchListaById, fetchListaProducts, fetchListaPrices, fetchListaAssignm
 import { fetchPriceLists, createPrice, updatePrice, deletePrice } from '../services/prices.service'
 import type { Price, PricePayload, UpdatePricePayload } from '../services/prices.service'
 import { fetchCategories, createCategory, type Category as SettingsCategory, type CategoryPayload } from '../services/settings.service'
-import { fetchSuppliers, type Supplier } from '../services/suppliers.service'
 import { fetchImportPresets, createImportPreset, deleteImportPreset, type ImportPreset } from '../services/import-presets.service'
 import { canDeletePrices, canManageListas, hasPermission } from '../lib/rbac'
 import { getApiErrorMessage } from '../lib/apiError'
@@ -15,7 +14,6 @@ import { Button, Modal } from '../components/ui'
 import ProductFormModal from '../features/products/components/ProductFormModal'
 import { MoveCategoryModal, type MoveCategoryTarget } from '../features/products/components/MoveCategoryModal'
 import ImportWizard from '../features/products/import/components/ImportWizard'
-import SupplierModal from '../features/products/import/components/SupplierModal'
 import { hasPersistedImportState, useImportStore } from '../features/products/import/store/import.store'
 import type { Category, Brand, Product } from '../features/products/types/product.types'
 import { ProductIndicators } from '../features/products/components/ProductIndicators'
@@ -1044,11 +1042,9 @@ function ConfiguracionTab({
     validUntil: toDateInputValue(lista?.validUntil),
     isActive: lista?.isActive ?? true,
     description: lista?.description ?? '',
-    supplierId: lista?.supplierId ?? '',
   })
   const [formError, setFormError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
-  const [showSupplierModal, setShowSupplierModal] = useState(false)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [presetName, setPresetName] = useState('')
   const [presetFeedback, setPresetFeedback] = useState<{ ok: boolean; message: string } | null>(null)
@@ -1058,7 +1054,6 @@ function ConfiguracionTab({
 
   const archived = Boolean(lista?.archivedAt)
 
-  const { data: suppliers = [] } = useQuery({ queryKey: ['suppliers'], queryFn: () => fetchSuppliers() })
   const { data: categories = [] } = useQuery({ queryKey: ['categories'], queryFn: fetchCategories })
   const { data: presets = [], isLoading: presetsLoading } = useQuery({
     queryKey: ['import-mappings'],
@@ -1117,7 +1112,6 @@ function ConfiguracionTab({
         validUntil: form.validUntil || null,
         isActive: form.isActive,
         description: form.description.trim() || null,
-        supplierId: form.supplierId || null,
       }),
     onSuccess: () => {
       invalidate()
@@ -1286,32 +1280,6 @@ function ConfiguracionTab({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label htmlFor="cfg-supplier" className="block text-sm font-medium text-neutral-800 mb-1.5">
-                Proveedor
-              </label>
-              <div className="flex items-center gap-2">
-                <select
-                  id="cfg-supplier"
-                  value={form.supplierId}
-                  onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
-                  className={FIELD_CLASS}
-                  disabled={!canEdit || archived}
-                >
-                  <option value="">Sin proveedor</option>
-                  {suppliers.map((s: Supplier) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.nit ? `(${s.nit})` : ''}
-                    </option>
-                  ))}
-                </select>
-                {canEdit && (
-                  <Button variant="secondary" onClick={() => setShowSupplierModal(true)} disabled={archived}>
-                    Crear
-                  </Button>
-                )}
-              </div>
-            </div>
             <div className="flex items-end gap-3">
               {archived ? (
                 <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
@@ -1461,17 +1429,6 @@ function ConfiguracionTab({
             </Button>
           </div>
         </div>
-      )}
-
-      {showSupplierModal && (
-        <SupplierModal
-          onClose={() => setShowSupplierModal(false)}
-          onSaved={(created: Supplier) => {
-            setShowSupplierModal(false)
-            setForm({ ...form, supplierId: created.id })
-            queryClient.invalidateQueries({ queryKey: ['suppliers'] })
-          }}
-        />
       )}
 
       {showCategoryModal && <CategoryCreateModal onClose={() => setShowCategoryModal(false)} />}
