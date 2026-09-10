@@ -74,6 +74,14 @@ const EXPIRY_TONE_CLASSES: Record<string, string> = {
   danger: 'bg-red-100 text-red-700',
 }
 
+type ListaStateFilter = 'all' | 'active' | 'inactive' | 'archived'
+
+/** Los tres estados son excluyentes y `archived` gana sobre `isActive`. */
+function listaState(lista: { isActive: boolean; archivedAt: string | null }) {
+  if (lista.archivedAt !== null) return 'archived' as const
+  return lista.isActive ? ('active' as const) : ('inactive' as const)
+}
+
 function StatusBadge({ isActive, archived }: { isActive: boolean; archived: boolean }) {
   let label = isActive ? 'Activo' : 'Inactivo'
   let cls = isActive
@@ -177,7 +185,7 @@ export default function ListasPage() {
   const [editingLista, setEditingLista] = useState<Lista | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [activeFilter, setActiveFilter] = useState<boolean | 'all'>('all')
+  const [activeFilter, setActiveFilter] = useState<ListaStateFilter>('all')
   const [showImportModal, setShowImportModal] = useState(hasPersistedImportState)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expiryFilter, setExpiryFilter] = useState<'all' | 'active' | 'expiring' | 'expired'>('all')
@@ -211,7 +219,7 @@ export default function ListasPage() {
         l.name.toLowerCase().includes(search.toLowerCase()) ||
         l.code.toLowerCase().includes(search.toLowerCase())
       const matchesState =
-        activeFilter === 'all' || l.isActive === activeFilter
+        activeFilter === 'all' || listaState(l) === activeFilter
       const matchesExpiry =
         expiryFilter === 'all' ||
         (expiryFilter === 'active' && !l.isExpired && !l.isExpiringSoon) ||
@@ -304,8 +312,9 @@ export default function ListasPage() {
   }
 
   const listFilterChips: SearchFilterChip[] = []
-  if (activeFilter === true) listFilterChips.push({ id: 'state-active', label: 'Estado: Activas', onRemove: () => setActiveFilter('all') })
-  if (activeFilter === false) listFilterChips.push({ id: 'state-inactive', label: 'Estado: Inactivas', onRemove: () => setActiveFilter('all') })
+  if (activeFilter === 'active') listFilterChips.push({ id: 'state-active', label: 'Estado: Activas', onRemove: () => setActiveFilter('all') })
+  if (activeFilter === 'inactive') listFilterChips.push({ id: 'state-inactive', label: 'Estado: Inactivas', onRemove: () => setActiveFilter('all') })
+  if (activeFilter === 'archived') listFilterChips.push({ id: 'state-archived', label: 'Estado: Archivadas', onRemove: () => setActiveFilter('all') })
   if (expiryFilter === 'active') listFilterChips.push({ id: 'exp-active', label: 'Vigencia: Vigentes', onRemove: () => setExpiryFilter('all') })
   if (expiryFilter === 'expiring') listFilterChips.push({ id: 'exp-expiring', label: 'Vigencia: Por vencer (30 días)', onRemove: () => setExpiryFilter('all') })
   if (expiryFilter === 'expired') listFilterChips.push({ id: 'exp-expired', label: 'Vigencia: Vencidas', onRemove: () => setExpiryFilter('all') })
@@ -349,6 +358,7 @@ export default function ListasPage() {
     onSuccess: () => {
       invalidate()
       setActionError(null)
+      setActionNotice('Lista restaurada como Inactiva. Activala para volver a usarla.')
     },
     onError: (err) => setActionError(getApiErrorMessage(err, 'No se pudo restaurar la Lista')),
   })
@@ -570,8 +580,8 @@ export default function ListasPage() {
                     <input
                       type="radio"
                       name="lista-estado"
-                      checked={activeFilter === true}
-                      onChange={() => setActiveFilter(true)}
+                      checked={activeFilter === 'active'}
+                      onChange={() => setActiveFilter('active')}
                       className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
                     />
                     Activas
@@ -580,11 +590,21 @@ export default function ListasPage() {
                     <input
                       type="radio"
                       name="lista-estado"
-                      checked={activeFilter === false}
-                      onChange={() => setActiveFilter(false)}
+                      checked={activeFilter === 'inactive'}
+                      onChange={() => setActiveFilter('inactive')}
                       className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
                     />
                     Inactivas
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="lista-estado"
+                      checked={activeFilter === 'archived'}
+                      onChange={() => setActiveFilter('archived')}
+                      className="h-4 w-4 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary-focus-ring)]"
+                    />
+                    Archivadas
                   </label>
                 </div>
               </fieldset>

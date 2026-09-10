@@ -32,7 +32,7 @@ export class ListasService {
       id?: { in: string[] };
       OR?: Array<{ validUntil: null } | { validUntil: { gte: Date } }>;
     } = {
-      ...(params?.isActive === true && { isActive: true }),
+      ...(params?.isActive !== undefined && { isActive: params.isActive }),
       // deny-by-default: usuario no-admin sin assignments → id: { in: [] } (0 resultados).
       // Super Admin: allowed === null → sin filtro de id (ve todo).
       ...(allowed !== null && { id: { in: allowed.length ? allowed : [] } }),
@@ -459,7 +459,7 @@ export class ListasService {
 
     await this.audit.log({
       userId: ctx.userId,
-      action: requiresManage ? (dto.archivedAt ? 'restore' : 'archive') : 'update',
+      action: requiresManage ? (dto.archivedAt ? 'archive' : 'restore') : 'update',
       entity: 'LISTA',
       entityId: id,
       oldValues,
