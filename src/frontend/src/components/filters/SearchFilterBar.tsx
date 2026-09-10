@@ -159,6 +159,18 @@ export function SearchFilterBar({
   }, [])
 
   useEffect(() => {
+    // Bloquea el scroll del fondo mientras el drawer móvil está abierto.
+    if (layout === 'sidebar' && isDesktop) return
+    if (!isOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [layout, isDesktop, isOpen])
+
+  useEffect(() => {
     // En desktop con sidebar no se cierra por Escape ni clic exterior.
     if (layout === 'sidebar' && isDesktop) return
     if (!isOpen) return
@@ -414,7 +426,7 @@ export function SearchFilterBar({
                   role="dialog"
                   aria-modal="true"
                   aria-label="Filtros"
-                  className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col border-l border-neutral-200 bg-white shadow-2xl sm:w-[24rem]"
+                  className="fixed inset-0 z-50 flex w-full flex-col bg-white"
                 >
                   <header className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
                     <div className="min-w-0">
@@ -452,6 +464,16 @@ export function SearchFilterBar({
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
                     {renderSidebarAccordion()}
                   </div>
+
+                  <footer className="border-t border-neutral-200 px-5 py-4">
+                    <button
+                      type="button"
+                      onClick={() => closeOpenPanel(true)}
+                      className="w-full rounded-lg bg-[var(--color-primary)] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-focus-ring)]"
+                    >
+                      Ver resultados
+                    </button>
+                  </footer>
                 </aside>
               </>
             )}
