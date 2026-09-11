@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, IsBoolean, IsOptional, IsArray } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsBoolean, IsOptional, IsArray, IsUUID } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateUserDto {
@@ -28,4 +28,9 @@ export class UpdateUserDto {
   @IsArray()
   @IsOptional()
   roleIds?: string[];
+
+  @ApiPropertyOptional({ example: 'supervisor-id-1' })
+  @IsUUID()
+  @IsOptional()
+  supervisorId?: string | null;
 }

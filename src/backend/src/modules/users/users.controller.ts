@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -7,13 +7,24 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { HierarchyService } from '../../common/hierarchy/hierarchy.service';
+import { AuditService } from '../audit/audit.service';
+import { AccessContext } from '../../common/acl/acl.service';
 
 @ApiTags('Users')
 @ApiBearerAuth()
 @Controller('api/users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly hierarchyService: HierarchyService,
+    private readonly auditService: AuditService,
+  ) {}
+
+  private ctx(user: any): AccessContext {
+    return { userId: user?.sub ?? user?.id, roles: user?.roles ?? [] };
+  }
 
   @Get()
   @Roles('Super Admin', 'Admin Comercial')
@@ -65,5 +76,36 @@ export class UsersController {
   @ApiOperation({ summary: 'Eliminar usuario' })
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.usersService.remove(id, user?.sub ?? user?.id);
+  }
+
+  @Patch(':id/supervisor')
+  @Roles('Super Admin', 'Admin Comercial')
+  @ApiOperation({ summary: 'Asignar supervisor a un usuario' })
+  async setSupervisor(
+    @Param('id') id: string,
+    @Body() body: { supervisorId: string | null },
+    @CurrentUser() user: any,
+  ) {
+    const ctx = this.ctx(user);
+    await this.hierarchyService.assertCanSetSupervisor(id, body.supervisorId);
+    
+    const updated = await this.usersService.update(id, { supervisorId: body.supervisorId }, ctx.userId);
+    
+    await this.auditService.log({
+      userId: ctx.userId,
+      entity: 'User',
+      entityId: id,
+      action: 'update',
+      newValues: { supervisorId: body.supervisorId },
+    });
+    
+    return updated;
+  }
+
+  @Get('me/team')
+  @ApiOperation({ summary: 'Obtener el equipo del usuario actual' })
+  async getMyTeam(@CurrentUser() user: any) {
+    const userId = user?.sub ?? user?.id;
+    return this.hierarchyService.getTeamTree(userId);
   }
 }

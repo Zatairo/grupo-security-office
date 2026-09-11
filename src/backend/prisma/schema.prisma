@@ -30,9 +30,13 @@ model User {
   responsibleListas       Lista[]              @relation("ListaResponsible")
   deletionRequestedListas Lista[]              @relation("ListaDeletionRequester")
   publishedProducts       Product[]            @relation("ProductPublishedBy")
+  supervisorId            String?
+  supervisor              User?                @relation("UserHierarchy", fields: [supervisorId], references: [id], onDelete: SetNull)
+  subordinates            User[]               @relation("UserHierarchy")
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
 
+  @@index([supervisorId])
   @@map("users")
 }
 

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { HierarchyService } from '../../common/hierarchy/hierarchy.service';
 import { Prisma } from '@prisma/client';
 
 /**
@@ -19,7 +20,9 @@ export const COMERCIAL_ENTITIES = [
 /** Contexto opcional de auditoría: roles del JWT actual. */
 export interface AuditContext {
   roles?: string[];
+  userId?: string;
 }
+
 
 /**
  * Formas canónicas de las entidades auditadas (clave = mayúsculas sin espacios).
@@ -64,7 +67,9 @@ export function normalizeAction(action?: string): string | undefined {
 
 @Injectable()
 export class AuditService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService,
+    private hierarchyService: HierarchyService,
+  ) {}
 
   async log(params: {
     userId?: string;
@@ -98,8 +103,9 @@ export class AuditService {
    * las entidades comerciales, sin importar el filtro `entity` del query.
    */
   private isGlobalAuditor(roles?: string[]): boolean {
-    return !!roles && (roles.includes('Super Admin') || roles.includes('Supervisor'));
+    return !!roles && roles.includes('Super Admin');
   }
+
 
   async findAll(
     params?: {
@@ -114,6 +120,16 @@ export class AuditService {
   ) {
     const { skip = 0, take = 50, entity, entityId, userId, action } = params || {};
     const global = this.isGlobalAuditor(ctx?.roles);
+
+    // Supervisor (no global): scope SOLO a auditoría de sus subordinados.
+    let supervisorSubordinateIds: string[] = [];
+    const isSupervisor = !global && ctx?.roles?.includes('Supervisor') && ctx?.userId;
+    if (isSupervisor) {
+      supervisorSubordinateIds = await this.hierarchyService.getSubordinateIds(
+        ctx.userId,
+        { includeSelf: true },
+      );
+    }
 
     // C9: normaliza la entidad a su forma canónica (p.ej. 'Lista' → 'LISTA').
     const entityFilter = normalizeEntity(entity);
@@ -139,6 +155,7 @@ export class AuditService {
       ...entityWhere,
       ...(entityId && { entityId }),
       ...(userId && { userId }),
+      ...(isSupervisor && { userId: { in: supervisorSubordinateIds } }),
       ...(actionFilter && { action: actionFilter }),
     };
 
