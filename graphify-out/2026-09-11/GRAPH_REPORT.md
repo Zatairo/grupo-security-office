@@ -1,26 +1,26 @@
-# Graph Report - grupo-security-office  (2026-09-11)
+# Graph Report - grupo-security-office  (2026-09-09)
 
 ## Corpus Check
-- 387 files · ~339,803 words
+- 382 files · ~334,371 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3969 nodes · 7844 edges · 287 communities (226 shown, 49 thin omitted)
-- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 278 edges (avg confidence: 0.81)
+- 3909 nodes · 7719 edges · 295 communities (232 shown, 51 thin omitted)
+- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 276 edges (avg confidence: 0.81)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c167dcd7`
+- Built from commit: `cac27c1a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - PrismaService
 - AccessContext
-- ListaDetailPage.tsx
+- ListasPage.tsx
 - backend/package.json
-- @nestjs/swagger
-- acl.service.ts
+- products.service.ts
+- useToast.tsx
 - ProductSpreadsheetTable.tsx
 - react
 - @nestjs/common
@@ -28,7 +28,7 @@
 - CurrentUser
 - CategoriesService
 - CreateUserDto
-- UsersPage.tsx
+- Dashboard.tsx
 - ListasService
 - Roles
 - ProductsService
@@ -42,26 +42,26 @@
 - ListasController
 - ExecuteImportDto
 - text-normalizer.ts
-- suppliers.controller.ts
-- listas.service.spec.ts
+- listas.controller.ts
+- acl.service.ts
 - AssignmentsController
 - enrich_hikvision_catalog.py
 - batch-executor.service.ts
-- DashboardService
-- Dashboard.tsx
-- CommercialWorkspace.tsx
-- import.service.ts
-- @tanstack/react-query
-- TransitionProductDto
+- @nestjs/swagger
+- PricesService
+- PricesController
+- ImportService
+- api.ts
+- .isListasAdmin
 - .login
-- row-normalizer.service.ts
+- import.service.ts
 - dependencies
 - devDependencies
 - RBAC (Role-Based Access Control)
-- services/dashboard.service.ts
-- App.tsx
-- .log
-- import.store.ts
+- main.ts
+- SearchFilterBar.tsx
+- SuppliersService
+- ImportStepHeaders.tsx
 - RemapperApp
 - AuditController
 - compilerOptions
@@ -69,7 +69,7 @@
 - AclService
 - frontend/package.json
 - Tanda 1C — Módulo suppliers: stock avanzado, PO flujo completo, panel compras, proveedor↔producto, reportes (2026-08-15)
-- brands.service.ts
+- ImportStepUpload.tsx
 - Diseño técnico — `Lista` como raíz padre de `Producto`
 - Products Module
 - tech-lead-orchestrator.md
@@ -79,17 +79,17 @@
 - HeaderDetectorService
 - app.py
 - scripts
-- CreateBrandDto
+- ListaDetailPage.tsx
 - AclService
 - CreateSupplierDto
 - Grupo Security Office
 - React
 - FilesService
-- listas/listas.service.ts
+- CreateListaDto
 - BulkTransitionProductDto
 - MappingConfig
-- suppliers/suppliers.service.ts
-- roles.ts
+- CreateEvaluationDto
+- UpdateSupplierDto
 - Suppliers Module
 - Lista (entity root)
 - permissions.guard.ts
@@ -98,23 +98,23 @@
 - Product
 - chrome-analyze.cjs
 - ADR-001: Arquitectura Híbrida de Importación Masiva
-- PricesService
+- prices/prices.service.ts
 - ProductQueryDto
 - excel.helper.ts
-- useAuthStore
-- .uploadLogo
+- prices.service.spec.ts
+- CreateStockDto
 - Arquitectura Técnica - Grupo Security
 - User
 - seed.ts
-- BrandsService
-- brands.service.spec.ts
+- UpdateProductDto
+- UpdateStockDto
 - Import Module
 - Per-User Key (password)
 - overrides
 - Análisis técnico — Incremento 0
 - transition.service.spec.ts
 - hikvision.types.ts
-- .findAll
+- useImportExecution.ts
 - Agent Work Log
 - Sección 2: Controles de Hardening (Post-MVP, antes de producción)
 - Plan — Incremento 1: Gestión de Listas, ACL por Lista y deny-by-default
@@ -126,12 +126,12 @@
 - nest-cli.json
 - backfill-lifecycle.ts
 - AuditLog
-- Card.tsx
+- @prisma/client
 - scripts
 - apply_mapping
 - Branch Convention
 - tsconfig.build.json
-- Badge.tsx
+- ImportStepMapping.tsx
 - Delegation Contract
 - 5 RBAC Roles
 - python-excel-toolsmith
@@ -205,6 +205,8 @@
 - Decisiones técnicas — Plataforma Comercial
 - Órdenes Kilo listas para ejecutar
 - import.module.ts
+- import.store.ts
+- import.types.ts
 - Instrucciones globales
 - Tablero de issues entre agentes
 - 9. Frontend - Páginas del Admin
@@ -289,76 +291,82 @@
 - 05-estandar-backend.md
 - 06-estandar-qa.md
 - validate-env.sh
+- ImportStepSections.tsx
+- ImportStepper.tsx
+- Backend (NestJS)
 - SpecType
+- 11. Seguridad
+- 7. Autenticación y Autorización
+- 10. Configuración del Entorno
 
 ## God Nodes (most connected - your core abstractions)
-1. `Roles()` - 124 edges
-2. `AccessContext` - 93 edges
-3. `@nestjs/common` - 83 edges
-4. `CurrentUser` - 78 edges
+1. `Roles()` - 122 edges
+2. `AccessContext` - 88 edges
+3. `@nestjs/common` - 80 edges
+4. `CurrentUser` - 76 edges
 5. `getApiErrorMessage()` - 67 edges
 6. `ProductsService` - 63 edges
-7. `PrismaService` - 58 edges
-8. `@nestjs/swagger` - 53 edges
+7. `PrismaService` - 56 edges
+8. `@nestjs/swagger` - 52 edges
 9. `react` - 45 edges
 10. `RemapperApp` - 41 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `buildPrisma()` --calls--> `createPrismaMock()`  [EXTRACTED]
+  src/backend/src/modules/listas/listas.service.spec.ts → src/backend/src/__test__/mocks/prisma.mock.ts
 - `BulkDeleteModalProps` --references--> `Product`  [EXTRACTED]
   src/frontend/src/features/products/components/BulkDeleteModal.tsx → src/frontend/src/features/products/types/product.types.ts
+- `ImportStepConfirm()` --indirect_call--> `fetchListas()`  [INFERRED]
+  src/frontend/src/features/products/import/components/ImportStepConfirm.tsx → src/frontend/src/services/listas.service.ts
+- `ImportStepDocumentar()` --indirect_call--> `fetchListas()`  [INFERRED]
+  src/frontend/src/features/products/import/components/ImportStepDocumentar.tsx → src/frontend/src/services/listas.service.ts
 - `ImportStepResult()` --indirect_call--> `fetchPriceLists()`  [INFERRED]
   src/frontend/src/features/products/import/components/ImportStepResult.tsx → src/frontend/src/services/prices.service.ts
-- `DashboardListResult` --references--> `Product`  [EXTRACTED]
-  src/frontend/src/services/dashboard.service.ts → src/frontend/src/features/products/types/product.types.ts
-- `ProductosTab()` --calls--> `hasPermission()`  [EXTRACTED]
-  src/frontend/src/pages/ListaDetailPage.tsx → src/frontend/src/lib/rbac.ts
-- `AssignmentsPage()` --indirect_call--> `fetchListas()`  [INFERRED]
-  src/frontend/src/pages/AssignmentsPage.tsx → src/frontend/src/services/listas.service.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (287 total, 49 thin omitted)
+## Communities (295 total, 51 thin omitted)
 
 ### Community 0 - "PrismaService"
 Cohesion: 0.04
-Nodes (46): bcrypt, @prisma/client, loadEnv(), main(), verifyAfter(), CANONICAL_ROLE_NAMES, ROLE_DESCRIPTIONS, ROLE_PERMISSIONS (+38 more)
+Nodes (55): mockAcl, mockAssignment, mockAudit, mockPrisma, AuditContext, AuditService, COMERCIAL_ENTITIES, ENTITY_CANONICAL_MAP (+47 more)
 
-### Community 2 - "ListaDetailPage.tsx"
-Cohesion: 0.07
-Nodes (52): hasPersistedImportState(), formatDate(), AccesosTab(), AuditoriaTab(), CONFIG_CURRENCIES, ConfiguracionTab(), CURRENCIES, ListaDetailPage() (+44 more)
+### Community 2 - "ListasPage.tsx"
+Cohesion: 0.09
+Nodes (40): ProductPagination(), ProductPaginationProps, hasPersistedImportState(), formatDate(), AccesosTab(), AuditoriaTab(), ListaDetailPage(), countBucket() (+32 more)
 
 ### Community 3 - "backend/package.json"
-Cohesion: 0.05
-Nodes (43): Catch, cookie-parser, helmet, jest, @neondatabase/serverless, @nestjs/cli, @nestjs/schedule, @nestjs/schematics (+35 more)
-
-### Community 4 - "@nestjs/swagger"
 Cohesion: 0.06
-Nodes (44): class-transformer, class-validator, @nestjs/swagger, BulkSchedulePublicationDto, ApiProperty, ArrayMaxSize, ArrayMinSize, IsArray (+36 more)
+Nodes (32): jest, @neondatabase/serverless, @nestjs/cli, @nestjs/schedule, @nestjs/schematics, passport, prisma, @prisma/adapter-neon (+24 more)
 
-### Community 5 - "acl.service.ts"
-Cohesion: 0.08
-Nodes (26): ASSIGNMENT_LEVELS, LEVEL_RANK, ROLE_ASSIGNMENT_PREFIX, AssignmentFixture, mockPrisma, ASSIGNMENT_LEVELS, ASSIGNMENT_RESOURCE_TYPES, CreateAssignmentDto (+18 more)
+### Community 4 - "products.service.ts"
+Cohesion: 0.06
+Nodes (44): BulkSchedulePublicationDto, ApiProperty, ArrayMaxSize, ArrayMinSize, IsArray, IsISO8601, IsNotEmpty, DeleteProductDto (+36 more)
+
+### Community 5 - "useToast.tsx"
+Cohesion: 0.25
+Nodes (4): Toast, ToastContext, ToastContextValue, ToastProvider()
 
 ### Community 6 - "ProductSpreadsheetTable.tsx"
-Cohesion: 0.05
-Nodes (66): ProductPagination(), ProductPaginationProps, MoveCategoryModal(), MoveCategoryModalProps, MoveCategoryTarget, ProductCard(), ProductCardProps, PriceRow (+58 more)
+Cohesion: 0.06
+Nodes (54): ProductCard(), ProductCardProps, ProductFormModalProps, AccessIndicatorProps, ProductIndicators(), ProductIndicatorsProps, PublishBadge(), StockBadge() (+46 more)
 
 ### Community 7 - "react"
-Cohesion: 0.05
-Nodes (51): react, Alert(), AlertProps, AlertVariant, variantClasses, variantIcons, Button(), ButtonProps (+43 more)
+Cohesion: 0.06
+Nodes (34): react, Badge(), BadgeProps, BadgeVariant, variantClasses, ButtonProps, ButtonVariant, variantClasses (+26 more)
 
 ### Community 8 - "@nestjs/common"
-Cohesion: 0.08
-Nodes (43): @nestjs/common, AppModule, Module, AclModule, Module, Public(), AssignmentsModule, Module (+35 more)
+Cohesion: 0.11
+Nodes (33): @nestjs/common, AclModule, Module, AssignmentsModule, Module, AuditModule, Module, BrandsModule (+25 more)
 
 ### Community 9 - "CommercialSettingsPage.tsx"
-Cohesion: 0.07
-Nodes (46): BulkPriceUpdateModal(), BulkPriceUpdateModalProps, AUDIT_ACTIONS, AUDIT_ENTITIES, AuditLogEntry, AuditResponse, BrandModal(), BrandsTab() (+38 more)
+Cohesion: 0.05
+Nodes (63): react-router-dom, App(), ProtectedRoute(), AdminLayout(), COMMERCIAL_TABS, CommercialLayout(), COMMERCIAL_ITEMS, Header() (+55 more)
 
 ### Community 10 - "CurrentUser"
-Cohesion: 0.20
-Nodes (20): CurrentUser, ListasPublicationController, ProductsController, ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse (+12 more)
+Cohesion: 0.17
+Nodes (23): CurrentUser, ListasPublicationController, ProductsController, ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiQuery (+15 more)
 
 ### Community 11 - "CategoriesService"
 Cohesion: 0.06
@@ -368,9 +376,9 @@ Nodes (30): CategoriesController, ApiBearerAuth, ApiOperation, ApiResponse, ApiT
 Cohesion: 0.06
 Nodes (34): CreateUserDto, ApiProperty, ApiPropertyOptional, IsArray, IsBoolean, IsEmail, IsOptional, IsString (+26 more)
 
-### Community 13 - "UsersPage.tsx"
-Cohesion: 0.15
-Nodes (20): ROLES, ACCESS_MATRIX, groupedPermissionLabels(), matrixHasAccess(), MatrixRule, PERMISSION_GROUPS, RoleModal(), RolesManagementSection() (+12 more)
+### Community 13 - "Dashboard.tsx"
+Cohesion: 0.06
+Nodes (44): CAROUSEL_HEIGHT_MD, CAROUSEL_INTERVAL, TRENDING_PRODUCTS_LIMIT, canViewListas(), hasAnyRole(), ALL_ROLES, canViewDashboardSection(), DASHBOARD_SECTION_ROLES (+36 more)
 
 ### Community 15 - "Roles"
 Cohesion: 0.19
@@ -378,99 +386,91 @@ Nodes (18): Roles(), SuppliersController, ApiBearerAuth, ApiOperation, ApiQuery,
 
 ### Community 16 - "ProductsService"
 Cohesion: 0.10
-Nodes (4): Cron, LifecycleStatus, ProductsService, Injectable
+Nodes (3): Cron, ProductsService, Injectable
 
 ### Community 17 - "auth.service.spec.ts"
-Cohesion: 0.10
-Nodes (23): @nestjs/config, @nestjs/jwt, @nestjs/passport, @nestjs/testing, @nestjs/throttler, passport-jwt, supertest, mockAuthService (+15 more)
+Cohesion: 0.09
+Nodes (24): bcrypt, @nestjs/config, @nestjs/jwt, @nestjs/passport, @nestjs/testing, @nestjs/throttler, passport-jwt, supertest (+16 more)
 
 ### Community 18 - "BrandsController"
-Cohesion: 0.15
-Nodes (11): BrandsController, ApiBearerAuth, ApiOperation, ApiTags, Body, Controller, Delete, Get (+3 more)
+Cohesion: 0.07
+Nodes (27): BrandsController, ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags, Body (+19 more)
 
 ### Community 19 - "RolesController"
 Cohesion: 0.07
 Nodes (28): CreateRoleDto, ApiProperty, ApiPropertyOptional, IsArray, IsOptional, IsString, MinLength, ApiPropertyOptional (+20 more)
 
 ### Community 20 - "PurchaseOrdersPage.tsx"
-Cohesion: 0.10
-Nodes (31): CreatePurchaseOrderModal(), PO_STATUS_LABELS, PO_TRANSITIONS, PoBadge(), poBadgeClasses(), PurchaseOrderDetailModal(), PurchaseOrdersPage(), useProductsForPo() (+23 more)
+Cohesion: 0.09
+Nodes (33): Alert(), AlertProps, AlertVariant, variantClasses, variantIcons, CreatePurchaseOrderModal(), PO_STATUS_LABELS, PO_TRANSITIONS (+25 more)
 
 ### Community 21 - "CreateProductDto"
-Cohesion: 0.05
-Nodes (43): CreateProductDto, ApiProperty, ApiPropertyOptional, IsArray, IsBoolean, IsIn, IsISO8601, IsObject (+35 more)
+Cohesion: 0.07
+Nodes (34): class-transformer, CreateProductDto, ApiProperty, ApiPropertyOptional, IsArray, IsBoolean, IsIn, IsISO8601 (+26 more)
 
 ### Community 22 - "SuppliersPage.tsx"
-Cohesion: 0.08
-Nodes (41): ImportStepConfirm(), baseNameFromFile(), buildUniqueCode(), CURRENCIES, ImportStepDocumentar(), slugify(), SupplierModal(), SupplierModalProps (+33 more)
+Cohesion: 0.11
+Nodes (30): baseNameFromFile(), buildUniqueCode(), CURRENCIES, ImportStepDocumentar(), slugify(), SupplierModal(), SupplierModalProps, canDeleteSuppliers() (+22 more)
 
 ### Community 23 - "AssignmentsPage.tsx"
-Cohesion: 0.13
-Nodes (28): PRODUCT_ACCESS_LEVELS, ProductAccessModal(), ProductAccessModalProps, assignmentErrorFallback(), AssignmentFormModal(), AssignmentsPage(), LEVEL_LABELS, LEVEL_STYLES (+20 more)
+Cohesion: 0.11
+Nodes (31): Button(), PRODUCT_ACCESS_LEVELS, ProductAccessModal(), ProductAccessModalProps, canManageListaAccess(), assignmentErrorFallback(), AssignmentFormModal(), AssignmentsPage() (+23 more)
 
 ### Community 24 - "ListasController"
 Cohesion: 0.19
 Nodes (17): Permissions(), ListasController, ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags, Body (+9 more)
 
 ### Community 25 - "ExecuteImportDto"
-Cohesion: 0.08
+Cohesion: 0.07
 Nodes (40): Req, ColumnMappingDto, ExecuteImportDto, PreviewImportDto, SectionDecisionDto, ApiProperty, ApiPropertyOptional, IsArray (+32 more)
 
 ### Community 26 - "text-normalizer.ts"
-Cohesion: 0.18
-Nodes (12): capitalizeFirst(), deriveNameFromDescription(), escapeRegExp(), normalizeBrandName(), normalizeCategoryName(), normalizeDescription(), normalizeProductName(), normalizeSku() (+4 more)
+Cohesion: 0.15
+Nodes (14): isNumericLike(), ParseNumericOptions, parseNumericValue(), capitalizeFirst(), deriveNameFromDescription(), escapeRegExp(), normalizeBrandName(), normalizeCategoryName() (+6 more)
 
-### Community 27 - "suppliers.controller.ts"
-Cohesion: 0.17
-Nodes (11): @nestjs/core, @nestjs/platform-express, reflect-metadata, IS_PUBLIC_KEY, ROLES_KEY, RolesGuard, Injectable, JwtAuthGuard (+3 more)
+### Community 27 - "listas.controller.ts"
+Cohesion: 0.19
+Nodes (8): @nestjs/core, @nestjs/platform-express, reflect-metadata, ROLES_KEY, RolesGuard, Injectable, JwtAuthGuard, Injectable
 
-### Community 28 - "listas.service.spec.ts"
-Cohesion: 0.05
-Nodes (42): COMERCIAL_ENTITIES, LOG, mockPrisma, mockCategory, mockCategoryWithRelations, mockChildCategory, mockPrisma, ADMIN (+34 more)
+### Community 28 - "acl.service.ts"
+Cohesion: 0.09
+Nodes (22): ASSIGNMENT_LEVELS, LEVEL_RANK, ROLE_ASSIGNMENT_PREFIX, AssignmentFixture, mockPrisma, ASSIGNMENT_LEVELS, ASSIGNMENT_RESOURCE_TYPES, ADMIN (+14 more)
 
 ### Community 29 - "AssignmentsController"
-Cohesion: 0.17
-Nodes (15): AssignmentsController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, Delete (+7 more)
+Cohesion: 0.09
+Nodes (28): AssignmentsController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, Delete (+20 more)
 
 ### Community 30 - "enrich_hikvision_catalog.py"
 Cohesion: 0.09
 Nodes (50): BeautifulSoup, Logger, Namespace, build_parser(), classify_specs(), detect_sku_column(), download_document(), download_image() (+42 more)
 
 ### Community 31 - "batch-executor.service.ts"
-Cohesion: 0.18
-Nodes (8): generateSlug(), BatchError, BatchExecutionResult, BatchConfig, BatchExecutorService, DEFAULT_BATCH_CONFIG, SectionDecisionMap, Injectable
+Cohesion: 0.14
+Nodes (9): generateSlug(), BatchError, BatchExecutionResult, NormalizedRow, BatchConfig, BatchExecutorService, DEFAULT_BATCH_CONFIG, SectionDecisionMap (+1 more)
 
-### Community 32 - "DashboardService"
-Cohesion: 0.13
-Nodes (11): DashboardController, ApiBearerAuth, ApiOperation, ApiQuery, ApiTags, Controller, Get, Query (+3 more)
-
-### Community 33 - "Dashboard.tsx"
-Cohesion: 0.17
-Nodes (10): CAROUSEL_HEIGHT_MD, CAROUSEL_INTERVAL, TRENDING_PRODUCTS_LIMIT, BannerItem, defaultBanners, formatNumber(), KpiCard(), KpiItem (+2 more)
-
-### Community 34 - "CommercialWorkspace.tsx"
-Cohesion: 0.18
-Nodes (13): ACTION_LABEL, ActivityRow(), CommercialWorkspace(), CommercialWorkspaceSkeleton(), dateFormatter, ENTITY_LABEL, formatDate(), formatNumber() (+5 more)
-
-### Community 35 - "import.service.ts"
+### Community 32 - "@nestjs/swagger"
 Cohesion: 0.11
-Nodes (12): ImportService, Injectable, MappingPreset, NormalizedRow, PipelineStage, CurrentPriceResult, ImportExecutionResult, ImportPreviewResult (+4 more)
+Nodes (21): class-validator, @nestjs/swagger, ApiPropertyOptional, IsBoolean, IsOptional, IsString, UpdateProductImageDto, STOCK_ADJUSTMENT_TYPES (+13 more)
 
-### Community 36 - "@tanstack/react-query"
-Cohesion: 0.15
-Nodes (21): @tanstack/react-query, PRICE_FIELDS, PriceComparisonSection(), CurrentPriceInfo, CurrentPriceResponseData, fetchCurrentPrices(), usePriceComparison(), computeDeltaPercent() (+13 more)
+### Community 34 - "PricesController"
+Cohesion: 0.18
+Nodes (14): PricesController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, Delete (+6 more)
 
-### Community 37 - "TransitionProductDto"
-Cohesion: 0.20
-Nodes (8): TransitionProductDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsIn, IsISO8601, IsOptional, IsString
+### Community 35 - "ImportService"
+Cohesion: 0.12
+Nodes (11): ImportService, Injectable, MappingPreset, PipelineStage, CurrentPriceResult, ImportExecutionResult, ImportPreviewResult, ImportProgressResult (+3 more)
+
+### Community 36 - "api.ts"
+Cohesion: 0.07
+Nodes (45): @tanstack/react-query, ImportStepConfirm(), PRICE_FIELDS, PriceComparisonSection(), ImportStepHeaders(), ImportStepMapping(), formatDuration(), ImportStepResult() (+37 more)
 
 ### Community 38 - ".login"
-Cohesion: 0.11
-Nodes (18): AuthController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, Get (+10 more)
+Cohesion: 0.10
+Nodes (20): AuthController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, Get (+12 more)
 
-### Community 39 - "row-normalizer.service.ts"
-Cohesion: 0.14
-Nodes (15): isNumericLike(), ParseNumericOptions, parseNumericValue(), ColumnMapping, SystemField, ImportContext, IvaMode, PipelineError (+7 more)
+### Community 39 - "import.service.ts"
+Cohesion: 0.17
+Nodes (17): normalizeSku(), ColumnMapping, ColumnMappingEntry, HeaderDetectionConfig, HeaderDetectionResult, SystemField, ImportContext, IvaMode (+9 more)
 
 ### Community 40 - "dependencies"
 Cohesion: 0.08
@@ -484,17 +484,17 @@ Nodes (24): devDependencies, eslint, jest, @nestjs/cli, @nestjs/schematics, @nes
 Cohesion: 0.12
 Nodes (22): Admin Bootstrap Script, Admin Comercial, Admin Comercial, Auth Module, Consulta, Consulta, JWT + bcrypt, JwtAuthGuard (+14 more)
 
-### Community 43 - "services/dashboard.service.ts"
+### Community 43 - "main.ts"
+Cohesion: 0.14
+Nodes (13): Catch, cookie-parser, helmet, rxjs, AppModule, Module, HttpExceptionFilter, Response (+5 more)
+
+### Community 44 - "SearchFilterBar.tsx"
 Cohesion: 0.19
-Nodes (12): AdminDashboard(), DashboardListResult, fetchActiveUsers(), fetchAuditEventsTotal(), fetchLatestProducts(), fetchPendingPublication(), MyActivityEntry, MyListaSummary (+4 more)
+Nodes (9): SearchFilterBar(), SearchFilterBarProps, SearchFilterChip, SIDEBAR_ACCORDIONS, SidebarAccordionId, SidebarFilterSection, viewportIsDesktop(), AuditPage() (+1 more)
 
-### Community 44 - "App.tsx"
-Cohesion: 0.06
-Nodes (27): react-router-dom, App(), SearchFilterBar(), SearchFilterBarProps, SearchFilterChip, SIDEBAR_ACCORDIONS, SidebarAccordionId, SidebarFilterSection (+19 more)
-
-### Community 46 - "import.store.ts"
-Cohesion: 0.06
-Nodes (49): ALL_FIELDS, REQUIRED_FIELDS, SYSTEM_FIELD_LABELS, FIXED_VALUE_FIELDS, FIXED_VALUE_PLACEHOLDERS, REQUIRED_FIELDS, getStepState(), ImportStepper() (+41 more)
+### Community 46 - "ImportStepHeaders.tsx"
+Cohesion: 0.25
+Nodes (8): ALL_FIELDS, REQUIRED_FIELDS, SYSTEM_FIELD_LABELS, SystemField, detectHeaderMappings(), FIELD_SYNONYMS, HeaderMatch, normalizeHeader()
 
 ### Community 47 - "RemapperApp"
 Cohesion: 0.09
@@ -513,20 +513,20 @@ Cohesion: 0.11
 Nodes (18): compilerOptions, allowImportingTsExtensions, isolatedModules, jsx, lib, module, moduleDetection, moduleResolution (+10 more)
 
 ### Community 51 - "AclService"
-Cohesion: 0.14
+Cohesion: 0.13
 Nodes (5): AclService, normalizeLevel(), Injectable, AssignmentsService, Injectable
 
 ### Community 52 - "frontend/package.json"
 Cohesion: 0.11
-Nodes (18): agentation, autoprefixer, axios, @base-ui/react, postcss, react-dom, react-hook-form, react-router (+10 more)
+Nodes (18): agentation, autoprefixer, axios, postcss, react-dom, react-hook-form, react-router, tailwindcss (+10 more)
 
 ### Community 53 - "Tanda 1C — Módulo suppliers: stock avanzado, PO flujo completo, panel compras, proveedor↔producto, reportes (2026-08-15)"
 Cohesion: 0.06
 Nodes (34): Auditoría (checklist 51/49/73), Cambios realizados, Cambios realizados, Cierre FSM de ciclo de vida de Product (2026-08-20), Contrato (fuente de verdad), Contratos confirmados, Dashboard.tsx Mejoras (2026-07-31), Decisiones sin migración (importante) (+26 more)
 
-### Community 54 - "brands.service.ts"
-Cohesion: 0.22
-Nodes (8): ALLOWED_BRAND_IMAGE_MIMETYPES, ApiPropertyOptional, IsBoolean, IsOptional, IsString, MinLength, UpdateBrandDto, FILES_URL_PREFIX
+### Community 54 - "ImportStepUpload.tsx"
+Cohesion: 0.27
+Nodes (8): ACCEPTED_EXTENSIONS, ACCEPTED_TYPES, formatFileSize(), ImportStepUpload(), isValidFileType(), ParsedFile, useFileParser(), useImportPreview()
 
 ### Community 55 - "Diseño técnico — `Lista` como raíz padre de `Producto`"
 Cohesion: 0.06
@@ -545,16 +545,12 @@ Cohesion: 0.20
 Nodes (10): Cookie Parser, DTOs y Validación, Helmet, Jest, NestJS, Rate Limiting, Supertest, Swagger/OpenAPI (+2 more)
 
 ### Community 59 - "ProductDetailPage.tsx"
-Cohesion: 0.04
-Nodes (76): BulkDeleteModal(), BulkDeleteModalProps, DeleteResult, Phase, deserializeSpecFields(), serializeSpecFields(), SpecEditor(), SpecEditorProps (+68 more)
+Cohesion: 0.06
+Nodes (62): BulkDeleteModal(), BulkDeleteModalProps, DeleteResult, Phase, asMatrixEntries(), MatrixEntry, useAccessMatrix(), useProductMutations() (+54 more)
 
 ### Community 60 - "devDependencies"
 Cohesion: 0.12
 Nodes (16): devDependencies, agentation, autoprefixer, eslint, @eslint/js, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals (+8 more)
-
-### Community 61 - "HeaderDetectorService"
-Cohesion: 0.21
-Nodes (6): ColumnMappingEntry, HeaderDetectionConfig, HeaderDetectionResult, FIELD_SYNONYMS, HeaderDetectorService, Injectable
 
 ### Community 62 - "app.py"
 Cohesion: 0.12
@@ -564,9 +560,9 @@ Nodes (23): analyze_file(), ColumnInfo, _copy_to_temp(), _detect_header_row(), _
 Cohesion: 0.15
 Nodes (13): scripts, build, db:bootstrap:dev-admin, db:bootstrap:dev-rbac, db:generate, db:migrate, db:seed, db:studio (+5 more)
 
-### Community 64 - "CreateBrandDto"
-Cohesion: 0.22
-Nodes (8): Post, CreateBrandDto, ApiProperty, ApiPropertyOptional, IsBoolean, IsOptional, IsString, MinLength
+### Community 64 - "ListaDetailPage.tsx"
+Cohesion: 0.07
+Nodes (38): Modal(), ModalProps, sizeClasses, BulkPriceUpdateModal(), BulkPriceUpdateModalProps, MoveCategoryModal(), MoveCategoryModalProps, MoveCategoryTarget (+30 more)
 
 ### Community 65 - "AclService"
 Cohesion: 0.17
@@ -577,19 +573,19 @@ Cohesion: 0.17
 Nodes (12): CreateSupplierDto, ApiProperty, ApiPropertyOptional, IsIn, IsNumber, IsObject, IsOptional, IsString (+4 more)
 
 ### Community 67 - "Grupo Security Office"
-Cohesion: 0.12
-Nodes (17): JWT Authentication, Backend (NestJS), Brands Module, PostgreSQL, File Storage Migration, Files Module, Frontend (React), GitHub Actions (+9 more)
+Cohesion: 0.20
+Nodes (11): Brands Module, File Storage Migration, Files Module, GitHub Actions, graphify, Grupo Security Office, Neon Driver Adapter, Playwright (+3 more)
 
 ### Community 68 - "React"
 Cohesion: 0.13
 Nodes (15): Dashboard Module, Dashboard.tsx Mejoras, Dashboard Trending Products, Frontend Components, React, React Query (TanStack Query), Tailwind CSS, TanStack Query (+7 more)
 
 ### Community 69 - "FilesService"
-Cohesion: 0.14
-Nodes (10): FilesController, ApiOperation, ApiResponse, ApiTags, Controller, Get, Param, Res (+2 more)
+Cohesion: 0.06
+Nodes (28): IS_PUBLIC_KEY, Public(), ALLOWED_BRAND_IMAGE_MIMETYPES, mockBrand, mockBrandWithCount, mockBrandWithProducts, mockFiles, mockPrisma (+20 more)
 
-### Community 70 - "listas/listas.service.ts"
-Cohesion: 0.10
+### Community 70 - "CreateListaDto"
+Cohesion: 0.09
 Nodes (21): CreateListaDto, LISTA_CURRENCIES, ApiProperty, ApiPropertyOptional, IsBoolean, IsEnum, IsISO8601, IsOptional (+13 more)
 
 ### Community 71 - "BulkTransitionProductDto"
@@ -600,13 +596,13 @@ Nodes (11): BulkTransitionProductDto, ApiProperty, ApiPropertyOptional, ArrayMax
 Cohesion: 0.11
 Nodes (20): build_mapping_from_analysis(), ColumnMapping, MappingConfig, _match_field_by_synonym(), _normalize_for_match(), Any, Path, mapper/mapping.py ----------------- Module responsible for loading, validating,… (+12 more)
 
-### Community 73 - "suppliers/suppliers.service.ts"
-Cohesion: 0.04
-Nodes (60): CreateEvaluationDto, ApiProperty, ApiPropertyOptional, IsISO8601, IsNumber, IsObject, IsOptional, IsString (+52 more)
+### Community 73 - "CreateEvaluationDto"
+Cohesion: 0.09
+Nodes (20): CreateEvaluationDto, ApiProperty, ApiPropertyOptional, IsISO8601, IsNumber, IsObject, IsOptional, IsString (+12 more)
 
-### Community 74 - "roles.ts"
-Cohesion: 0.22
-Nodes (8): canViewListas(), hasAnyRole(), ALL_ROLES, canViewDashboardSection(), DASHBOARD_SECTION_ROLES, DASHBOARD_SECTIONS, DashboardSection, RoleName
+### Community 74 - "UpdateSupplierDto"
+Cohesion: 0.18
+Nodes (11): ApiPropertyOptional, IsIn, IsNumber, IsObject, IsOptional, IsString, Max, MaxLength (+3 more)
 
 ### Community 75 - "Suppliers Module"
 Cohesion: 0.24
@@ -617,12 +613,12 @@ Cohesion: 0.22
 Nodes (10): Catalog (legacy), D1: Lista is new entity, Incremento 0: Lista entity root, LISTA-GENERAL (default), Lista (entity root), ListaDetailPage, Price, PriceList (tier/tariff) (+2 more)
 
 ### Community 77 - "permissions.guard.ts"
-Cohesion: 0.28
+Cohesion: 0.27
 Nodes (5): PERMISSIONS_KEY, LEGACY_PERMISSION_ALIASES, PermissionsGuard, resolveGrantedPermissions(), Injectable
 
 ### Community 78 - "dependencies"
-Cohesion: 0.18
-Nodes (11): dependencies, axios, @base-ui/react, react, react-dom, react-hook-form, react-router, react-router-dom (+3 more)
+Cohesion: 0.20
+Nodes (10): dependencies, axios, react, react-dom, react-hook-form, react-router, react-router-dom, @tanstack/react-query (+2 more)
 
 ### Community 79 - "lifecycleStatus"
 Cohesion: 0.22
@@ -640,29 +636,29 @@ Nodes (7): ws, getWsUrl(), http, run(), extractAX(), send(), WebSocket
 Cohesion: 0.08
 Nodes (24): 1. Sanitización Multi-Capa, 2. Detección Automática de Fila Header, 3. Campo `__extra` para Columnas No Reconocidas, 4. `extraAttributes Json?` en Product, ADR-001: Arquitectura Híbrida de Importación Masiva, Archivos Relacionados, Atributos extra guardados (ejemplo Hikvision), Backend (10 archivos modificados) (+16 more)
 
-### Community 83 - "PricesService"
-Cohesion: 0.05
-Nodes (42): CreatePriceDto, ApiProperty, ApiPropertyOptional, IsDateString, IsNumber, IsOptional, IsString, IsUUID (+34 more)
+### Community 83 - "prices/prices.service.ts"
+Cohesion: 0.07
+Nodes (26): CreatePriceDto, ApiProperty, ApiPropertyOptional, IsDateString, IsNumber, IsOptional, IsString, IsUUID (+18 more)
 
 ### Community 84 - "ProductQueryDto"
-Cohesion: 0.22
+Cohesion: 0.20
 Nodes (9): ProductQueryDto, ApiPropertyOptional, IsBoolean, IsNumber, IsOptional, IsString, Min, Type (+1 more)
 
 ### Community 85 - "excel.helper.ts"
 Cohesion: 0.42
 Nodes (7): createCorruptedBuffer(), createCsvBuffer(), createEmptyExcelBuffer(), createExcelBuffer(), createHikvisionMockExcel(), createHikvisionMockRows(), HIKVISION_MOCK_HEADERS
 
-### Community 86 - "useAuthStore"
-Cohesion: 0.25
-Nodes (7): zustand, ProtectedRoute(), Dashboard(), fetchMyWorkspace(), AuthState, useAuthStore, User
+### Community 86 - "prices.service.spec.ts"
+Cohesion: 0.20
+Nodes (8): mockAcl, mockAudit, mockPrice, mockPriceList, mockPriceListWithCount, mockPriceListWithPrices, mockPriceWithRelations, mockPrisma
 
-### Community 87 - ".uploadLogo"
-Cohesion: 0.25
-Nodes (6): ApiBody, ApiConsumes, ApiResponse, Patch, UploadedFile, UseInterceptors
+### Community 87 - "CreateStockDto"
+Cohesion: 0.22
+Nodes (9): CreateStockDto, ApiProperty, ApiPropertyOptional, IsIn, IsInt, IsOptional, IsString, MaxLength (+1 more)
 
 ### Community 88 - "Arquitectura Técnica - Grupo Security"
-Cohesion: 0.09
-Nodes (23): 10.1 Variables de Entorno, 10.2 Scripts npm, 10. Configuración del Entorno, 11.1 Seguridad Mínima Obligatoria (Fase 1), 11.2 Controles de Hardening (Post-Fase 1), 11.3 Cookie HttpOnly - Configuración, 11.4 Auditoría, 11. Seguridad (+15 more)
+Cohesion: 0.20
+Nodes (10): 12. Integración ERP (Yéminus), 13. Próximos Pasos, 14. Decisiones Técnicas, 1. Resumen Ejecutivo, 2. Stack Tecnológico, 3. Arquitectura del Sistema, 4. Estructura del Proyecto, 5. Modelo de Datos (Prisma Schema) (+2 more)
 
 ### Community 89 - "User"
 Cohesion: 0.32
@@ -672,9 +668,13 @@ Nodes (8): Assignment (ACL), Purchase Order status, PurchaseOrder (PO), Role, Su
 Cohesion: 0.32
 Nodes (7): LEGACY_ROLE_MAPPING, main(), migrateLegacyRoles(), prisma, ROLE_DESCRIPTIONS, ROLE_PERMISSIONS, upsertRole()
 
-### Community 92 - "brands.service.spec.ts"
-Cohesion: 0.33
-Nodes (5): mockBrand, mockBrandWithCount, mockBrandWithProducts, mockFiles, mockPrisma
+### Community 91 - "UpdateProductDto"
+Cohesion: 0.20
+Nodes (10): ApiPropertyOptional, IsArray, IsObject, IsOptional, IsString, IsUUID, MinLength, Type (+2 more)
+
+### Community 92 - "UpdateStockDto"
+Cohesion: 0.25
+Nodes (8): ApiPropertyOptional, IsIn, IsInt, IsOptional, IsString, MaxLength, Min, UpdateStockDto
 
 ### Community 93 - "Import Module"
 Cohesion: 0.29
@@ -700,13 +700,13 @@ Nodes (7): expectTransition(), mkProduct(), mLegacy(), mockAcl, mockAudit, mockF
 Cohesion: 0.29
 Nodes (6): HikvisionAssetCandidate, HikvisionAssetType, HikvisionCatalogSource, HikvisionLookupResult, HikvisionLookupStatus, HikvisionProductCandidate
 
-### Community 99 - ".findAll"
-Cohesion: 0.53
-Nodes (3): ApiQuery, Get, Query
+### Community 99 - "useImportExecution.ts"
+Cohesion: 0.31
+Nodes (8): ImportStepExecution(), ImportStepExecutionProps, ExecuteParams, isSectionsNotWhitelisted(), useImportExecution(), ImportExecutionResult, ImportSectionDecision, buildImportSectionDecisions()
 
 ### Community 100 - "Agent Work Log"
-Cohesion: 0.09
-Nodes (21): Agent Work Log, [BE-LINT-FIX-001] — Resolve no-empty-object-type ESLint errors (products), [BE-RBAC-001] — Make granular global permissions effective (PermissionsGuard + seed + @Permissions), [CHORE-OBSIDIAN-IGNORE-001] — Ignore local Obsidian configuration so .obsidian/graph.json does not appear as untracked, [COORD-RECONCILE-001] — Reconcile Grupo Security Office multi-agent identity and OpenCode configuration, Entry template, [FE-COMMERCIAL-NAV-001] - Close and commit commercial navigation Phase A, [FE-CONTEXTUAL-PRODUCT-001] — Synchronize and commit contextual product operations (+13 more)
+Cohesion: 0.10
+Nodes (19): Agent Work Log, [BE-LINT-FIX-001] — Resolve no-empty-object-type ESLint errors (products), [BE-RBAC-001] — Make granular global permissions effective (PermissionsGuard + seed + @Permissions), [CHORE-OBSIDIAN-IGNORE-001] — Ignore local Obsidian configuration so .obsidian/graph.json does not appear as untracked, [COORD-RECONCILE-001] — Reconcile Grupo Security Office multi-agent identity and OpenCode configuration, Entry template, [FE-COMMERCIAL-NAV-001] - Close and commit commercial navigation Phase A, [FE-CONTEXTUAL-PRODUCT-001] — Synchronize and commit contextual product operations (+11 more)
 
 ### Community 101 - "Sección 2: Controles de Hardening (Post-MVP, antes de producción)"
 Cohesion: 0.10
@@ -748,9 +748,9 @@ Nodes (5): computeLifecycle(), main(), ORDER, prisma, ProductRow
 Cohesion: 0.40
 Nodes (5): AuditLog, AuditPage, AuditService, Header Navigation, UsersPage
 
-### Community 111 - "Card.tsx"
-Cohesion: 0.33
-Nodes (5): Card(), CardProps, elevatedClasses, paddingClasses, variantClasses
+### Community 111 - "@prisma/client"
+Cohesion: 0.24
+Nodes (7): @prisma/client, loadEnv(), main(), verifyAfter(), CANONICAL_ROLE_NAMES, ROLE_DESCRIPTIONS, ROLE_PERMISSIONS
 
 ### Community 112 - "scripts"
 Cohesion: 0.40
@@ -768,9 +768,9 @@ Nodes (4): Branch Convention, Commit Format, Issue → PR → Merge → Handoff,
 Cohesion: 0.50
 Nodes (3): ./tsconfig.json, exclude, extends
 
-### Community 116 - "Badge.tsx"
-Cohesion: 0.40
-Nodes (4): Badge(), BadgeProps, BadgeVariant, variantClasses
+### Community 116 - "ImportStepMapping.tsx"
+Cohesion: 0.24
+Nodes (7): FIXED_VALUE_FIELDS, FIXED_VALUE_PLACEHOLDERS, REQUIRED_FIELDS, ALL_FIELDS, MappingLine(), MappingLineProps, SYSTEM_FIELD_LABELS
 
 ### Community 117 - "Delegation Contract"
 Cohesion: 0.67
@@ -931,6 +931,14 @@ Nodes (9): Orden Fase 1A — Diseño de esquema (solo documento, no migración),
 ### Community 194 - "import.module.ts"
 Cohesion: 0.31
 Nodes (3): ImportSourceAdapter, ParseResult, ExcelAdapter
+
+### Community 195 - "import.store.ts"
+Cohesion: 0.27
+Nodes (9): IMPORT_WIZARD_STORAGE_KEY, ImportStore, initialMetadata, initialState, NON_RESTORABLE_STEPS, STEPS, ImportListaMetadata, ImportPreviewResult (+1 more)
+
+### Community 196 - "import.types.ts"
+Cohesion: 0.25
+Nodes (6): ColumnMapping, ColumnMappingEntry, ImportColumnValueInfo, ImportSectionAction, MappingPreset, ClientValidationError
 
 ### Community 197 - "Instrucciones globales"
 Cohesion: 0.25
@@ -1220,29 +1228,53 @@ Nodes (4): 5.1 Ubicación de tests, 5.2 Convención de nombres, 5.3 Estructura i
 Cohesion: 0.67
 Nodes (3): 2.1 Diagnóstico al 2026-07-23, 2.2 Riesgo actual, 2. Estado Actual (Línea Base)
 
+### Community 288 - "ImportStepSections.tsx"
+Cohesion: 0.54
+Nodes (6): ImportStepSections(), ImportSection, buildSectionsFromValues(), detectSectionValues(), DistinctValue, normalizeSectionName()
+
+### Community 289 - "ImportStepper.tsx"
+Cohesion: 0.38
+Nodes (6): getStepState(), ImportStepper(), ImportStepperProps, STEP_ORDER, STEPS, ImportStep
+
+### Community 290 - "Backend (NestJS)"
+Cohesion: 0.33
+Nodes (6): JWT Authentication, Backend (NestJS), PostgreSQL, Frontend (React), Prisma Migrations, Prisma ORM
+
 ### Community 291 - "SpecType"
 Cohesion: 0.33
 Nodes (6): SpecType, BOOLEAN, NUMBER, SELECT, TEXT, UNIT
 
+### Community 292 - "11. Seguridad"
+Cohesion: 0.40
+Nodes (5): 11.1 Seguridad Mínima Obligatoria (Fase 1), 11.2 Controles de Hardening (Post-Fase 1), 11.3 Cookie HttpOnly - Configuración, 11.4 Auditoría, 11. Seguridad
+
+### Community 293 - "7. Autenticación y Autorización"
+Cohesion: 0.40
+Nodes (5): 7.1 Flujo de Login, 7.2 JWT Payload, 7.3 Roles y Permisos, 7.4 Guards (NestJS), 7. Autenticación y Autorización
+
+### Community 294 - "10. Configuración del Entorno"
+Cohesion: 0.67
+Nodes (3): 10.1 Variables de Entorno, 10.2 Scripts npm, 10. Configuración del Entorno
+
 ## Knowledge Gaps
-- **1361 isolated node(s):** `$schema`, `instructions`, `type`, `command`, `enabled` (+1356 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2118 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **49 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **1341 isolated node(s):** `$schema`, `instructions`, `type`, `command`, `enabled` (+1336 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2087 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **51 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `@nestjs/common` connect `@nestjs/common` to `PrismaService`, `backend/package.json`, `@nestjs/swagger`, `acl.service.ts`, `auth.service.spec.ts`, `suppliers.controller.ts`, `listas.service.spec.ts`, `batch-executor.service.ts`, `import.service.ts`, `row-normalizer.service.ts`, `brands.service.ts`, `HeaderDetectorService`, `import.module.ts`, `listas/listas.service.ts`, `suppliers/suppliers.service.ts`, `permissions.guard.ts`, `PricesService`, `brands.service.spec.ts`, `transition.service.spec.ts`?**
-  _High betweenness centrality (0.092) - this node is a cross-community bridge._
-- **Why does `Roles()` connect `Roles` to `CreateBrandDto`, `DashboardService`, `.findAll`, `@nestjs/swagger`, `CurrentUser`, `CategoriesService`, `CreateUserDto`, `AuditController`, `BrandsController`, `PricesService`, `RolesController`, `.uploadLogo`, `ListasController`, `ExecuteImportDto`, `suppliers.controller.ts`, `AssignmentsController`?**
-  _High betweenness centrality (0.050) - this node is a cross-community bridge._
-- **Why does `Arquitectura Backend — Grupo Security Office` connect `Arquitectura Backend — Grupo Security Office` to `9. Autorización RBAC`, `12. Alineación Frontend ↔ Backend ↔ Base de Datos`, `13. Seguridad`, `15. Puntos de Extensión para ERP Yéminus`, `11. Contratos API`, `00-INDEX.md`, `4.2 Descripción de cada módulo`, `10. Auditoría`, `5. Flujo Controller → Service → Prisma`, `6. DTOs y Validación`, `7. Estrategia de Errores`, `8. Autenticación JWT`?**
-  _High betweenness centrality (0.033) - this node is a cross-community bridge._
+- **Why does `@nestjs/common` connect `@nestjs/common` to `PrismaService`, `transition.service.spec.ts`, `import.module.ts`, `backend/package.json`, `products.service.ts`, `FilesService`, `@nestjs/swagger`, `import.service.ts`, `main.ts`, `permissions.guard.ts`, `auth.service.spec.ts`, `prices/prices.service.ts`, `RolesController`, `prices.service.spec.ts`, `listas.controller.ts`, `acl.service.ts`, `batch-executor.service.ts`?**
+  _High betweenness centrality (0.084) - this node is a cross-community bridge._
+- **Why does `Roles()` connect `Roles` to `@nestjs/swagger`, `PricesController`, `products.service.ts`, `CurrentUser`, `CategoriesService`, `CreateUserDto`, `AuditController`, `BrandsController`, `RolesController`, `ListasController`, `ExecuteImportDto`, `listas.controller.ts`, `AssignmentsController`?**
+  _High betweenness centrality (0.064) - this node is a cross-community bridge._
+- **Why does `devDependencies` connect `devDependencies` to `backend/package.json`?**
+  _High betweenness centrality (0.026) - this node is a cross-community bridge._
 - **What connects `$schema`, `instructions`, `type` to the rest of the system?**
-  _1361 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _1341 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `PrismaService` be split into smaller, more focused modules?**
-  _Cohesion score 0.03861927546138073 - nodes in this community are weakly interconnected._
-- **Should `ListaDetailPage.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.07049180327868852 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.03830439223697651 - nodes in this community are weakly interconnected._
+- **Should `ListasPage.tsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.08787878787878788 - nodes in this community are weakly interconnected._
 - **Should `backend/package.json` be split into smaller, more focused modules?**
-  _Cohesion score 0.04524886877828054 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.058823529411764705 - nodes in this community are weakly interconnected._
