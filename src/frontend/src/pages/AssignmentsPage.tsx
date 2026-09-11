@@ -28,12 +28,14 @@ const RESOURCE_TYPE_LABELS: Record<AssignmentResourceType, string> = {
 
 const LEVEL_LABELS: Record<AssignmentLevel, string> = {
   view: 'Vista',
+  view_prices: 'Ve precios',
   edit: 'Edición',
   manage: 'Administrar',
 }
 
 const LEVEL_STYLES: Record<AssignmentLevel, string> = {
   view: 'bg-[var(--color-primary-bg-subtle)] text-[var(--color-primary)]',
+  view_prices: 'bg-[var(--color-primary-bg-subtle)] text-[var(--color-primary)]',
   edit: 'bg-[var(--color-warning-bg-subtle)] text-[var(--color-warning)]',
   manage: 'bg-[var(--color-error-bg-subtle)] text-[var(--color-error)]',
 }
