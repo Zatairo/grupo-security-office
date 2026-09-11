@@ -577,3 +577,13 @@
 - `Documentation updated`: work-log.md, memoria de sesión (`push_before_delegating_to_remote_agents.md`) para no repetir el patrón en las etapas E1–E6 restantes del módulo comercial
 - `Handoff to`: Backend sigue trabajando #16 (view_prices en el ACL); cuando cierre, revisar y decidir merge de #29 y del PR de #16 juntos (view_prices no tiene efecto real hasta que ambos estén en main).
 - `Blockers`: NONE
+
+---
+
+## Cierre Etapa E0 — `view_prices` mergeado a main
+
+- `PRs`: #30 (backend, closes #16) y #29 (frontend, closes #17), ambos squash-merged a `main`.
+- `Commits`: `96f145b` (backend), `665d9c1` (frontend).
+- `Verificación previa al merge`: revisión manual del diff de `acl.service.ts` contra la especificación del plan (LEVEL_ORDER derivado, `actionsForLevel` por nombre de nivel) + ejecución independiente de la suite completa en worktree aislado (tsc, lint, build, jest 595/605 — mismo baseline de 10 fallos preexistentes, sin regresión).
+- `Nota`: #29 fue mergeado por la cuenta de la organización antes de que el coordinador ejecutara `gh pr merge` — confirmado sin automatización de por medio (`autoMergeRequest: null`).
+- `Estado`: Etapa E0 del plan de módulo comercial (`no-se-primero-cada-comercial-joyful-whistle.md`) **completa**. Próxima etapa lista para delegar: E1 (jerarquía de usuarios + acotar auditoría del Supervisor), issue #18 ya tiene `ready-for-agent`.
