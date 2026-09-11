@@ -238,7 +238,6 @@ export class ListasService {
     }
 
     await this.validateResponsible(dto.responsibleId);
-    await this.validateSupplier(dto.supplierId);
     this.assertCoherentValidity(dto.validFrom, dto.validUntil);
 
     const created = await this.prisma.lista.create({
@@ -252,7 +251,6 @@ export class ListasService {
         type: dto.type ?? null,
         defaultVisibility: dto.defaultVisibility ?? false,
         responsibleId: dto.responsibleId ?? null,
-        supplierId: dto.supplierId ?? null,
         validFrom: dto.validFrom ? new Date(dto.validFrom) : null,
         validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
         createdById: ctx.userId,
@@ -273,7 +271,6 @@ export class ListasService {
         type: created.type,
         defaultVisibility: created.defaultVisibility,
         responsibleId: created.responsibleId,
-        supplierId: created.supplierId,
         validFrom: created.validFrom,
         validUntil: created.validUntil,
       },
@@ -339,7 +336,6 @@ export class ListasService {
         validFrom: source.validFrom,
         validUntil: source.validUntil,
         responsibleId: source.responsibleId,
-        supplierId: source.supplierId,
         isActive: false,
         createdById: ctx.userId ?? null,
         updatedById: ctx.userId ?? null,
@@ -403,7 +399,6 @@ export class ListasService {
       type: lista.type,
       defaultVisibility: lista.defaultVisibility,
       responsibleId: lista.responsibleId,
-      supplierId: lista.supplierId,
       validFrom: lista.validFrom,
       validUntil: lista.validUntil,
     };
@@ -432,9 +427,6 @@ export class ListasService {
     }
 
     await this.validateResponsible(dto.responsibleId);
-    if (dto.supplierId !== undefined) {
-      await this.validateSupplier(dto.supplierId);
-    }
     this.assertCoherentValidity(dto.validFrom, dto.validUntil);
 
     const data: Record<string, unknown> = {};
@@ -451,7 +443,6 @@ export class ListasService {
     if (dto.type !== undefined) data.type = dto.type;
     if (dto.defaultVisibility !== undefined) data.defaultVisibility = dto.defaultVisibility;
     if (dto.responsibleId !== undefined) data.responsibleId = dto.responsibleId ?? null;
-    if (dto.supplierId !== undefined) data.supplierId = dto.supplierId ?? null;
     if (dto.validFrom !== undefined) data.validFrom = dto.validFrom ? new Date(dto.validFrom) : null;
     if (dto.validUntil !== undefined) data.validUntil = dto.validUntil ? new Date(dto.validUntil) : null;
 
@@ -661,18 +652,6 @@ export class ListasService {
       select: { id: true },
     });
     if (!responsible) throw new NotFoundException('Usuario responsable no encontrado');
-  }
-
-  /**
-   * Valida que el proveedor exista cuando se envía supplierId (no aplica a null).
-   */
-  private async validateSupplier(supplierId?: string | null): Promise<void> {
-    if (!supplierId) return;
-    const supplier = await this.prisma.supplier.findUnique({
-      where: { id: supplierId },
-      select: { id: true },
-    });
-    if (!supplier) throw new NotFoundException('Proveedor no encontrado');
   }
 
 /**

@@ -13,9 +13,6 @@ export const COMERCIAL_ENTITIES = [
   'Category',
   'Brand',
   'Price',
-  'Supplier',
-  'SupplierEvaluation',
-  'PurchaseOrder',
   'Stock',
 ] as const;
 
@@ -37,9 +34,6 @@ const ENTITY_CANONICAL_MAP: Record<string, string> = {
   BRAND: 'Brand',
   PRICE: 'Price',
   PRICELIST: 'PriceList',
-  SUPPLIER: 'Supplier',
-  SUPPLIEREVALUATION: 'SupplierEvaluation',
-  PURCHASEORDER: 'PurchaseOrder',
   STOCK: 'Stock',
   USER: 'User',
   ROLE: 'Role',

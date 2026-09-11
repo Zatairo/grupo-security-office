@@ -33,7 +33,6 @@ export class CreateListaDto {
   })
   @IsUUID()
   @IsOptional()
-  supplierId?: string;
 
   @ApiProperty({ example: 'Lista Hikvision Video' })
   @IsString()

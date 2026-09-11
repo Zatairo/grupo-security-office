@@ -110,8 +110,6 @@ export interface ImportSection {
 export interface ImportListaMetadata {
   mode: 'create' | 'select';
   listaId: string | null;
-  supplierId: string | null;
-  supplierName: string | null;
   name: string;
   codigo: string;
   currency: string;
@@ -132,9 +130,6 @@ export interface ImportWizardState {
   fixedValues: Partial<Record<SystemField, string>>;
   ivaMode: 'with_iva' | 'without_iva' | 'mixed';
   listaId: string | null;
-  /** Proveedor asociado a la Lista destino (si aplica). */
-  supplierId: string | null;
-  supplierName: string | null;
   /** Decisiones de secciones (renombradas/fusionadas/descartadas). */
   sections: ImportSection[];
   /** Metadata de la Lista destino definida en el paso "Documentar". */
