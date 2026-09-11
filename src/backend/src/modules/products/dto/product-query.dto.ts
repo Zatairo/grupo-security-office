@@ -51,4 +51,14 @@ export class ProductQueryDto {
   })
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ type: Boolean, description: 'Incluir solo productos de una Lista Activa (no Inactiva/Archivada)' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (typeof value === 'boolean') return value;
+    return value === 'true';
+  })
+  @IsBoolean()
+  activeListaOnly?: boolean;
 }

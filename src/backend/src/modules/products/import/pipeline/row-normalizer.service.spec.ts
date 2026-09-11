@@ -190,22 +190,24 @@ describe('RowNormalizerService', () => {
       expect(row.description).toBe(DVR_DESCRIPTION);
     });
 
-    it('solo separador no genera nombre válido (name vacío)', () => {
+    it('solo separador no genera nombre válido: usa el SKU como respaldo (nameIsFallback=true)', () => {
       const ctx = makeDescriptionOnlyContext([
         { SKU: 'SKU-SEP', DESCRIPCION: 'TITLE HIKVISION TURBO' },
       ]);
 
       const [row] = service.normalizeAll(ctx);
 
-      expect(row.name).toBe('');
+      expect(row.name).toBe('SKU-SEP');
+      expect(row.nameIsFallback).toBe(true);
     });
 
-    it('sin nombre ni descripción no genera un nombre ficticio (name vacío)', () => {
+    it('sin nombre ni descripción usa el SKU como nombre provisional (nameIsFallback=true)', () => {
       const ctx = makeDescriptionOnlyContext([{ SKU: 'SKU-EMPTY', DESCRIPCION: '' }]);
 
       const [row] = service.normalizeAll(ctx);
 
-      expect(row.name).toBe('');
+      expect(row.name).toBe('SKU-EMPTY');
+      expect(row.nameIsFallback).toBe(true);
     });
 
     it('describe larga sin frase de corte: name <= 120, sin palabra partida y sin SKU', () => {

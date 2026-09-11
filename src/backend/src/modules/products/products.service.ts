@@ -370,10 +370,11 @@ export class ProductsService {
       brandId?: string;
       isVisible?: boolean;
       isActive?: boolean;
+      activeListaOnly?: boolean;
     },
     ctx?: AccessContext,
   ) {
-    const { skip = 0, take = 50, search, categoryId, brandId, isVisible, isActive } = params || {};
+    const { skip = 0, take = 50, search, categoryId, brandId, isVisible, isActive, activeListaOnly } = params || {};
 
     // ACL por Lista (deny-by-default) cuando se provee contexto de usuario.
     // ctx opcional: los llamadores legacy/tests sin ctx conservan el comportamiento abierto.
@@ -395,8 +396,11 @@ export class ProductsService {
       const brandFilter = brandId ? `AND "brandId" = '${brandId}'` : '';
       const isVisibleFilter = isVisible !== undefined ? `AND "isVisible" = ${isVisible}` : '';
       const isActiveFilter = isActive !== undefined ? `AND "isActive" = ${isActive}` : '';
+      const activeListaOnlyFilter = activeListaOnly
+        ? `AND EXISTS (SELECT 1 FROM "listas" l WHERE l.id = "listaId" AND l."isActive" = true AND l."archivedAt" IS NULL)`
+        : '';
 
-      const whereClause = `WHERE 1=1 ${listaFilter} ${categoryFilter} ${brandFilter} ${isVisibleFilter} ${isActiveFilter}`;
+      const whereClause = `WHERE 1=1 ${listaFilter} ${categoryFilter} ${brandFilter} ${isVisibleFilter} ${isActiveFilter} ${activeListaOnlyFilter}`;
 
       // Total count with fuzzy search
       const countResult = await this.prisma.$queryRawUnsafe<{ count: bigint }[]>(`
@@ -473,6 +477,7 @@ export class ProductsService {
         ...(brandId && { brandId }),
         ...(isVisible !== undefined && { isVisible }),
         ...(isActive !== undefined && { isActive }),
+        ...(activeListaOnly && { lista: { isActive: true, archivedAt: null } }),
       };
 
       const [foundProducts, count] = await Promise.all([

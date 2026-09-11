@@ -42,3 +42,47 @@ export const fetchAuditEventsTotal = async (): Promise<number> => {
   const body = res.data as PaginatedResponse<unknown>
   return body.meta?.total ?? 0
 }
+
+// --- Espacio de trabajo del usuario autenticado (GET /api/dashboard/me) ---
+// Una sola llamada agregada: reemplaza el patron de componer N requests desde el
+// cliente, que ya provoco 429s en el wizard de importacion.
+
+export type WorkspaceScope = 'GLOBAL' | 'ASSIGNED'
+
+export interface MyListaSummary {
+  id: string
+  code: string
+  name: string
+  currency: string
+  level: string | null
+  isResponsible: boolean
+  productCount: number
+  updatedAt: string
+}
+
+export interface MyActivityEntry {
+  id: string
+  action: string
+  entity: string
+  entityId: string
+  result: string | null
+  createdAt: string
+}
+
+export interface MyWorkspace {
+  scope: WorkspaceScope
+  kpis: {
+    listas: number
+    products: number
+    pendingPublication: number
+    recentActivity: number
+  }
+  listas: MyListaSummary[]
+  recentActivity: MyActivityEntry[]
+}
+
+export const fetchMyWorkspace = async (take?: number): Promise<MyWorkspace> => {
+  const qs = take ? `?take=${take}` : ''
+  const res = await api.get(`/dashboard/me${qs}`)
+  return res.data as MyWorkspace
+}

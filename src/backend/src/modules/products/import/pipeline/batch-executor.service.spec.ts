@@ -25,6 +25,7 @@ describe('BatchExecutorService — Lista destino (listaId)', () => {
     technicalSpecs: {},
     extraAttributes: {},
     isUpdate: false,
+    nameIsFallback: false,
   };
 
   const makeCtx = (overrides?: Partial<ImportContext>): ImportContext => ({
@@ -137,6 +138,38 @@ describe('BatchExecutorService — Lista destino (listaId)', () => {
 
     expect(mockPrisma.product.create.mock.calls[0][0].data).not.toHaveProperty('catalogId');
   });
+
+  it('actualización con nameIsFallback=true no sobrescribe el nombre real ya guardado (lista sin nombre/descripción)', async () => {
+    mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-x', defaultVisibility: false });
+    mockPrisma.product.findMany.mockResolvedValue([{ id: 'prod-existente', sku: 'SKU-1' }]);
+
+    const rowSinNombreReal = { ...normalizedRow, name: 'SKU-1', nameIsFallback: true };
+
+    const result = await service.execute([rowSinNombreReal], makeCtx({ listaId: 'lista-x' }));
+
+    expect(result.updated).toBe(1);
+    expect(mockPrisma.product.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'prod-existente' },
+        data: expect.not.objectContaining({ name: expect.anything() }),
+      }),
+    );
+  });
+
+  it('actualización con nombre real (nameIsFallback=false) sí actualiza el nombre', async () => {
+    mockPrisma.lista.findUnique.mockResolvedValue({ id: 'lista-x', defaultVisibility: false });
+    mockPrisma.product.findMany.mockResolvedValue([{ id: 'prod-existente', sku: 'SKU-1' }]);
+
+    const result = await service.execute([normalizedRow], makeCtx({ listaId: 'lista-x' }));
+
+    expect(result.updated).toBe(1);
+    expect(mockPrisma.product.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'prod-existente' },
+        data: expect.objectContaining({ name: 'Cámara IP' }),
+      }),
+    );
+  });
 });
 
 describe('BatchExecutorService — Decisiones de secciones del wizard', () => {
@@ -157,6 +190,7 @@ describe('BatchExecutorService — Decisiones de secciones del wizard', () => {
     technicalSpecs: {},
     extraAttributes: {},
     isUpdate: false,
+    nameIsFallback: false,
   };
 
   const makeRow = (overrides?: Partial<typeof normalizedRowBase>) => ({
@@ -322,6 +356,7 @@ describe('BatchExecutorService — Aislamiento de filas con SAVEPOINT', () => {
     technicalSpecs: {},
     extraAttributes: {},
     isUpdate: false,
+    nameIsFallback: false,
     ...overrides,
   });
 

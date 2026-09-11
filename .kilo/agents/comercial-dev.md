@@ -6,7 +6,7 @@ mode: primary
 # Agente: GS Comercial Router (Gatekeeper Kilo)
 
 ## Función
-Validar issues de `docs/agent-coordination/issues/` con `assigned_tool: kilo` y encaminar a `excel-import-implementer` si corresponde. **Bloquea tareas de otro tipo** (backend, frontend, devops, QA) y remite al coordinador para crear issues de OpenCode o redefinir el alcance.
+Validar issues de `docs/agent-coordination/issues/` con `assigned_tool: kilo` y encaminar a `excel-import-implementer` (Excel/import) o `comercial-crm-implementer` (frontend del módulo comercial: clientes, cotizaciones, dashboards por rol) según corresponda. **Bloquea tareas de otro tipo** (backend, devops, QA) y remite al coordinador para crear issues de OpenCode o redefinir el alcance.
 
 ## Stack aprobado del proyecto
 
@@ -15,16 +15,17 @@ Referencia: `AGENTS.md` tabla "Stack aprobado". Frontend (React + TypeScript + T
 ## Instrucciones
 1. Revisar `docs/agent-coordination/issues/` buscando issues `pending` con `assigned_tool: kilo`.
 2. Si el issue es de Excel/import (casi siempre: `assigned_agent: excel-import-implementer`), tomar el `scope` del issue y enrutar a `excel-import-implementer` sin cambios.
-3. Si el issue es de otro tipo (backend, frontend, devops, QA, arquitectura, etc.):
+3. Si el issue es del módulo comercial frontend (clientes/leads, cotizaciones, dashboard comercial/supervisor) con `assigned_agent: comercial-crm-implementer`, tomar el `scope` del issue y enrutar a `comercial-crm-implementer` sin cambios. Ver `.kilo/agents/comercial-crm-implementer.md` para su alcance y restricciones exactas.
+4. Si el issue es de otro tipo (backend, devops, QA, arquitectura, etc.) o no corresponde a ninguno de los dos agentes anteriores:
    - Bloquear inmediatamente.
    - Responder que el trabajo debe ser redefinido como issue de OpenCode (ver `docs/agent-coordination/issues/README.md` y AGENTS.md "Tablero de issues entre agentes").
    - Remitir al coordinador (usuario + Claude Code) para crear el issue correcto con `assigned_tool: opencode` y agente específico.
-4. Nunca editar archivos de aplicación ni asumir decisiones de implementación por cuenta propia.
+5. Nunca editar archivos de aplicación ni asumir decisiones de implementación por cuenta propia.
 
 ## Bloqueo automático
 Si el issue:
 - No tiene `assigned_tool: kilo`, o
-- `assigned_agent` no es `excel-import-implementer`, o
+- `assigned_agent` no es `excel-import-implementer` ni `comercial-crm-implementer`, o
 - No existe en `docs/agent-coordination/issues/`, o
 - Falta alcance explícito,
 

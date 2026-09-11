@@ -9,7 +9,11 @@ import {
   fetchPendingPublication,
   fetchActiveUsers,
   fetchAuditEventsTotal,
+  fetchMyWorkspace,
 } from '../services/dashboard.service'
+import CommercialWorkspace, {
+  CommercialWorkspaceSkeleton,
+} from '../features/dashboard/components/CommercialWorkspace'
 import { canViewDashboardSection, DASHBOARD_SECTIONS } from '../lib/roles'
 import type { Product } from '../features/products/types/product.types'
 import { CAROUSEL_INTERVAL, TRENDING_PRODUCTS_LIMIT } from '../constants'
@@ -136,7 +140,11 @@ function ProductCard({ product }: { product: Product }) {
   )
 }
 
-export default function Dashboard() {
+/**
+ * Panel global: catalogo completo, usuarios y auditoria. Se renderiza para quien
+ * administra todas las Listas (scope GLOBAL resuelto por el backend).
+ */
+function AdminDashboard() {
   const user = useAuthStore((state) => state.user)
   const [currentBanner, setCurrentBanner] = useState(0)
 
@@ -577,5 +585,40 @@ export default function Dashboard() {
         </div>
       </section>
     </div>
+  )
+}
+
+/**
+ * Punto de entrada del dashboard. El scope lo decide el backend
+ * (AclService.isListasAdmin) y no una lista de roles duplicada en el cliente,
+ * para que ambos lados no puedan divergir.
+ */
+export default function Dashboard() {
+  const user = useAuthStore((state) => state.user)
+
+  const workspaceQuery = useQuery({
+    queryKey: ['dashboard', 'me'],
+    queryFn: () => fetchMyWorkspace(),
+  })
+
+  if (workspaceQuery.isLoading) {
+    return <CommercialWorkspaceSkeleton />
+  }
+
+  // Si el resumen falla no se deja al usuario sin panel: el global degrada por
+  // seccion y cada una muestra su propio estado de error.
+  if (workspaceQuery.error || !workspaceQuery.data) {
+    return <AdminDashboard />
+  }
+
+  if (workspaceQuery.data.scope === 'GLOBAL') {
+    return <AdminDashboard />
+  }
+
+  return (
+    <CommercialWorkspace
+      workspace={workspaceQuery.data}
+      userName={user?.name || 'Usuario'}
+    />
   )
 }

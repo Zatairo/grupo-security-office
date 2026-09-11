@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 import type { LifecycleStatus } from '../features/products/types/product.types'
 import {
   LIFECYCLE_STATUS_LABEL,
@@ -9,7 +8,6 @@ import { useProducts } from '../features/products/hooks/useProducts'
 import { ProductCard } from '../features/products/components/ProductCard'
 import { ProductTableRow } from '../features/products/components/ProductTableRow'
 import { ProductPagination } from '../components/ProductPagination'
-import { fetchListas } from '../services/listas.service'
 import { hasRole } from '../lib/rbac'
 import { ROLES } from '../lib/roles'
 import { SearchFilterBar, type SearchFilterChip } from '../components/filters/SearchFilterBar'
@@ -37,16 +35,12 @@ export default function ProductsPage() {
     lifecycleStatuses: [] as string[],
   })
 
-  const listasQuery = useQuery({
-    queryKey: ['listas'],
-    queryFn: fetchListas,
-  })
-
   const filters = {
     search,
     categoryIds: filterChips.categoryIds,
     brandIds: filterChips.brandIds,
     lifecycleStatuses: filterChips.lifecycleStatuses,
+    activeListaOnly: true,
   }
 
   const { products, categories, brands, total, isLoading } = useProducts({
@@ -57,16 +51,9 @@ export default function ProductsPage() {
 
   const isCatalogManager = hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
 
-  // Obtener IDs de listas activas
-  const listasData = listasQuery.data ?? []
-  const activeListaIds = listasData
-    .filter((l) => l.isActive && !l.archivedAt)
-    .map((l) => l.id)
-
-  // Filtrar productos: solo mostrar los que pertenecen a una lista activa
-  const currentProducts = (products ?? []).filter(
-    (p) => !!p.listaId && activeListaIds.includes(p.listaId),
-  )
+  // El backend ya filtra por productos de Listas activas (activeListaOnly),
+  // asi total/totalPages quedan consistentes con lo mostrado.
+  const currentProducts = products ?? []
 
   useEffect(() => {
     setPage(1)

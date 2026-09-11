@@ -53,7 +53,7 @@ describe('RowValidatorService', () => {
       expect(skuErrors[0].code).toBe('SKU_DUPLICATE');
     });
 
-    it('debe detectar nombre vacío', () => {
+    it('nombre vacío no bloquea la fila (RowNormalizerService usa el SKU como respaldo)', () => {
       const rawRow: RawRow = {
         SKU: 'CAM-001',
         Nombre: '',
@@ -64,8 +64,7 @@ describe('RowValidatorService', () => {
       const errors = service.validateRow(rawRow, validMapping, new Map(), 0);
 
       const nameErrors = errors.filter((e) => e.field === 'name');
-      expect(nameErrors).toHaveLength(1);
-      expect(nameErrors[0].code).toBe('NAME_REQUIRED');
+      expect(nameErrors).toHaveLength(0);
     });
 
     it('debe detectar categoría vacía', () => {

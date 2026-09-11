@@ -1028,6 +1028,62 @@ describe('ProductsService', () => {
       );
     });
 
+    it('findAll con activeListaOnly restringe a Listas activas (rama Prisma)', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([]);
+      mockPrisma.product.count.mockResolvedValue(0);
+
+      await service.findAll({ activeListaOnly: true });
+
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            lista: { isActive: true, archivedAt: null },
+          })}),
+      );
+    });
+
+    it('findAll sin activeListaOnly no agrega el filtro de Lista (rama Prisma)', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([]);
+      mockPrisma.product.count.mockResolvedValue(0);
+
+      await service.findAll({ skip: 0, take: 50 });
+
+      const where = mockPrisma.product.findMany.mock.calls[0][0].where;
+      expect(where.lista).toBeUndefined();
+    });
+
+    it('findAll con activeListaOnly aplica EXISTS sobre listas en la rama de fuzzy search', async () => {
+      mockPrisma.$queryRawUnsafe
+        .mockResolvedValueOnce([{ count: BigInt(0) }])
+        .mockResolvedValueOnce([]);
+      mockPrisma.category.findMany.mockResolvedValue([]);
+      mockPrisma.brand.findMany.mockResolvedValue([]);
+      mockPrisma.productImage.findMany.mockResolvedValue([]);
+      mockPrisma.price.findMany.mockResolvedValue([]);
+
+      await service.findAll({ search: 'camara', activeListaOnly: true });
+
+      const [countSql] = mockPrisma.$queryRawUnsafe.mock.calls[0];
+      expect(countSql).toContain('EXISTS (SELECT 1 FROM "listas" l');
+      expect(countSql).toContain('l."isActive" = true');
+      expect(countSql).toContain('l."archivedAt" IS NULL');
+    });
+
+    it('findAll sin activeListaOnly no agrega el EXISTS en la rama de fuzzy search', async () => {
+      mockPrisma.$queryRawUnsafe
+        .mockResolvedValueOnce([{ count: BigInt(0) }])
+        .mockResolvedValueOnce([]);
+      mockPrisma.category.findMany.mockResolvedValue([]);
+      mockPrisma.brand.findMany.mockResolvedValue([]);
+      mockPrisma.productImage.findMany.mockResolvedValue([]);
+      mockPrisma.price.findMany.mockResolvedValue([]);
+
+      await service.findAll({ search: 'camara' });
+
+      const [countSql] = mockPrisma.$queryRawUnsafe.mock.calls[0];
+      expect(countSql).not.toContain('FROM "listas" l');
+    });
+
     it('findOne no incluye la relaciÃ³n catalog en el include', async () => {
       mockPrisma.product.findUnique.mockResolvedValue(mockProductWithRelations);
 

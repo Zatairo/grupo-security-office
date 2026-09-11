@@ -122,6 +122,13 @@ export interface NormalizedRow {
   /** Nombre del producto */
   name: string;
 
+  /**
+   * true si `name` es un valor de relleno (se usó el SKU porque la fila no
+   * traía nombre ni descripción). BatchExecutorService lo usa para no
+   * sobrescribir el nombre real de un producto ya existente con este relleno.
+   */
+  nameIsFallback: boolean;
+
   /** Descripción (opcional) */
   description?: string;
 

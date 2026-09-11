@@ -9,6 +9,7 @@ export interface ProductFilters {
   lifecycleStatuses?: string[] // Se aplica en frontend
   isVisible?: boolean
   isActive?: boolean
+  activeListaOnly?: boolean
 }
 
 interface UseProductsOptions {
@@ -44,6 +45,7 @@ export function useProducts({ filters, page, pageSize }: UseProductsOptions) {
       
       if (filters.isVisible !== undefined) params.set('isVisible', String(filters.isVisible))
       if (filters.isActive !== undefined) params.set('isActive', String(filters.isActive))
+      if (filters.activeListaOnly) params.set('activeListaOnly', 'true')
       
       const res = await api.get(`/products?${params}`)
       return res.data as ProductListResponse
