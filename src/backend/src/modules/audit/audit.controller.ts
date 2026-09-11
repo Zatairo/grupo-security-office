@@ -40,7 +40,7 @@ export class AuditController {
         userId,
         action,
       },
-      { roles: user?.roles ?? [] },
+      { roles: user?.roles ?? [], userId: user?.sub ?? user?.id },
     );
   }
 

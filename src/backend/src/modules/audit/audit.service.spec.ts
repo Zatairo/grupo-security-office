@@ -8,6 +8,10 @@ jest.mock('../../prisma/prisma.service', () => ({
 
 import { AuditService, COMERCIAL_ENTITIES } from './audit.service';
 
+const mockHierarchyService = {
+  getSubordinateIds: jest.fn().mockResolvedValue([]),
+};
+
 const LOG = {
   id: 'log-1',
   action: 'create',
@@ -27,7 +31,7 @@ describe('AuditService — scope comercial (Admin Comercial)', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-    service = new AuditService(mockPrisma as any);
+    service = new AuditService(mockPrisma as any, mockHierarchyService as any);
     mockPrisma.auditLog.findMany.mockResolvedValue([LOG]);
     mockPrisma.auditLog.count.mockResolvedValue(1);
   });
@@ -49,9 +53,9 @@ describe('AuditService — scope comercial (Admin Comercial)', () => {
       expect(mockPrisma.auditLog.findMany.mock.calls[0][0].where.entity).toBe('User');
     });
 
-    it('Supervisor no recibe filtro comercial forzado', async () => {
-      await service.findAll({ entity: 'Assignment' }, SUPERVISOR);
-      expect(mockPrisma.auditLog.findMany.mock.calls[0][0].where.entity).toBe('Assignment');
+    it('Supervisor recibe filtro comercial (no es auditor global)', async () => {
+      await service.findAll({ entity: 'Assignment' }, { roles: ['Supervisor'], userId: 'sup-id' });
+      expect(mockPrisma.auditLog.findMany.mock.calls[0][0].where.entity).toEqual({ in: [] });
     });
 
     it('Admin Comercial sin entity query → entity in COMERCIAL_ENTITIES', async () => {

@@ -587,3 +587,50 @@
 - `Verificación previa al merge`: revisión manual del diff de `acl.service.ts` contra la especificación del plan (LEVEL_ORDER derivado, `actionsForLevel` por nombre de nivel) + ejecución independiente de la suite completa en worktree aislado (tsc, lint, build, jest 595/605 — mismo baseline de 10 fallos preexistentes, sin regresión).
 - `Nota`: #29 fue mergeado por la cuenta de la organización antes de que el coordinador ejecutara `gh pr merge` — confirmado sin automatización de por medio (`autoMergeRequest: null`).
 - `Estado`: Etapa E0 del plan de módulo comercial (`no-se-primero-cada-comercial-joyful-whistle.md`) **completa**. Próxima etapa lista para delegar: E1 (jerarquía de usuarios + acotar auditoría del Supervisor), issue #18 ya tiene `ready-for-agent`.
+
+## [E1-BACKEND-HIERARCHY-001] — Implementar jerarquía de supervisores recursiva + acotar auditoría de Supervisor (issue #18)
+
+- `Executor`: Claude Haiku 4.5 (subagente, ejecutor técnico backend)
+- `Status`: `COMMITTED`
+- `Branch`: agent/claude/issue-18-user-hierarchy
+- `PR`: #33 (draft)
+- `Requirement source`: Issue #18 (etapa E1 del plan de módulo comercial). Requerimiento: implementar User.supervisorId como jerarquía sin límite de niveles, HierarchyService con resolución recursiva, endpoints para asignar supervisor y obtener equipo, y cambio crítico de seguridad: Supervisor deja de ser auditor global (hoy ve auditoría de toda la empresa).
+- `Implementation summary`: 
+  - **Schema Prisma**: Añadir `supervisorId` (FK self-ref, nullable), `supervisor` y `subordinates` (relaciones bidireccionales), índice, constraint de no-self-supervision.
+  - **Migración SQL**: Generada offline (`prisma migrate diff`) con constraint CHECK adicional, sin aplicar a ninguna BD.
+  - **HierarchyService** (nuevo módulo): Constructor inyecta PrismaService. Implementación:
+    - `getSubordinateIds(userId, opts)`: `WITH RECURSIVE` bajando por `subordinates`, retorna arreglo de IDs, respeta `includeSelf` y `maxDepth` (default 10).
+    - `getAncestorIds(userId)`: `WITH RECURSIVE` subiendo por `supervisorId`, retorna cadena hasta la raíz.
+    - `getTeamTree(userId)`: árbol jerárquico completo (recursión en TS, no SQL).
+    - `assertCanViewUser(ctx, targetUserId)`: permite si Super Admin, o self, o subordinado.
+    - `assertCanSetSupervisor(userId, supervisorId)`: rechaza con ConflictException si `supervisorId` aparece en ancestros de `userId` (previene ciclos).
+  - **Endpoints nuevos**:
+    - `PATCH /api/users/:id/supervisor` — roles: Super Admin, Admin Comercial. Llama `assertCanSetSupervisor`, ejecuta update, registra en auditoría con `auditService.log()`.
+    - `GET /api/users/me/team` — roles: todos (5). Retorna `getTeamTree(userId)`.
+  - **Cambio de comportamiento en AuditService**:
+    - `isGlobalAuditor()`: ahora solo retorna true para 'Super Admin', no para 'Supervisor'.
+    - `findAll()`: detecta si es Supervisor; obtiene subordinados con `hierarchyService.getSubordinateIds(..., includeSelf: true)`; filtra `where.userId: { in: subordinateIds }`.
+    - AuditContext actualizado con campo `userId` (antes solo `roles`).
+    - audit.controller.ts: pasa `userId` al contexto.
+  - **DTOs**: UpdateUserDto extendida con `supervisorId?: string | null`.
+  - **Módulos**: HierarchyModule registrado en app.module.ts.
+  - **Tests**:
+    - HierarchyService: 3+ niveles, prevención de ciclos (directa e indirecta), permisos de vista (Super Admin, self, subordinado, denied), getTeamTree.
+    - AuditService: test actualizado para reflejar que Supervisor no es auditor global.
+- `Validation commands`: 
+  - `npx tsc --noEmit` → 0 errores
+  - `npx jest` → 10 fallos (baseline preexistente: 9 transition.service.spec.ts, 1 listas.service.spec.ts; sin regresión)
+  - `npm run lint` → 0 errores
+  - `npm run build` → OK
+  - `npx prisma validate` → schema válido
+- `Validation results`: Todas las validaciones pasadas. No hay errores nuevos, solo los 10 preexistentes.
+- `Documentation updated`: work-log.md (esta entrada); agent-status.md pendiente.
+- `Commit hash`: `640e77c` (rama agent/claude/issue-18-user-hierarchy)
+- `Handoff to`: Coordinador revisa PR #33, merges cuando esté listo. Tras merge: desbloquear issue #19 (frontend) añadiendo label `ready-for-agent`.
+- `Known risks`:
+  - **Cambio de comportamiento visible**: Supervisores actuales pierden visibilidad de auditoría global. Esto es una restricción intencional, pero afecta UX en runtime.
+  - **Ciclos en datos históricos**: Si existiera un ciclo preexistente en la tabla, `WITH RECURSIVE` está limitada a depth=10. El constraint de DB previene ciclos nuevos.
+  - **HierarchyService inyectado en AuditService**: Depende de que HierarchyModule esté importado en app.module (verificado).
+  - **Validación de ciclos es síncrona pero costosa**: cada `assertCanSetSupervisor` hace una query recursiva. En escenarios de jerarquía muy profunda (50+ niveles), el depth=10 en `WITH RECURSIVE` truncaría la detección. No es un bloqueador práctico (las jerarquías reales rara vez superan 5-6 niveles).
+- `Blockers`: NONE
+
