@@ -33,6 +33,8 @@ model User {
   supervisorId            String?
   supervisor              User?                @relation("UserHierarchy", fields: [supervisorId], references: [id], onDelete: SetNull)
   subordinates            User[]               @relation("UserHierarchy")
+  ownedCustomers          Customer[]           @relation("CustomerOwner")
+  createdCustomers        Customer[]           @relation("CustomerCreator")
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
 
@@ -335,6 +337,42 @@ model ImportSession {
 
   @@index([userId])
   @@map("import_sessions")
+}
+
+/// Cliente o lead del módulo comercial. Un lead y un cliente son el MISMO
+/// registro, distinguidos por `status` (LEAD puede cotizar; la conversión
+/// lead→cliente no copia filas ni rompe referencias de cotizaciones).
+/// `city` es texto libre por decisión de producto (no se modelan sedes/ciudades).
+model Customer {
+  id            String    @id @default(uuid())
+  code          String    @unique
+  name          String
+  documentType  String?
+  documentId    String?
+  email         String?
+  phone         String?
+  city          String?
+  address       String?
+  status        String    @default("LEAD") // LEAD | CLIENTE | INACTIVO
+  source        String? // REFERIDO | PROMOCION | LLAMADA_FRIA | WEB | EVENTO | OTRO
+  sourceDetail  String?
+  ownerId       String?
+  createdById   String?
+  convertedAt   DateTime?
+  lastContactAt DateTime?
+  notes         String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  owner     User? @relation("CustomerOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy User? @relation("CustomerCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([documentType, documentId])
+  @@index([ownerId, status])
+  @@index([status])
+  @@index([createdAt])
+  @@map("customers")
 }
 
 model Stock {
