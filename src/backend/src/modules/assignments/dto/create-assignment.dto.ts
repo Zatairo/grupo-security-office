@@ -14,6 +14,7 @@ export const ASSIGNMENT_RESOURCE_TYPES = [
  */
 export const ASSIGNMENT_LEVELS = [
   'view',
+  'view_prices',
   'edit_prices',
   'edit_products',
   'edit',

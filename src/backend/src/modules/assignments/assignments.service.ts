@@ -387,7 +387,7 @@ export class AssignmentsService {
     const nivelLista = await this.acl.getUserLevel(userId ?? '', listaId, roleNames);
     const preciosVisibles =
       !!nivelLista &&
-      (LEVEL_RANK[nivelLista] ?? 0) >= (LEVEL_RANK['edit_prices'] ?? 0);
+      (LEVEL_RANK[nivelLista] ?? 0) >= (LEVEL_RANK['view_prices'] ?? 0);
 
     // Productos de la Lista con restricción explícita (PRODUCT isActive=false) del usuario.
     let restricciones: {
