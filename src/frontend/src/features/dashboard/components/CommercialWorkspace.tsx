@@ -28,6 +28,7 @@ const formatDate = (iso: string) => {
  */
 const LEVEL_LABEL: Record<string, string> = {
   view: 'Solo lectura',
+  view_prices: 'Ve precios',
   edit_prices: 'Edita precios',
   edit_products: 'Edita productos',
   edit: 'Edita productos',
@@ -37,6 +38,7 @@ const LEVEL_LABEL: Record<string, string> = {
 
 const LEVEL_VARIANT: Record<string, 'neutral' | 'info' | 'success' | 'warning'> = {
   view: 'neutral',
+  view_prices: 'neutral',
   edit_prices: 'info',
   edit_products: 'info',
   edit: 'info',
