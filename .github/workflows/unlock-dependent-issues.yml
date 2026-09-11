@@ -1,0 +1,56 @@
+name: Desbloquear issues dependientes
+
+# Cuando un issue se cierra (manual, o por PR con "Closes #N"), busca issues
+# abiertos cuyo título diga "bloqueado por #<n>, #<m>..." y si TODOS los
+# números referenciados ya están cerrados, les agrega ready-for-agent.
+# Evita el desbloqueo manual que se le olvida a alguien tras cada merge
+# (ver historial: #19/#20 quedaron huérfanos tras mergear #18).
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+jobs:
+  unlock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Escanear issues bloqueados
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          CLOSED_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+
+          echo "Issue cerrado: #$CLOSED_NUMBER"
+
+          gh issue list --repo "$REPO" --state open --json number,title,labels \
+            --jq '.[] | select(.title | test("bloqueado por #")) | [.number, .title, ([.labels[].name] | join(","))] | @tsv' \
+          | while IFS=$'\t' read -r NUM TITLE LABELS; do
+              # Extrae todos los "#123" mencionados tras "bloqueado por"
+              BLOCKERS=$(echo "$TITLE" | grep -oE '#[0-9]+' | tr -d '#')
+
+              ALL_CLOSED=true
+              for B in $BLOCKERS; do
+                STATE=$(gh issue view "$B" --repo "$REPO" --json state -q .state 2>/dev/null || echo "UNKNOWN")
+                if [ "$STATE" != "CLOSED" ]; then
+                  ALL_CLOSED=false
+                  break
+                fi
+              done
+
+              if [ "$ALL_CLOSED" = "true" ]; then
+                if echo "$LABELS" | grep -q "ready-for-agent"; then
+                  echo "#$NUM ya tiene ready-for-agent, se omite."
+                else
+                  echo "Desbloqueando #$NUM (bloqueadores: $BLOCKERS, todos cerrados)"
+                  gh issue edit "$NUM" --repo "$REPO" --add-label "ready-for-agent"
+                  gh issue comment "$NUM" --repo "$REPO" --body "🔓 Desbloqueado automáticamente: todos sus issues bloqueantes ($BLOCKERS) ya están cerrados. Etiquetado \`ready-for-agent\`."
+                fi
+              else
+                echo "#$NUM sigue bloqueado (pendientes entre: $BLOCKERS)"
+              fi
+            done
