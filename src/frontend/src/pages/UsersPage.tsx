@@ -6,6 +6,7 @@ import { canViewUsers, hasRole } from '../lib/rbac'
 import { ROLES } from '../lib/roles'
 import { getApiErrorMessage } from '../lib/apiError'
 import {
+  updateUserSupervisor,
 } from '../services/users.service'
 import {
   fetchRoles,
@@ -22,6 +23,7 @@ interface User {
   name: string
   email: string
   isActive: boolean
+  supervisorId?: string | null
   roles: { id: string; name: string }[]
 }
 
@@ -135,6 +137,7 @@ export default function UsersPage() {
   }
 
   const canManageRoles = hasRole(ROLES.SUPER_ADMIN)
+  const canAssignSupervisor = hasRole(ROLES.SUPER_ADMIN) || hasRole(ROLES.ADMIN_COMERCIAL)
 
   return (
     <div className="space-y-6">
@@ -264,6 +267,20 @@ export default function UsersPage() {
                     </div>
                   </div>
 
+                  <div className="mt-3">
+                    <p className="text-xs font-medium text-gray-500 mb-1">
+                      Supervisor:{' '}
+                      <span className="text-gray-700">
+                        {user.supervisorId
+                          ? (users?.data?.find((u: User) => u.id === user.supervisorId)?.name ?? '— Sin asignar —')
+                          : '— Sin asignar —'}
+                      </span>
+                    </p>
+                    {canAssignSupervisor && (
+                      <SupervisorSelect user={user} users={users?.data ?? []} />
+                    )}
+                  </div>
+
                   <div className="mt-3 flex items-center justify-between">
                     <div className="flex gap-1.5 flex-wrap">
                       {user.roles?.map((role) => (
@@ -338,6 +355,51 @@ export default function UsersPage() {
         </>
       )}
           </div>
+  )
+}
+
+function SupervisorSelect({ user, users }: { user: User; users: User[] }) {
+  const queryClient = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+
+  const mutation = useMutation({
+    mutationFn: (supervisorId: string | null) => updateUserSupervisor(user.id, supervisorId),
+    onSuccess: () => {
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+    },
+    onError: (err) => {
+      setError(getApiErrorMessage(err, 'No se pudo asignar el supervisor'))
+    },
+  })
+
+  return (
+    <div className="mt-1.5">
+      <select
+        value={user.supervisorId ?? ''}
+        disabled={mutation.isPending}
+        onChange={(e) => {
+          setError(null)
+          mutation.mutate(e.target.value === '' ? null : e.target.value)
+        }}
+        aria-label={`Supervisor de ${user.name}`}
+        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary bg-white disabled:opacity-50"
+      >
+        <option value="">— Sin asignar —</option>
+        {users
+          .filter((u) => u.id !== user.id)
+          .map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+      </select>
+      {error && (
+        <p className="mt-1 text-xs text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
   )
 }
 

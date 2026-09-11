@@ -7,6 +7,7 @@ export interface UserListItem {
   isActive: boolean
   createdAt: string
   updatedAt: string
+  supervisorId?: string | null
   roles: { id: string; name: string }[]
 }
 
@@ -22,4 +23,9 @@ export const fetchUsers = async (search = '', take = 200): Promise<UserListItem[
   const res = await api.get(`/users?${params}`)
   const body = res.data as UserListResponse
   return body.data ?? []
+}
+
+export const updateUserSupervisor = async (userId: string, supervisorId: string | null) => {
+  const res = await api.patch(`/users/${userId}/supervisor`, { supervisorId })
+  return res.data
 }
