@@ -47,4 +47,4 @@
 - `Default branch`: `main`
 - `Parallel work allowed`: only with non-overlapping file ownership
 - `Active project`: Grupo Security Office / Plataforma Comercial Grupo Security
-- `OpenRouter fallback`: forbidden unless explicitly approved by the user
+- `OpenRouter fallback`: forbidden unless explicitly approved by the user| Claude Code | (Haiku subagent) | COMMITTED | E1-BACKEND-HIERARCHY-001 | Implementar jerarquía de supervisores recursiva + acotar auditoría de Supervisor (issue #18) | agent/claude/issue-18-user-hierarchy | (released) | DELEGATE-COMMERCIAL-MODULE-001 | 640e77c | NONE | Coordinador revisa y mergea PR #33; desbloquear #19 (frontend) | 2026-09-11T12:45:00Z |
