@@ -128,6 +128,15 @@ export const createPrismaMock = () => ({
     updateMany: jest.fn(),
     count: jest.fn(),
   },
+  customer: {
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+  },
   importSession: {
     findUnique: jest.fn(),
     upsert: jest.fn(),
