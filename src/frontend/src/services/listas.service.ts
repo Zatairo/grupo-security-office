@@ -5,8 +5,6 @@ export interface Lista {
   code: string
   /** Código de identificación de negocio (contrato nuevo; opcional). */
   codigo?: string | null
-  /** Proveedor asociado (contrato nuevo; opcional). */
-  supplierId?: string | null
   name: string
   description: string | null
   currency: string
@@ -29,7 +27,6 @@ export interface ListaPayload {
   name: string
   code: string
   codigo?: string | null
-  supplierId?: string | null
   description?: string | null
   currency?: string
   isActive?: boolean
@@ -58,7 +55,7 @@ export const fetchListaById = async (id: string): Promise<Lista> => {
 
 /**
  * Defensivo: el backend usa ValidationPipe con forbidNonWhitelisted=true.
- * Si el runtime aún no acepta codigo/supplierId (campos nuevos en desarrollo),
+ * Si el runtime aún no acepta codigo (campos nuevos en desarrollo),
  * reintenta sin ellos en lugar de fallar.
  */
 function isNonWhitelistedError(err: unknown, fields: string[]): boolean {
@@ -74,10 +71,10 @@ export const createLista = async (payload: ListaPayload): Promise<Lista> => {
     return res.data as Lista
   } catch (err) {
     if (
-      isNonWhitelistedError(err, ['codigo', 'supplierId']) &&
-      (payload.codigo !== undefined || payload.supplierId !== undefined)
+      isNonWhitelistedError(err, ['codigo']) &&
+      (payload.codigo !== undefined)
     ) {
-      const { codigo, supplierId, ...rest } = payload
+      const { codigo, ...rest } = payload
       const res = await api.post('/listas', rest)
       return res.data as Lista
     }
@@ -91,10 +88,10 @@ export const updateLista = async (id: string, payload: Partial<ListaPayload>): P
     return res.data as Lista
   } catch (err) {
     if (
-      isNonWhitelistedError(err, ['codigo', 'supplierId']) &&
-      (payload.codigo !== undefined || payload.supplierId !== undefined)
+      isNonWhitelistedError(err, ['codigo']) &&
+      (payload.codigo !== undefined)
     ) {
-      const { codigo, supplierId, ...rest } = payload
+      const { codigo, ...rest } = payload
       const res = await api.patch(`/listas/${id}`, rest)
       return res.data as Lista
     }

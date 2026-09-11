@@ -108,22 +108,6 @@ export const createPrismaMock = () => ({
     delete: jest.fn(),
     count: jest.fn(),
   },
-  supplier: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-    count: jest.fn(),
-  },
-  supplierEvaluation: {
-    findUnique: jest.fn(),
-    findMany: jest.fn(),
-    create: jest.fn(),
-    delete: jest.fn(),
-    count: jest.fn(),
-  },
   stock: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
@@ -132,14 +116,6 @@ export const createPrismaMock = () => ({
     delete: jest.fn(),
     deleteMany: jest.fn(),
     upsert: jest.fn(),
-    count: jest.fn(),
-  },
-  purchaseOrder: {
-    findUnique: jest.fn(),
-    findMany: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
     count: jest.fn(),
   },
   productImage: {

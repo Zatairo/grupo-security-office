@@ -33,7 +33,6 @@ import {
   fetchProductStock,
   updateProductStock,
   fetchProductAudit,
-  fetchProductSuppliers,
   uploadProductImage,
   deleteProductImage,
   markProductImagePrimary,
@@ -62,7 +61,6 @@ type DetailTab =
   | 'images'
   | 'prices'
   | 'stock'
-  | 'suppliers'
   | 'publish'
   | 'audit'
 
@@ -72,7 +70,6 @@ const TABS: { id: DetailTab; label: string }[] = [
   { id: 'images', label: 'Imágenes' },
   { id: 'prices', label: 'Precios' },
   { id: 'stock', label: 'Stock' },
-  { id: 'suppliers', label: 'Proveedores' },
   { id: 'publish', label: 'Publicación' },
   { id: 'audit', label: 'Auditoría' },
 ]
@@ -1333,65 +1330,6 @@ function StockTab({ product }: { product: Product }) {
   )
 }
 
-// ------------------------------ Proveedores (defensivo) ------------------------------
-function SuppliersTab({ product }: { product: Product }) {
-  const { data = [], isLoading, error } = useQuery({
-    queryKey: ['product-suppliers', product.id],
-    queryFn: () => fetchProductSuppliers(product.id),
-    retry: false,
-  })
-
-  if (isNotImplemented(error)) {
-    return (
-      <ComingSoon
-        title="Proveedores"
-        message="El vínculo producto ↔ proveedor estará disponible próximamente."
-      />
-    )
-  }
-
-  if (isLoading) {
-    return <p className="text-sm text-neutral-400 py-6 text-center">Cargando proveedores...</p>
-  }
-
-  if (error) {
-    return (
-      <Alert variant="error">
-        {getApiErrorMessage(error, 'No se pudieron cargar los proveedores.')}
-      </Alert>
-    )
-  }
-
-  if (data.length === 0) {
-    return <p className="text-sm text-neutral-400 py-6 text-center">Sin proveedores asociados.</p>
-  }
-
-  return (
-    <div className="overflow-x-auto border border-neutral-200 rounded-lg">
-      <table className="min-w-full divide-y divide-neutral-200 text-sm">
-        <thead className="bg-neutral-50">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Proveedor</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">NIT</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase">Última orden</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-neutral-100">
-          {data.map((s, idx) => (
-            <tr key={s.id ?? idx} className="hover:bg-neutral-50">
-              <td className="px-4 py-3 font-medium text-neutral-800">{s.name}</td>
-              <td className="px-4 py-3 text-xs font-mono text-neutral-500">{s.nit ?? '—'}</td>
-              <td className="px-4 py-3 text-neutral-500 text-xs">
-                {s.lastOrderAt ? formatDate(s.lastOrderAt) : '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 // ------------------------------ Publicación (ciclo de vida FSM) ------------------------------
 function PublishTab({
   product,
@@ -2331,7 +2269,6 @@ export default function ProductDetailPage() {
           {effectiveTab === 'images' && <ImagesTab product={product} />}
           {effectiveTab === 'prices' && <PricesTab product={product} />}
           {effectiveTab === 'stock' && <StockTab product={product} />}
-          {effectiveTab === 'suppliers' && <SuppliersTab product={product} />}
           {effectiveTab === 'publish' && (
             <PublishTab
               product={product}

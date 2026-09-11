@@ -15,7 +15,7 @@ interface ExecuteParams {
 /**
  * Defensivo: el backend usa ValidationPipe con forbidNonWhitelisted=true.
  * Si el runtime aún no acepta `sections` (campo nuevo en desarrollo), el 400
- * reintenta sin el campo, igual que se hace con codigo/supplierId en createLista.
+ * reintenta sin el campo, igual que se hace con codigo en createLista.
  */
 function isSectionsNotWhitelisted(err: unknown): boolean {
   const status = (err as { response?: { status?: number } })?.response?.status;

@@ -33,7 +33,6 @@ interface ImportStore extends ImportWizardState {
   setFixedValue: (field: SystemField, value: string) => void;
   setIvaMode: (mode: 'with_iva' | 'without_iva' | 'mixed') => void;
   setListaId: (listaId: string | null) => void;
-  setSupplier: (supplierId: string | null, supplierName?: string | null) => void;
   setSections: (sections: ImportSection[]) => void;
   updateSection: (key: string, patch: Partial<ImportSection>) => void;
   mergeSections: (keys: string[], merged: ImportSection) => void;
@@ -50,8 +49,6 @@ const STEPS: ImportStep[] = ['upload', 'headers', 'mapping', 'sections', 'docume
 const initialMetadata: ImportListaMetadata = {
   mode: 'create',
   listaId: null,
-  supplierId: null,
-  supplierName: null,
   name: '',
   codigo: '',
   currency: 'COP',
@@ -71,8 +68,6 @@ const initialState: ImportWizardState = {
   fixedValues: {},
   ivaMode: 'with_iva',
   listaId: null,
-  supplierId: null,
-  supplierName: null,
   sections: [],
   listaMetadata: initialMetadata,
   isLoading: false,
@@ -127,8 +122,6 @@ export const useImportStore = create<ImportStore>()(
       },
       setIvaMode: (mode) => set({ ivaMode: mode }),
       setListaId: (listaId) => set({ listaId, listaMetadata: { ...get().listaMetadata, listaId } }),
-      setSupplier: (supplierId, supplierName = null) =>
-        set({ supplierId, supplierName, listaMetadata: { ...get().listaMetadata, supplierId, supplierName } }),
       setSections: (sections) => set({ sections }),
       updateSection: (key, patch) => {
         const { sections } = get();
@@ -160,10 +153,6 @@ export const useImportStore = create<ImportStore>()(
           preview: state.preview,
         };
         if (state.listaId) persisted.listaId = state.listaId;
-        if (state.supplierId) {
-          persisted.supplierId = state.supplierId;
-          persisted.supplierName = state.supplierName;
-        }
         return persisted;
       },
       merge: (persistedState, currentState) => {

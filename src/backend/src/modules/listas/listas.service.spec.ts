@@ -40,7 +40,6 @@ const mockLista = {
   validFrom: null,
   validUntil: null,
   codigo: null,
-  supplierId: null,
   currency: 'COP',
   isActive: true,
   archivedAt: null,
@@ -51,7 +50,7 @@ const mockLista = {
 
 const mockListaInactiva = { ...mockLista, isActive: false };
 const mockListaArchivada = { ...mockLista, archivedAt: new Date() };
-const mockOtherLista = { id: OTHER_LISTA_ID, code: 'OTHER', name: 'Otra', description: null, type: 'catalogo', defaultVisibility: false, responsibleId: null, validFrom: null, validUntil: null, codigo: null, supplierId: null, currency: 'COP', isActive: true, archivedAt: null, createdAt: new Date(), updatedAt: new Date(), _count: { products: 0 } };
+const mockOtherLista = { id: OTHER_LISTA_ID, code: 'OTHER', name: 'Otra', description: null, type: 'catalogo', defaultVisibility: false, responsibleId: null, validFrom: null, validUntil: null, codigo: null, currency: 'COP', isActive: true, archivedAt: null, createdAt: new Date(), updatedAt: new Date(), _count: { products: 0 } };
 
 // Assignments activos por usuario (resourceType LISTA).
 const assignments: Record<
@@ -104,10 +103,6 @@ function buildPrisma(): AnyMock {
     createdAt: new Date(),
     updatedAt: new Date(),
   }));
-  p.supplier.findUnique.mockImplementation(async (args: any) => {
-    if (args?.where?.id === 'supplier-1') return { id: 'supplier-1' };
-    return null;
-  });
   p.product.findMany.mockResolvedValue([]);
   p.product.count.mockResolvedValue(0);
   p.price.findMany.mockResolvedValue([]);
@@ -447,39 +442,31 @@ describe('ListasService â€” ACL (T1â€“T20)', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  // ---- Campos nuevos (codigo, supplierId â€” metadata de lista importada) ----
+  // ---- Campos nuevos (codigo â€” metadata de lista importada) ----
 
-  it('crea Lista con codigo+supplierId y los persiste + audita', async () => {
+  it('crea Lista con codigo y lo persiste + audita', async () => {
     const res = await service.create(
-      { code: 'NUEVA-META', name: 'Lista Metadata', codigo: 'HIKV-2026', supplierId: 'supplier-1' },
+      { code: 'NUEVA-META', name: 'Lista Metadata', codigo: 'HIKV-2026' },
       ADMIN,
     );
     expect(res.codigo).toBe('HIKV-2026');
-    expect(res.supplierId).toBe('supplier-1');
     expect(mockPrisma.lista.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           codigo: 'HIKV-2026',
-          supplierId: 'supplier-1',
         }),
       }),
     );
-    expect(mockPrisma.supplier.findUnique).toHaveBeenCalledWith({
-      where: { id: 'supplier-1' },
-      select: { id: true },
-    });
     expect(mockAudit.log).toHaveBeenCalledWith(
       expect.objectContaining({
-        newValues: expect.objectContaining({ codigo: 'HIKV-2026', supplierId: 'supplier-1' }),
+        newValues: expect.objectContaining({ codigo: 'HIKV-2026' }),
       }),
     );
   });
 
-  it('crea Lista sin codigo/supplierId â†’ null (opcionales)', async () => {
+  it('crea Lista sin codigo â†’ null (opcionales)', async () => {
     const res = await service.create({ code: 'SIN-META', name: 'Sin Meta' }, ADMIN);
     expect(res.codigo).toBeNull();
-    expect(res.supplierId).toBeNull();
-    expect(mockPrisma.supplier.findUnique).not.toHaveBeenCalled();
   });
 
   it('crea Lista con codigo duplicado â†’ 409', async () => {
@@ -490,34 +477,27 @@ describe('ListasService â€” ACL (T1â€“T20)', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('crea Lista con supplierId inexistente â†’ 404', async () => {
-    await expect(
-      service.create({ code: 'NUEVA', name: 'X', supplierId: 'no-existe' }, ADMIN),
-    ).rejects.toThrow(NotFoundException);
-  });
 
-  it('update (PATCH) persiste codigo+supplierId y audita old/new', async () => {
+  it('update (PATCH) persiste codigo y audita old/new', async () => {
     mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
     const res = await service.update(
       LISTA_ID,
-      { codigo: 'HIKV-2026', supplierId: 'supplier-1' },
+      { codigo: 'HIKV-2026' },
       EDITER,
     );
     expect(res.codigo).toBe('HIKV-2026');
-    expect(res.supplierId).toBe('supplier-1');
     expect(mockAudit.log).toHaveBeenCalledWith(
       expect.objectContaining({
-        oldValues: expect.objectContaining({ codigo: mockLista.codigo, supplierId: mockLista.supplierId }),
-        newValues: expect.objectContaining({ codigo: 'HIKV-2026', supplierId: 'supplier-1' }),
+        oldValues: expect.objectContaining({ codigo: mockLista.codigo }),
+        newValues: expect.objectContaining({ codigo: 'HIKV-2026' }),
       }),
     );
   });
 
-  it('update (PATCH) limpia codigo y supplierId con null', async () => {
-    mockPrisma.lista.findUnique.mockResolvedValueOnce({ ...mockLista, codigo: 'OLD', supplierId: 'supplier-1' });
-    const res = await service.update(LISTA_ID, { codigo: null, supplierId: null }, EDITER);
+  it('update (PATCH) limpia codigo con null', async () => {
+    mockPrisma.lista.findUnique.mockResolvedValueOnce({ ...mockLista, codigo: 'OLD' });
+    const res = await service.update(LISTA_ID, { codigo: null }, EDITER);
     expect(res.codigo).toBeNull();
-    expect(res.supplierId).toBeNull();
   });
 
   it('update con codigo duplicado â†’ 409', async () => {
@@ -529,12 +509,6 @@ describe('ListasService â€” ACL (T1â€“T20)', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('update con supplierId inexistente â†’ 404', async () => {
-    mockPrisma.lista.findUnique.mockResolvedValueOnce(mockLista);
-    await expect(
-      service.update(LISTA_ID, { supplierId: 'no-existe' }, EDITER),
-    ).rejects.toThrow(NotFoundException);
-  });
 
   // ---- Cobertura complementaria (reemplaza ACL de la entidad Catalog eliminada) ----
   // El test T16 muta assignments[VIEWER.userId] a inactivo; se restaura por suite.

@@ -13,7 +13,6 @@ import { BrandsModule } from './modules/brands/brands.module';
 import { AssignmentsModule } from './modules/assignments/assignments.module';
 import { PricesModule } from './modules/prices/prices.module';
 import { ListasModule } from './modules/listas/listas.module';
-import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { HealthModule } from './modules/health/health.module';
 import { FilesModule } from './modules/files/files.module';
@@ -52,7 +51,6 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     PricesModule,
     ListasModule,
     
-    SuppliersModule,
     AuditModule,
     HealthModule,
     FilesModule,

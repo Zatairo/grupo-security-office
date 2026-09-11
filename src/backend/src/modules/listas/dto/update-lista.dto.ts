@@ -67,7 +67,6 @@ export class UpdateListaDto extends PartialType(CreateListaDto) {
   })
   @IsUUID()
   @IsOptional()
-  supplierId?: string;
 
   @ApiPropertyOptional({
     example: '2026-01-01T00:00:00Z',

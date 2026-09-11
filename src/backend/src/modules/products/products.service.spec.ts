@@ -544,7 +544,6 @@ describe('ProductsService', () => {
       mockPrisma.productImage.findMany.mockResolvedValue([]);
       mockPrisma.stock.findUnique.mockResolvedValue(null);
       mockPrisma.auditLog.count.mockResolvedValue(0);
-      mockPrisma.purchaseOrder.findMany.mockResolvedValue([]);
     }
 
     it('debe eliminar un producto sin datos asociados con confirm: true y auditar delete', async () => {
@@ -616,7 +615,6 @@ describe('ProductsService', () => {
       mockPrisma.productImage.findMany.mockResolvedValue([]);
       mockPrisma.stock.findUnique.mockResolvedValue(null);
       mockPrisma.auditLog.count.mockResolvedValue(0);
-      mockPrisma.purchaseOrder.findMany.mockResolvedValue([]);
 
       const ctx = { userId: 'u1', roles: ['Super Admin'] };
       const result = await service.remove('prod-1', { confirm: true }, ctx);
@@ -631,7 +629,6 @@ describe('ProductsService', () => {
       mockPrisma.productImage.findMany.mockResolvedValue([]);
       mockPrisma.stock.findUnique.mockResolvedValue(null);
       mockPrisma.auditLog.count.mockResolvedValue(0);
-      mockPrisma.purchaseOrder.findMany.mockResolvedValue([]);
 
       const ctx = { userId: 'u1', roles: ['Super Admin'] };
       const result = await service.remove('prod-1', { confirm: true}, ctx);
@@ -649,10 +646,6 @@ describe('ProductsService', () => {
       mockPrisma.productImage.count.mockResolvedValue(1);
       mockPrisma.stock.findUnique.mockResolvedValue({ id: 'stock-1', availableQty: 3 });
       mockPrisma.auditLog.count.mockResolvedValue(2);
-      mockPrisma.purchaseOrder.findMany.mockResolvedValue([
-        { id: 'po-1', items: { productId: 'prod-1', quantity: 5 } },
-        { id: 'po-2', items: { productId: 'otro', quantity: 2 } },
-      ]);
       mockPrisma.productImage.findMany.mockResolvedValue([]);
       mockPrisma.price.deleteMany.mockResolvedValue({ count: 1 });
       mockPrisma.productImage.deleteMany.mockResolvedValue({ count: 0 });
@@ -680,21 +673,6 @@ describe('ProductsService', () => {
       expect(mockPrisma.product.delete).toHaveBeenCalledWith({ where: { id: 'prod-1' } });
     });
 
-    it('detecta referencias en items de Ã³rdenes de compra (array de items) â†’ borrado exitoso (detecciÃ³n PO no bloquea)', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue({ ...mockProduct, listaId: 'lista-1' });
-      mockPrisma.price.count.mockResolvedValue(0);
-      mockPrisma.productImage.count.mockResolvedValue(0);
-      mockPrisma.productImage.findMany.mockResolvedValue([]);
-      mockPrisma.stock.findUnique.mockResolvedValue(null);
-      mockPrisma.auditLog.count.mockResolvedValue(0);
-      mockPrisma.purchaseOrder.findMany.mockResolvedValue([
-        { id: 'po-a', items: [{ productId: 'prod-1', quantity: 5 }, { productId: 'prod-2', quantity: 3 }] },
-      ]);
-
-      const ctx = { userId: 'u1', roles: ['Super Admin'] };
-      const result = await service.remove('prod-1', { confirm: true }, ctx);
-      expect(result.message).toBe('Producto eliminado exitosamente');
-    });
 
     it('DELETE vÃ¡lido desde distintos estados FSM (publicado/oculto/archivado)', async () => {
       for (const status of ['PUBLISHED', 'HIDDEN', 'ARCHIVED']) {

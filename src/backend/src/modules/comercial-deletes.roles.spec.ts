@@ -3,7 +3,6 @@ import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { CategoriesController } from './categories/categories.controller';
 import { BrandsController } from './brands/brands.controller';
 import { PricesController } from './prices/prices.controller';
-import { SuppliersController } from './suppliers/suppliers.controller';
 
 describe('ComercialDeletes — Admin Comercial puede eliminar todo el área comercial (contrato)', () => {
   const rolesOf = (method: Function): string[] =>
@@ -30,21 +29,6 @@ describe('ComercialDeletes — Admin Comercial puede eliminar todo el área come
 
   it('DELETE /api/prices/:id incluye Admin Comercial y Super Admin (precio)', () => {
     expectsCommercialDelete(PricesController.prototype.removePrice, 'DELETE /api/prices/:id');
-  });
-
-  it('DELETE /api/suppliers/:id incluye Admin Comercial y Super Admin', () => {
-    expectsCommercialDelete(SuppliersController.prototype.remove, 'DELETE /api/suppliers/:id');
-  });
-
-  it('DELETE /api/stock/:id incluye Admin Comercial y Super Admin', () => {
-    expectsCommercialDelete(SuppliersController.prototype.removeStock, 'DELETE /api/stock/:id');
-  });
-
-  it('DELETE /api/purchase-orders/:id incluye Admin Comercial y Super Admin', () => {
-    expectsCommercialDelete(
-      SuppliersController.prototype.removePurchaseOrder,
-      'DELETE /api/purchase-orders/:id',
-    );
   });
 
   it('DELETE de usuarios sigue siendo SOLO Super Admin (no se abre al contenedor comercial)', () => {
