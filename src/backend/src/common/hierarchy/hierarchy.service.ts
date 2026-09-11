@@ -64,46 +64,66 @@ export class HierarchyService {
     return result.map((r) => r.id);
   }
 
-  // Get hierarchical team tree starting from userId
+  // Get hierarchical team tree starting from userId.
+  //
+  // Resuelve TODO el subarbol en una sola query recursiva (mismo patron de
+  // path-tracking + tope de profundidad que getSubordinateIds/getAncestorIds)
+  // y arma el arbol en memoria a partir de las filas planas. La version
+  // anterior recorria el arbol con findUnique/findMany recursivos por nodo,
+  // sin ningun tope ni deteccion de ciclos: ante datos con un ciclo (aunque
+  // la escritura vía assertCanSetSupervisor lo prevenga, un ciclo podria
+  // colarse por una migracion o edicion directa de la base) esa version se
+  // hubiera colgado en recursion infinita. Este endpoint es alcanzable por
+  // los 5 roles, asi que no puede depender solo de que nunca falle la
+  // proteccion de escritura.
   async getTeamTree(userId: string): Promise<TeamNode> {
-    const user = await this.prisma.user.findUnique({
+    const root = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, name: true, email: true },
     });
 
-    if (!user) {
+    if (!root) {
       throw new Error(`User ${userId} not found`);
     }
 
-    const buildTree = async (uid: string, depth: number): Promise<TeamNode> => {
-      const currentUser = await this.prisma.user.findUnique({
-        where: { id: uid },
-        select: { id: true, name: true, email: true },
-      });
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        email: string;
+        supervisorId: string | null;
+        depth: number;
+      }>
+    >`
+      WITH RECURSIVE team AS (
+        SELECT u."id", u."name", u."email", u."supervisorId", 0 AS depth, ARRAY[u."id"] AS path
+        FROM "users" u
+        WHERE u."id" = ${userId}
+        UNION ALL
+        SELECT c."id", c."name", c."email", c."supervisorId", t.depth + 1, t.path || c."id"
+        FROM "users" c
+        JOIN team t ON c."supervisorId" = t."id"
+        WHERE NOT (c."id" = ANY(t.path))
+          AND t.depth < 10
+      )
+      SELECT "id", "name", "email", "supervisorId", depth FROM team
+    `;
 
-      if (!currentUser) {
-        throw new Error(`User ${uid} not found`);
-      }
+    const nodeById = new Map<string, TeamNode>(
+      rows.map((r) => [
+        r.id,
+        { id: r.id, name: r.name, email: r.email, depth: r.depth, children: [] },
+      ]),
+    );
 
-      const subordinates = await this.prisma.user.findMany({
-        where: { supervisorId: uid },
-        select: { id: true, name: true, email: true },
-      });
+    for (const row of rows) {
+      if (row.id === userId) continue;
+      const parent = row.supervisorId ? nodeById.get(row.supervisorId) : undefined;
+      const node = nodeById.get(row.id);
+      if (parent && node) parent.children.push(node);
+    }
 
-      const childrenTrees = await Promise.all(
-        subordinates.map((sub) => buildTree(sub.id, depth + 1)),
-      );
-
-      return {
-        id: currentUser.id,
-        name: currentUser.name,
-        email: currentUser.email,
-        depth,
-        children: childrenTrees,
-      };
-    };
-
-    return buildTree(userId, 0);
+    return nodeById.get(userId)!;
   }
 
   // Check if ctx.userId can view targetUserId

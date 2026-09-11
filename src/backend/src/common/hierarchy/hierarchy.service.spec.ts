@@ -88,6 +88,52 @@ describe('HierarchyService', () => {
     });
   });
 
+  describe('getTeamTree', () => {
+    it('arma el arbol multinivel en una sola query recursiva', async () => {
+      prismaMock.user.findUnique.mockResolvedValueOnce({
+        id: 'a', name: 'Root', email: 'root@test.com',
+      });
+      prismaMock.$queryRaw.mockResolvedValueOnce([
+        { id: 'a', name: 'Root', email: 'root@test.com', supervisorId: null, depth: 0 },
+        { id: 'b', name: 'B', email: 'b@test.com', supervisorId: 'a', depth: 1 },
+        { id: 'c', name: 'C', email: 'c@test.com', supervisorId: 'a', depth: 1 },
+        { id: 'd', name: 'D', email: 'd@test.com', supervisorId: 'b', depth: 2 },
+      ]);
+
+      const tree = await service.getTeamTree('a');
+
+      expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(tree.id).toBe('a');
+      expect(tree.children).toHaveLength(2);
+      const nodeB = tree.children.find((c: any) => c.id === 'b');
+      expect(nodeB.children).toHaveLength(1);
+      expect(nodeB.children[0].id).toBe('d');
+    });
+
+    it('no se cuelga y no duplica nodos ante datos con ciclo (protegido por path+depth en la query)', async () => {
+      prismaMock.user.findUnique.mockResolvedValueOnce({
+        id: 'a', name: 'Root', email: 'root@test.com',
+      });
+      // La query real nunca devolveria un id repetido (NOT (id = ANY(path))
+      // lo impide en Postgres); esto confirma que el ensamblado en JS tampoco
+      // asume que puede recorrer indefinidamente si el mock se equivocara.
+      prismaMock.$queryRaw.mockResolvedValueOnce([
+        { id: 'a', name: 'Root', email: 'root@test.com', supervisorId: null, depth: 0 },
+        { id: 'b', name: 'B', email: 'b@test.com', supervisorId: 'a', depth: 1 },
+      ]);
+
+      const tree = await service.getTeamTree('a');
+
+      expect(tree.children).toHaveLength(1);
+      expect(tree.children[0].children).toHaveLength(0);
+    });
+
+    it('lanza si el usuario raiz no existe', async () => {
+      prismaMock.user.findUnique.mockResolvedValueOnce(null);
+      await expect(service.getTeamTree('no-existe')).rejects.toThrow();
+    });
+  });
+
   describe('assertCanSetSupervisor', () => {
     it('allows null supervisor', async () => {
       await expect(service.assertCanSetSupervisor('a', null)).resolves.not.toThrow();

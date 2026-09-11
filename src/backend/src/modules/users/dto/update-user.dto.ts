@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, IsBoolean, IsOptional, IsArray, IsUUID } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsBoolean, IsOptional, IsArray, IsUUID, ValidateIf } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateUserDto {
@@ -29,7 +29,12 @@ export class UpdateUserDto {
   @IsOptional()
   roleIds?: string[];
 
-  @ApiPropertyOptional({ example: 'supervisor-id-1' })
+  // @IsOptional() de class-validator solo salta la validacion cuando el valor
+  // es undefined, NO cuando es null explicito — y null es un valor valido acá
+  // (significa "quitar supervisor"). @ValidateIf evita que @IsUUID() rechace
+  // ese null con un 400.
+  @ApiPropertyOptional({ example: 'supervisor-id-1', nullable: true })
+  @ValidateIf((_, value) => value !== null)
   @IsUUID()
   @IsOptional()
   supervisorId?: string | null;
