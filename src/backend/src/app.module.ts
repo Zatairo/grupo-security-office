@@ -17,6 +17,7 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { HealthModule } from './modules/health/health.module';
 import { FilesModule } from './modules/files/files.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 
@@ -55,6 +56,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     AuditModule,
     HealthModule,
     FilesModule,
+    DashboardModule,
   ],
   providers: [
     {

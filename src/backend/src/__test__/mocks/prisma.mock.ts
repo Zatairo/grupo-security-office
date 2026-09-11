@@ -47,6 +47,7 @@ export const createPrismaMock = () => ({
     delete: jest.fn(),
     deleteMany: jest.fn(),
     count: jest.fn(),
+    groupBy: jest.fn(),
   },
   category: {
     findUnique: jest.fn(),
