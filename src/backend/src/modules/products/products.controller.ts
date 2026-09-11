@@ -65,6 +65,7 @@ export class ProductsController {
   @ApiQuery({ name: 'brandId', required: false, type: String })
   @ApiQuery({ name: 'isVisible', required: false, type: Boolean })
   @ApiQuery({ name: 'isActive', required: false, type: Boolean })
+  @ApiQuery({ name: 'activeListaOnly', required: false, type: Boolean })
   findAll(
     @Query() query: ProductQueryDto,
     @CurrentUser() user: any,
@@ -77,6 +78,7 @@ export class ProductsController {
       brandId: query.brandId,
       isVisible: query.isVisible,
       isActive: query.isActive,
+      activeListaOnly: query.activeListaOnly,
     }, this.ctx(user));
   }
 
