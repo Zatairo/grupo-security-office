@@ -121,9 +121,9 @@ export class ListasService {
     return { data: products, meta: { total } };
   }
 
-  /** Precios de productos de una Lista (scoped + deny-by-default; exige edit_prices). */
+  /** Precios de productos de una Lista (scoped + deny-by-default; exige view_prices). */
   async findPrices(id: string, ctx: AccessContext) {
-    await this.acl.assertListaAccess(id, ctx, 'edit_prices');
+    await this.acl.assertListaAccess(id, ctx, 'view_prices');
 
     const prices = await this.prisma.price.findMany({
       where: { product: { listaId: id } },
@@ -143,7 +143,7 @@ export class ListasService {
    * con `daysRemaining` (ceil). El interceptor global envuelve la respuesta en `{ data }`.
    */
   async findExpiringPrices(listaId: string, ctx: AccessContext, days = 30) {
-    await this.acl.assertListaAccess(listaId, ctx, 'edit_prices');
+    await this.acl.assertListaAccess(listaId, ctx, 'view_prices');
 
     const lista = await this.prisma.lista.findUnique({
       where: { id: listaId },
@@ -633,13 +633,13 @@ export class ListasService {
   }
 
   /**
-   * ¿El usuario puede ver precios sobre una Lista? Requiere edit_prices o superior
+   * ¿El usuario puede ver precios sobre una Lista? Requiere view_prices o superior
    * (checklist 29/30). Super Admin siempre.
    */
   private async userCanSeePrices(listaId: string, ctx: AccessContext): Promise<boolean> {
     if (this.acl.isListasAdmin(ctx.roles)) return true;
     const level = await this.acl.getUserLevel(ctx.userId!, listaId, ctx.roles);
-    return !!level && (LEVEL_RANK[level] ?? 0) >= (LEVEL_RANK['edit_prices'] ?? 0);
+    return !!level && (LEVEL_RANK[level] ?? 0) >= (LEVEL_RANK['view_prices'] ?? 0);
   }
 
   /**

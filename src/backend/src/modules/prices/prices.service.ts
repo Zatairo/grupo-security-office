@@ -182,10 +182,10 @@ export class PricesService {
 
   async findOnePriceList(id: string, ctx?: AccessContext) {
     // ACL: los precios incluidos se filtran por las Listas donde el usuario tiene
-    // edit_prices o superior (checklist 29/30: ver precios exige edit_prices).
+    // view_prices o superior (ver precios exige view_prices; escribirlos sigue exigiendo edit_prices).
     let allowedListaIds: string[] | null = null;
     if (ctx) {
-      allowedListaIds = await this.acl.getAllowedListaIds(ctx.userId, ctx.roles, 'edit_prices');
+      allowedListaIds = await this.acl.getAllowedListaIds(ctx.userId, ctx.roles, 'view_prices');
     }
 
     const pricesWhere =
@@ -336,8 +336,8 @@ export class PricesService {
   }
 
   async findPricesByProduct(productId: string, ctx?: AccessContext) {
-    // Deny-by-default: ver precios exige edit_prices sobre la Lista del producto (checklist 29/30).
-    if (ctx) await this.acl.assertProductAccess(productId, ctx, 'edit_prices');
+    // Deny-by-default: ver precios exige view_prices sobre la Lista del producto.
+    if (ctx) await this.acl.assertProductAccess(productId, ctx, 'view_prices');
 
     const prices = await this.prisma.price.findMany({
       where: { productId },
@@ -349,10 +349,10 @@ export class PricesService {
 
   async findPricesByPriceList(priceListId: string, ctx?: AccessContext) {
     // Deny-by-default: solo precios cuyo producto pertenece a una Lista donde el
-    // usuario tiene edit_prices o superior (ver precios exige edit_prices).
+    // usuario tiene view_prices o superior (ver precios exige view_prices).
     let pricesWhere: { priceListId: string; product?: { listaId: { in: string[] } } } = { priceListId };
     if (ctx) {
-      const allowed = await this.acl.getAllowedListaIds(ctx.userId, ctx.roles, 'edit_prices');
+      const allowed = await this.acl.getAllowedListaIds(ctx.userId, ctx.roles, 'view_prices');
       if (allowed !== null) {
         pricesWhere.product = { listaId: { in: allowed } };
       }

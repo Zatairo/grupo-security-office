@@ -20,6 +20,7 @@ const VIEWER = { userId: 'pepito-1', roles: ['Operador'] }; // view sobre LISTA-
 // dan los assignments del map. La polÃ­tica Admin Comercial se testea en su propio describe.
 const EDITER = { userId: 'editer-1', roles: ['Operador'] }; // edit sobre LISTA-GENERAL
 const EDIT_PRICES = { userId: 'price-editor', roles: ['Operador'] }; // edit_prices sobre LISTA-GENERAL
+const VIEW_PRICES = { userId: 'price-viewer', roles: ['Operador'] }; // view_prices sobre LISTA-GENERAL
 const MANAGER = { userId: 'manager-1', roles: ['Operador'] }; // manage sobre LISTA-GENERAL
 const MANAGE_ACCESS = { userId: 'access-mgr', roles: ['Operador'] }; // manage_access sobre LISTA-GENERAL
 const NOAUTH = { userId: 'none-1', roles: ['Operador'] }; // sin assignments
@@ -60,6 +61,7 @@ const assignments: Record<
   [VIEWER.userId]: [{ resourceType: 'LISTA', resourceId: LISTA_ID, level: 'view', isActive: true }],
   [EDITER.userId]: [{ resourceType: 'LISTA', resourceId: LISTA_ID, level: 'edit', isActive: true }],
   [EDIT_PRICES.userId]: [{ resourceType: 'LISTA', resourceId: LISTA_ID, level: 'edit_prices', isActive: true }],
+  [VIEW_PRICES.userId]: [{ resourceType: 'LISTA', resourceId: LISTA_ID, level: 'view_prices', isActive: true }],
   [MANAGER.userId]: [{ resourceType: 'LISTA', resourceId: LISTA_ID, level: 'manage', isActive: true }],
   [MANAGE_ACCESS.userId]: [{ resourceType: 'LISTA', resourceId: LISTA_ID, level: 'manage_access', isActive: true }],
   [NOAUTH.userId]: [],
@@ -567,8 +569,21 @@ describe('ListasService â€” ACL (T1â€“T20)', () => {
       expect(res.data).toHaveLength(1);
     });
 
-    it('findPrices exige edit_prices (403 para view)', async () => {
+    it('findPrices exige view_prices (403 para view)', async () => {
       await expect(service.findPrices(LISTA_ID, VIEWER)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('findPrices funciona con view_prices', async () => {
+      mockPrisma.price.findMany.mockResolvedValue([{ id: 'price-1', value: 1000 }]);
+
+      const res = await service.findPrices(LISTA_ID, VIEW_PRICES);
+
+      expect(mockPrisma.price.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ product: expect.objectContaining({ listaId: LISTA_ID }) }),
+        }),
+      );
+      expect(res.data).toHaveLength(1);
     });
 
     it('findPrices funciona con edit_prices', async () => {
@@ -584,7 +599,7 @@ describe('ListasService â€” ACL (T1â€“T20)', () => {
       expect(res.data).toHaveLength(1);
     });
 
-    it('findProducts NO incluye precios para view (solo edit_prices+)', async () => {
+    it('findProducts NO incluye precios para view (solo view_prices+)', async () => {
       mockPrisma.product.findMany.mockResolvedValue([{ id: 'prod-1' }]);
 
       await service.findProducts(LISTA_ID, VIEWER);
@@ -597,6 +612,15 @@ describe('ListasService â€” ACL (T1â€“T20)', () => {
       mockPrisma.product.findMany.mockResolvedValue([{ id: 'prod-1' }]);
 
       await service.findProducts(LISTA_ID, EDIT_PRICES);
+
+      const call = mockPrisma.product.findMany.mock.calls[0][0];
+      expect(call.include.prices).toBeDefined();
+    });
+
+    it('findProducts también incluye precios para view_prices', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([{ id: 'prod-1' }]);
+
+      await service.findProducts(LISTA_ID, VIEW_PRICES);
 
       const call = mockPrisma.product.findMany.mock.calls[0][0];
       expect(call.include.prices).toBeDefined();

@@ -596,10 +596,12 @@ describe('PricesService', () => {
     const ADMIN = { userId: 'admin-1', roles: ['Super Admin'] };
     const VIEWER = { userId: 'pepito-1', roles: ['Operador'] }; // view sobre LISTA
     const EDIT_PRICES = { userId: 'price-editor', roles: ['Admin Comercial'] }; // edit_prices sobre LISTA
+    const VIEW_PRICES = { userId: 'price-viewer', roles: ['Operador'] }; // view_prices sobre LISTA
     const NOAUTH = { userId: 'none-1', roles: ['Operador'] }; // sin assignments
 
     const listaAssignments: Record<string, { resourceId: string; level: string; isActive: boolean }[]> = {
       [VIEWER.userId]: [{ resourceId: LISTA_ID, level: 'view', isActive: true }],
+      [VIEW_PRICES.userId]: [{ resourceId: LISTA_ID, level: 'view_prices', isActive: true }],
       [EDIT_PRICES.userId]: [{ resourceId: LISTA_ID, level: 'edit_prices', isActive: true }],
       [ADMIN.userId]: [],
       [NOAUTH.userId]: [],
@@ -637,6 +639,56 @@ describe('PricesService', () => {
       mockPrisma.price.findMany.mockResolvedValue([mockPriceWithRelations]);
       const res = await svc.findPricesByProduct('prod-1', EDIT_PRICES);
       expect(res.data).toHaveLength(1);
+    });
+
+    it('findPricesByProduct: view_prices ve precios de su Lista', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: LISTA_ID });
+      mockPrisma.price.findMany.mockResolvedValue([mockPriceWithRelations]);
+      const res = await svc.findPricesByProduct('prod-1', VIEW_PRICES);
+      expect(res.data).toHaveLength(1);
+    });
+
+    it('createPrice: view_prices NO puede crear precio (403, sigue exigiendo edit_prices)', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: LISTA_ID });
+      mockPrisma.priceList.findUnique.mockResolvedValue({ id: 'pl-1' });
+      mockPrisma.price.findUnique.mockResolvedValue(null);
+      const dto = { productId: 'prod-1', priceListId: 'pl-1', value: 1500000 };
+      await expect(svc.createPrice(dto, VIEW_PRICES)).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.price.create).not.toHaveBeenCalled();
+    });
+
+    it('updatePrice: view_prices NO puede editar precio (403)', async () => {
+      mockPrisma.price.findUnique.mockResolvedValue(mockPrice);
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: LISTA_ID });
+      await expect(svc.updatePrice('price-1', { value: 1600000 }, VIEW_PRICES)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockPrisma.price.update).not.toHaveBeenCalled();
+    });
+
+    it('removePrice: view_prices NO puede eliminar precio (403)', async () => {
+      mockPrisma.price.findUnique.mockResolvedValue(mockPrice);
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: LISTA_ID });
+      await expect(svc.removePrice('price-1', VIEW_PRICES)).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.price.delete).not.toHaveBeenCalled();
+    });
+
+    it('updatePrice: edit_prices sigue pudiendo editar precios (sin regresión)', async () => {
+      mockPrisma.price.findUnique.mockResolvedValue(mockPrice);
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: LISTA_ID });
+      mockPrisma.price.update.mockResolvedValue({ ...mockPriceWithRelations, value: 1600000 });
+      const res = await svc.updatePrice('price-1', { value: 1600000 }, EDIT_PRICES);
+      expect(mockPrisma.price.update).toHaveBeenCalled();
+      expect(res.value).toBe(1600000);
+    });
+
+    it('removePrice: edit_prices sigue pudiendo eliminar precios (sin regresión)', async () => {
+      mockPrisma.price.findUnique.mockResolvedValue(mockPrice);
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 'prod-1', listaId: LISTA_ID });
+      mockPrisma.price.delete.mockResolvedValue(mockPrice);
+      const res = await svc.removePrice('price-1', EDIT_PRICES);
+      expect(mockPrisma.price.delete).toHaveBeenCalledWith({ where: { id: 'price-1' } });
+      expect(res.message).toContain('eliminado');
     });
 
     it('findPricesByProduct: usuario sin assignment recibe 404 (no revela existencia)', async () => {

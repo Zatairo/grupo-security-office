@@ -6,19 +6,28 @@ import { PrismaService } from '../../prisma/prisma.service';
  * Un assignment de nivel superior implica los niveles inferiores.
  *
  *  view:0           → ver Lista SIN precios.
- *  edit_prices:1    → view + ver precios + editar precios.
- *  edit_products:2  → edit_prices + editar productos.
- *  edit:2           → ALIAS legacy de edit_products (compatibilidad OLA 4/7A).
- *  manage:3         → todo + archivar/duplicar/eliminar Lista + gestionar accesos de nivel inferior.
- *  manage_access:4  → manage + administrar accesos (otorgar manage/manage_access).
+ *  view_prices:1    → view + ver precios.
+ *  edit_prices:2    → view_prices + editar precios.
+ *  edit_products:3  → edit_prices + editar productos.
+ *  edit:3           → ALIAS legacy de edit_products (compatibilidad OLA 4/7A).
+ *  manage:4         → todo + archivar/duplicar/eliminar Lista + gestionar accesos de nivel inferior.
+ *  manage_access:5  → manage + administrar accesos (otorgar manage/manage_access).
+ *
+ * El ranking se deriva de LEVEL_ORDER (nunca literales numéricos)
+ * para que insertar un nivel nuevo no desincronice las comparaciones.
  */
+export const LEVEL_ORDER = [
+  'view',
+  'view_prices',
+  'edit_prices',
+  'edit_products',
+  'manage',
+  'manage_access',
+] as const;
+
 export const LEVEL_RANK: Record<string, number> = {
-  view: 0,
-  edit_prices: 1,
-  edit_products: 2,
-  edit: 2,
-  manage: 3,
-  manage_access: 4,
+  ...Object.fromEntries(LEVEL_ORDER.map((l, i) => [l, i])),
+  edit: LEVEL_ORDER.indexOf('edit_products'), // alias legacy, siempre sincronizado
 };
 
 export const ASSIGNMENT_LEVELS = Object.keys(LEVEL_RANK);
@@ -385,13 +394,14 @@ export class AclService {
   /** Acciones permitidas para un nivel efectivo (matrix viewer). */
   actionsForLevel(level?: string | null) {
     const rank = level ? (LEVEL_RANK[level] ?? -1) : -1;
+    const at = (l: string) => rank >= LEVEL_RANK[l];
     return {
-      ver: rank >= 0,
-      verPrecios: rank >= 1,
-      editarPrecios: rank >= 1,
-      editarProductos: rank >= 2,
-      administrar: rank >= 3,
-      administrarAccesos: rank >= 4,
+      ver: at('view'),
+      verPrecios: at('view_prices'),
+      editarPrecios: at('edit_prices'),
+      editarProductos: at('edit_products'),
+      administrar: at('manage'),
+      administrarAccesos: at('manage_access'),
     };
   }
 }

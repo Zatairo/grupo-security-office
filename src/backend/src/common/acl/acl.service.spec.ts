@@ -68,13 +68,14 @@ describe('AclService (TANDA 1B)', () => {
   });
 
   describe('niveles reales (checklist 29/30)', () => {
-    it('LEVEL_RANK ordena view < edit_prices < edit_products < manage < manage_access', () => {
+    it('LEVEL_RANK ordena view < view_prices < edit_prices < edit_products < manage < manage_access', () => {
       expect(LEVEL_RANK.view).toBe(0);
-      expect(LEVEL_RANK.edit_prices).toBe(1);
-      expect(LEVEL_RANK.edit_products).toBe(2);
-      expect(LEVEL_RANK.manage).toBe(3);
-      expect(LEVEL_RANK.manage_access).toBe(4);
-      expect(LEVEL_RANK.edit).toBe(2); // alias legacy
+      expect(LEVEL_RANK.view_prices).toBe(1);
+      expect(LEVEL_RANK.edit_prices).toBe(2);
+      expect(LEVEL_RANK.edit_products).toBe(3);
+      expect(LEVEL_RANK.manage).toBe(4);
+      expect(LEVEL_RANK.manage_access).toBe(5);
+      expect(LEVEL_RANK.edit).toBe(3); // alias legacy
     });
 
     it('normalizeLevel: edit → edit_products, niveles válidos intactos, inválidos null', () => {
@@ -282,6 +283,24 @@ describe('AclService (TANDA 1B)', () => {
       expect(a.editarPrecios).toBe(false);
       expect(a.editarProductos).toBe(false);
       expect(a.administrarAccesos).toBe(false);
+    });
+
+    it('view_prices: ver + ver precios, SIN editar precios', () => {
+      const a = acl.actionsForLevel('view_prices');
+      expect(a.ver).toBe(true);
+      expect(a.verPrecios).toBe(true);
+      expect(a.editarPrecios).toBe(false);
+      expect(a.editarProductos).toBe(false);
+      expect(a.administrar).toBe(false);
+      expect(a.administrarAccesos).toBe(false);
+    });
+
+    it('edit_prices: ver + ver precios + editar precios, sin editar productos', () => {
+      const a = acl.actionsForLevel('edit_prices');
+      expect(a.ver).toBe(true);
+      expect(a.verPrecios).toBe(true);
+      expect(a.editarPrecios).toBe(true);
+      expect(a.editarProductos).toBe(false);
     });
 
     it('manage_access: todas las acciones', () => {
