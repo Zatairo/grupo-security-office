@@ -18,6 +18,7 @@ import { HealthModule } from './modules/health/health.module';
 import { FilesModule } from './modules/files/files.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { CustomersModule } from './modules/commercial/customers/customers.module';
+import { QuotesModule } from './modules/commercial/quotes/quotes.module';
 import { HierarchyModule } from './common/hierarchy/hierarchy.module';
 import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -59,6 +60,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     FilesModule,
     DashboardModule,
     CustomersModule,
+    QuotesModule,
   ],
   providers: [
     {
