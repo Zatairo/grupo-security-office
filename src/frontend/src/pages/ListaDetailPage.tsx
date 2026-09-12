@@ -926,7 +926,13 @@ function toDateInputValue(iso?: string | null): string {
 }
 
 function AccesosTab({ assignments }: { assignments: any[] }) {
-  const LEVEL_LABELS: Record<string, string> = { view: 'Vista', edit: 'Edición', manage: 'Administrar' }
+  const LEVEL_LABELS: Record<string, string> = {
+    view: 'Vista',
+    view_prices: 'Ve precios',
+    edit_prices: 'Edita precios',
+    edit: 'Edición',
+    manage: 'Administrar',
+  }
   if (assignments.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-neutral-200 text-center py-12">
@@ -962,7 +968,9 @@ function AccesosTab({ assignments }: { assignments: any[] }) {
                         ? 'bg-red-100 text-red-700'
                         : a.level === 'edit'
                           ? 'bg-amber-100 text-amber-700'
-                          : 'bg-[var(--color-primary-bg-subtle)] text-[var(--color-primary)]'
+                          : a.level === 'view_prices' || a.level === 'edit_prices'
+                            ? 'bg-sky-100 text-sky-700'
+                            : 'bg-[var(--color-primary-bg-subtle)] text-[var(--color-primary)]'
                     }`}
                   >
                     {LEVEL_LABELS[a.level] ?? a.level}
