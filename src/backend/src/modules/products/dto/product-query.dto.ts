@@ -17,6 +17,13 @@ export class ProductQueryDto {
   @Min(1)
   take?: number;
 
+  @ApiPropertyOptional({ type: Number, description: 'Alias de take (paginación limit/offset); take tiene precedencia si se envían ambos' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  limit?: number;
+
   @ApiPropertyOptional({ type: String, description: 'Término de búsqueda' })
   @IsOptional()
   @IsString()

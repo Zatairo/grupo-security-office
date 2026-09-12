@@ -60,6 +60,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Listar productos' })
   @ApiQuery({ name: 'skip', required: false, type: Number })
   @ApiQuery({ name: 'take', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Alias de take (paginación limit/offset); take tiene precedencia si se envían ambos' })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'categoryId', required: false, type: String })
   @ApiQuery({ name: 'brandId', required: false, type: String })
@@ -72,7 +73,7 @@ export class ProductsController {
   ) {
     return this.productsService.findAll({
       skip: query.skip ?? 0,
-      take: query.take ?? 50,
+      take: query.take ?? query.limit ?? 50,
       search: query.search,
       categoryId: query.categoryId,
       brandId: query.brandId,
