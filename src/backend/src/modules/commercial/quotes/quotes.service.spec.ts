@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -154,6 +155,45 @@ describe('QuotesService', () => {
       service.addItem('q1', { productId: 'p1', quantity: 1 }, operadorCtx),
     ).rejects.toThrow(/SKU-NO-P/);
     expect(prisma.quoteItem.create).not.toHaveBeenCalled();
+  });
+
+  it('discountPct fuera de 0-100 al agregar ítem → 400, nunca lineTotal negativo', async () => {
+    prisma.price.findMany.mockResolvedValue([
+      {
+        id: 'price-1',
+        productId: 'p1',
+        priceListId: 'pl-1',
+        value: 1000,
+        currency: 'COP',
+        validFrom: null,
+        validUntil: null,
+        updatedAt: new Date(),
+      },
+    ]);
+    prisma.product.findUnique.mockResolvedValue({ id: 'p1', sku: 'SKU-1', name: 'Prod' });
+
+    await expect(
+      service.addItem('q1', { productId: 'p1', quantity: 1, discountPct: '150' }, operadorCtx),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.addItem('q1', { productId: 'p1', quantity: 1, discountPct: '-10' }, operadorCtx),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.quoteItem.create).not.toHaveBeenCalled();
+  });
+
+  it('discountPct fuera de 0-100 al editar ítem → 400', async () => {
+    prisma.quoteItem.findUnique.mockResolvedValue({
+      id: 'item-1',
+      quoteId: 'q1',
+      unitPrice: 1000,
+      quantity: 1,
+      discountPct: 0,
+    });
+
+    await expect(
+      service.updateItem('q1', 'item-1', { discountPct: '101' }, operadorCtx),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.quoteItem.update).not.toHaveBeenCalled();
   });
 
   it('cambiar el Price original DESPUÉS de agregar el ítem NO cambia QuoteItem.unitPrice (snapshot)', async () => {

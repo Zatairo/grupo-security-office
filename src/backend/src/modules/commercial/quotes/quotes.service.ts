@@ -52,6 +52,20 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+/**
+ * Valida el rango de un descuento porcentual de línea. Sin este chequeo,
+ * un discountPct > 100 produce lineTotal negativo y contamina subtotal/total
+ * de toda la cotización (class-validator solo verifica que sea decimal, no
+ * el rango, porque el campo es string por @IsDecimal).
+ */
+function assertValidDiscountPct(discountPct: number): void {
+  if (!Number.isFinite(discountPct) || discountPct < 0 || discountPct > 100) {
+    throw new BadRequestException(
+      'discountPct debe estar entre 0 y 100',
+    );
+  }
+}
+
 @Injectable()
 export class QuotesService {
   constructor(
@@ -250,6 +264,7 @@ export class QuotesService {
     });
 
     const discountPct = dto.discountPct !== undefined ? Number(dto.discountPct) : 0;
+    assertValidDiscountPct(discountPct);
     const unitPrice = Number(vigente.value);
 
     const item = await this.prisma.quoteItem.create({
@@ -291,6 +306,7 @@ export class QuotesService {
     const quantity = dto.quantity !== undefined ? dto.quantity : item.quantity;
     const discountPct =
       dto.discountPct !== undefined ? Number(dto.discountPct) : Number(item.discountPct);
+    assertValidDiscountPct(discountPct);
 
     await this.prisma.quoteItem.update({
       where: { id: itemId },
