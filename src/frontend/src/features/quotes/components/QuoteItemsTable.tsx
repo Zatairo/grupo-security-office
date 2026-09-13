@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Table, Button, Card } from '../../../components/ui'
+import { Table, Button, Card, Modal, Alert } from '../../../components/ui'
 import EditQuoteItemModal from './EditQuoteItemModal'
 import type { Quote, QuoteItem, UpdateQuoteItemPayload } from '../types/quote.types'
 import { formatMoney, formatPercent } from '../utils/format'
@@ -8,7 +8,7 @@ interface QuoteItemsTableProps {
   quote: Quote
   editable: boolean
   onUpdateItem: (itemId: string, payload: UpdateQuoteItemPayload) => Promise<unknown>
-  onRemoveItem: (itemId: string) => void
+  onRemoveItem: (itemId: string) => Promise<unknown>
   isMutating?: boolean
 }
 
@@ -25,6 +25,23 @@ export default function QuoteItemsTable({
   isMutating = false,
 }: QuoteItemsTableProps) {
   const [editing, setEditing] = useState<QuoteItem | null>(null)
+  const [removing, setRemoving] = useState<QuoteItem | null>(null)
+  const [removeError, setRemoveError] = useState<string | null>(null)
+
+  const confirmRemove = async () => {
+    if (!removing) return
+    setRemoveError(null)
+    try {
+      await onRemoveItem(removing.id)
+      setRemoving(null)
+    } catch (err) {
+      const message = (err as { response?: { data?: { message?: string | string[] } } })
+        ?.response?.data?.message
+      setRemoveError(
+        Array.isArray(message) ? message.join('. ') : message || 'No se pudo quitar el producto'
+      )
+    }
+  }
 
   const currency = quote.currency
   const items = quote.items ?? []
@@ -98,9 +115,8 @@ export default function QuoteItemsTable({
               className="px-2 py-1 text-xs text-[var(--color-error)]"
               disabled={isMutating}
               onClick={() => {
-                if (window.confirm(`¿Quitar "${item.name}" de la cotización?`)) {
-                  onRemoveItem(item.id)
-                }
+                setRemoveError(null)
+                setRemoving(item)
               }}
             >
               Quitar
@@ -111,7 +127,7 @@ export default function QuoteItemsTable({
     }
 
     return cols
-  }, [currency, editable, isMutating, onRemoveItem])
+  }, [currency, editable, isMutating])
 
   return (
     <div className="space-y-4">
@@ -153,6 +169,45 @@ export default function QuoteItemsTable({
           </div>
         </dl>
       </Card>
+
+      <Modal
+        open={removing !== null}
+        onClose={() => !isMutating && setRemoving(null)}
+        title="Quitar producto"
+        size="sm"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={isMutating}
+              onClick={() => setRemoving(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              loading={isMutating}
+              onClick={() => void confirmRemove()}
+            >
+              Quitar
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {removeError && (
+            <Alert variant="error" onClose={() => setRemoveError(null)}>
+              {removeError}
+            </Alert>
+          )}
+          <p className="text-sm text-neutral-700">
+            ¿Quitar <span className="font-medium">{removing?.name}</span> (
+            <span className="font-mono text-xs">{removing?.sku}</span>) de la cotización?
+          </p>
+        </div>
+      </Modal>
 
       <EditQuoteItemModal
         open={editing !== null}

@@ -112,7 +112,9 @@ export default function QuoteDetailPage() {
         onUpdateItem={async (itemId, payload) => {
           await updateItem.mutateAsync({ itemId, payload })
         }}
-        onRemoveItem={(itemId) => removeItem.mutate(itemId)}
+        onRemoveItem={async (itemId) => {
+          await removeItem.mutateAsync(itemId)
+        }}
         isMutating={mutating}
       />
 

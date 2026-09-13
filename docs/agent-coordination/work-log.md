@@ -634,3 +634,35 @@
   - **Validación de ciclos es síncrona pero costosa**: cada `assertCanSetSupervisor` hace una query recursiva. En escenarios de jerarquía muy profunda (50+ niveles), el depth=10 en `WITH RECURSIVE` truncaría la detección. No es un bloqueador práctico (las jerarquías reales rara vez superan 5-6 niveles).
 - `Blockers`: NONE
 
+
+---
+
+## [GS-PR41-QUOTES-VALIDATION-01] — Validar PR #41 (quotes frontend) contra contrato backend + reemplazar dialogs nativos
+
+- `Executor`: OpenCode
+- `Agent`: tech-lead-orchestrator
+- `Status`: `COMMITTED`
+- `Branch`: agent/opencode/issue-23-quotes-page (rama del PR #41; el commit actualiza el PR)
+- `Started at`: 2026-09-12T00:00:00Z
+- `Completed at`: 2026-09-12T00:00:00Z
+- `Requirement source`: TASK_ID GS-PR41-QUOTES-VALIDATION-01 (validación de PR #41, fase VALIDATION)
+- `Files opened`: docs/agent-coordination/{README,agent-status,file-ownership,work-log}.md, src/frontend/src/services/api.ts, src/frontend/src/services/quotes.service.ts, src/frontend/src/pages/{QuotesPage,QuoteDetailPage}.tsx, src/frontend/src/features/quotes/components/{QuoteItemsTable,QuoteStatusActions}.tsx, src/frontend/src/features/quotes/types/quote.types.ts, src/frontend/src/components/ui/{Modal,Alert,Button,Table}.tsx, src/backend/src/modules/commercial/quotes/{quotes.controller.ts,quotes.service.ts,dto/*}
+- `Files modified`: src/frontend/src/features/quotes/components/QuoteItemsTable.tsx, src/frontend/src/features/quotes/components/QuoteStatusActions.tsx, src/frontend/src/pages/QuoteDetailPage.tsx (1 línea: `removeItem.mutate` → `mutateAsync` para propagar el error al Modal de confirmación), docs/agent-coordination/{agent-status,file-ownership,work-log}.md
+- `Files reserved`: (see file-ownership)
+- `Dependencies`: PR #41; E2E leg depende de credenciales de prueba autorizadas — NO disponibles en el worktree (sin src/backend/.env ni credenciales entregadas en esta sesión)
+- `Implementation summary`:
+  1. **Reemplazo de dialogs nativos**. `QuoteItemsTable.tsx`: `window.confirm` de "Quitar" reemplazado por `Modal` (size sm) con botones Cancelar/Quitar (variant danger), loading state ligado a `isMutating`, cierre bloqueado durante mutación, y errores visibles en `Alert` dentro del modal. `QuoteStatusActions.tsx`: `window.confirm` de transiciones sin motivo reemplazado por Modal de confirmación (danger para cancelada, primary para el resto); `window.alert` de errores eliminado — los errores ahora se muestran en `Alert` dentro del modal abierto o inline junto a los botones si no hay modal. No queda ningún `window.confirm`/`window.alert` en `src/frontend/src/features/quotes/` ni en las páginas quotes (grep vacío).
+  2. **Contrato verificado contra fuente backend real** (`src/backend/src/modules/commercial/quotes/`): rutas `GET/POST /api/commercial/quotes`, `GET /:id`, `POST /:id/items`, `PATCH /:id/items/:itemId`, `DELETE /:id/items/:itemId`, `PATCH /:id/status` — todas coinciden con `quotes.service.ts` del frontend (baseURL `/api` + `/commercial/quotes`). Matriz de transiciones, `perdida` requiere `lostReason` (400), roles de `ganada` (Super Admin / Admin Comercial / Supervisor), `vencida` derivada sin transición, e ítems editables solo en borrador/enviada/negociacion: TODO coincide exactamente con los mirrors en `src/frontend/src/features/quotes/types/quote.types.ts`. Respuestas de detalle/mutación devuelven el objeto Quote sin envoltura `data` → el interceptor de `api.ts` los deja intactos.
+  3. **Hallazgo confirmado del interceptor (reporte, sin fix — fuera de scope)**: `api.ts` líneas 42-52 des-envuelve cualquier body con prop `data` (`response.data = response.data.data`). `GET /api/commercial/quotes` devuelve `{ data, meta: { total, skip, take, totalPages } }` → la `meta` se pierde en tránsito. El frontend ya lo mitiga defensivamente (`parseListResponse` en quotes.service.ts: meta → null y la página oculta la paginación), así que no hay crash, pero la paginación del listado de cotizaciones NO muestra metadata real. Reportado como follow-up separado (ver riesgos).
+  4. **E2E contra api-dev: NO ejecutado (BLOCKED parcial)**. api-dev responde 200 en `/api/health`, pero no hay credenciales de prueba autorizadas ni registros seed disponibles en esta sesión/worktree. Por la regla de dependencias del task, no se realizaron mutaciones; tampoco se fabricaron datos.
+  5. **Sin cálculo de dinero en frontend**: confirmado — el frontend solo formatea `unitPrice/lineTotal/subtotal/discount/taxAmount/total` que vienen del backend (`quotes.service.ts` recalcula con `round2`; comentario explícito "SÓLO backend lo hace").
+- `Validation commands`: `npx tsc --noEmit`; `npm run lint`; `npm run build` (frontend); `grep -rn "window.confirm|window.alert" src/frontend/src/features/quotes`
+- `Validation results`: tsc 0 errores; lint 0 errores (10 warnings preexistentes sin cambios); build OK (warning de chunk-size preexistente); grep de dialogs nativos: vacío.
+- `Documentation updated`: agent-status.md, file-ownership.md, work-log.md
+- `Commit hash`: (ver commit siguiente a esta entrada, en la rama del PR #41)
+- `Handoff to`: Coordinador — decisión merge/no-merge del PR #41 con la evidencia de esta entrada. Recomendación: READY FOR REVIEW a nivel código; el merge debería condicionarse a la corrida E2E contra api-dev cuando haya credenciales autorizadas, o a una dispensa explícita del coordinador.
+- `Known risks`:
+  - **E2E no ejecutado** (falta de credenciales): el flujo real crear→agregar item→editar→quitar→transicionar no está probado contra api-dev; el contrato sí está verificado estáticamente contra el código backend.
+  - **Follow-up (separado, NO en este PR)**: el interceptor de `api.ts` pierde `meta` en TODAS las listas paginadas consumidas vía `api` (quotes hoy; products/listas usan el mismo patrón — verificar callers de `res.data.meta`). Remediación segura propuesta: en el interceptor, solo des-envolver cuando hay `data` y NO hay `meta`, o adjuntar `meta` al objeto resultante (ej. `response.data = { ...response.data, data: response.data.data }` → no; mejor: `if ('meta' in response.data) dejar intacto`). Requiere tarea propia con grep de todos los callers del patrón `{ data, meta }` antes de tocar `api.ts`.
+  - Modal.tsx del proyecto no implementa focus trap ni Escape para cerrar (limitación preexistente del primitive, no introducida aquí); la confirmación queda accesible por teclado vía tabulación a los botones del footer.
+- `Blockers`: E2E leg: credenciales de prueba autorizadas + registro/seed de prueba no disponibles en esta sesión.

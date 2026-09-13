@@ -38,6 +38,7 @@ export default function QuoteStatusActions({
   isMutating = false,
 }: QuoteStatusActionsProps) {
   const [reasonFor, setReasonFor] = useState<QuoteStatus | null>(null)
+  const [confirmFor, setConfirmFor] = useState<QuoteStatus | null>(null)
   const [lostReason, setLostReason] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -57,26 +58,23 @@ export default function QuoteStatusActions({
     try {
       await onChangeStatus({ status, lostReason: reason })
       setReasonFor(null)
+      setConfirmFor(null)
       setLostReason('')
     } catch (err) {
+      // El error queda visible in-app: dentro del modal abierto si lo hay,
+      // o en el Alert junto a los botones si la transición no usa modal.
       setError(errorMessage(err))
-      if (!QUOTE_STATUS_REQUIRES_REASON.includes(status)) {
-        // sin modal abierto: mostrar el error nivel página via alert estándar
-        window.alert(errorMessage(err))
-      }
     }
   }
 
   const handleClick = (status: QuoteStatus) => {
+    setError(null)
     if (QUOTE_STATUS_REQUIRES_REASON.includes(status)) {
       setLostReason('')
-      setError(null)
       setReasonFor(status)
       return
     }
-    if (window.confirm(`¿${QUOTE_DESTINATION_LABELS[status]}?`)) {
-      void runTransition(status)
-    }
+    setConfirmFor(status)
   }
 
   const handleReasonSubmit = async (event: FormEvent) => {
@@ -91,6 +89,13 @@ export default function QuoteStatusActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {!reasonFor && !confirmFor && error && (
+        <div className="w-full">
+          <Alert variant="error" onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        </div>
+      )}
       {transitions.map((status) => (
         <Button
           key={status}
@@ -103,6 +108,45 @@ export default function QuoteStatusActions({
           {QUOTE_DESTINATION_LABELS[status]}
         </Button>
       ))}
+
+      <Modal
+        open={confirmFor !== null}
+        onClose={() => !isMutating && setConfirmFor(null)}
+        title={confirmFor ? QUOTE_DESTINATION_LABELS[confirmFor] : ''}
+        size="sm"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={isMutating}
+              onClick={() => setConfirmFor(null)}
+            >
+              Volver
+            </Button>
+            <Button
+              type="button"
+              variant={confirmFor === 'cancelada' ? 'danger' : 'primary'}
+              loading={isMutating}
+              onClick={() => confirmFor && void runTransition(confirmFor)}
+            >
+              Confirmar
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {error && (
+            <Alert variant="error" onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
+          <p className="text-sm text-neutral-700">
+            ¿Seguro que quieres {QUOTE_DESTINATION_LABELS[confirmFor ?? 'borrador'].toLowerCase()}{' '}
+            la cotización <span className="font-medium">{quote.code}</span>?
+          </p>
+        </div>
+      </Modal>
 
       <Modal
         open={reasonFor !== null}
