@@ -8,6 +8,7 @@
 
 | Executor | Agent | Status | Task ID | Task title | Branch | Files reserved | Dependencies | Last commit | Blockers | Next action | Updated at |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| OpenCode | tech-lead-orchestrator | COMMITTED | GS-PR41-QUOTES-VALIDATION-01 | Validar PR #41 (quotes frontend) contra contrato backend + reemplazar dialogs nativos | agent/opencode/issue-23-quotes-page | (released) | PR #41; E2E leg BLOCKED (sin credenciales autorizadas) | (see work-log) | E2E leg: credenciales de prueba | Coordinador decide merge/no-merge de PR #41 | 2026-09-12T00:00:00Z |
 | OpenCode | tech-lead-orchestrator | COMMITTED | COORD-RECONCILE-001 | Reconcile Grupo Security Office multi-agent identity and OpenCode configuration | main | (released) | NONE | (see work-log) | NONE | Await Perplexity assignment | 2026-09-03T00:00:00Z |
 | Kilo Code | GS Frontend Implementer | COMMITTED | FE-COMMERCIAL-NAV-001 | Close and commit commercial navigation Phase A | main | (released) | NONE | (see work-log) | NONE | Await Perplexity assignment | 2026-09-04T00:00:00Z |
 | OpenCode | backend-engineer | COMMITTED | BE-RBAC-001 | Make granular global permissions effective (PermissionsGuard + seed + @Permissions) | main | (released) | RBAC-PLAN-001 | (see work-log) | NONE | Await Perplexity assignment | 2026-09-04T00:00:00Z |
